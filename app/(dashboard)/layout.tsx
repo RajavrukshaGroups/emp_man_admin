@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 
 import { ProtectedRoute } from "@/components/auth/protected-route";
+import { DashboardShell } from "@/components/dashboard/dashboard-shell";
 
 interface DashboardLayoutProps {
   children: ReactNode;
@@ -9,7 +10,7 @@ interface DashboardLayoutProps {
 export default function DashboardLayout({ children }: DashboardLayoutProps) {
   return (
     <ProtectedRoute>
-      <div className="min-h-screen bg-slate-50">{children}</div>
+      <DashboardShell>{children}</DashboardShell>
     </ProtectedRoute>
   );
 }
