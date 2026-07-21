@@ -4,9 +4,7 @@ interface RoleStatusBadgeProps {
   status: RoleStatus;
 }
 
-export function RoleStatusBadge({
-  status,
-}: RoleStatusBadgeProps) {
+export function RoleStatusBadge({ status }: RoleStatusBadgeProps) {
   const isActive = status === "ACTIVE";
 
   return (
