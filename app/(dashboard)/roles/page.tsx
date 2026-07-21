@@ -76,7 +76,7 @@ export default function RolesPage() {
           </p>
 
           <p className="mt-1 text-3xl font-bold">
-            {data?.pagination.total ?? 0}
+            {data?.pagination.totalRecords ?? 0}
           </p>
         </div>
       </div>
@@ -109,7 +109,7 @@ export default function RolesPage() {
         </div>
       ) : (
         <RoleTable
-          roles={data?.roles ?? []}
+          roles={data?.records ?? []}
           canUpdate={canUpdate}
           canDelete={canDelete}
           onDelete={(role) => {

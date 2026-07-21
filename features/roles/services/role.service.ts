@@ -3,6 +3,8 @@ import apiClient from "@/lib/axios";
 import type { ApiResponse } from "@/types/api";
 
 import type {
+    CreateRolePayload,
+    Permission,
     Role,
     RoleListData,
     RoleListParams,
@@ -33,6 +35,29 @@ export const roleService = {
             ApiResponse<Role>
         >(
             `/companies/${companyId}/roles/${roleId}`,
+        );
+
+        return response.data.data;
+    },
+
+    async getPermissions(): Promise<Permission[]> {
+        const response = await apiClient.get<
+            ApiResponse<Permission[]>
+        >("/permissions");
+
+        return response.data.data;
+    },
+
+
+    async createRole(
+        companyId: string,
+        payload: CreateRolePayload,
+    ): Promise<Role> {
+        const response = await apiClient.post<
+            ApiResponse<Role>
+        >(
+            `/companies/${companyId}/roles`,
+            payload,
         );
 
         return response.data.data;
