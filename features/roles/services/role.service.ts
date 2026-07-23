@@ -4,6 +4,7 @@ import type { ApiResponse } from "@/types/api";
 
 import type {
     CreateRolePayload,
+    UpdateRolePayload,
     Permission,
     Role,
     RoleListData,
@@ -57,6 +58,21 @@ export const roleService = {
             ApiResponse<Role>
         >(
             `/companies/${companyId}/roles`,
+            payload,
+        );
+
+        return response.data.data;
+    },
+
+    async updateRole(
+        companyId: string,
+        roleId: string,
+        payload: UpdateRolePayload,
+    ): Promise<Role> {
+        const response = await apiClient.patch<
+            ApiResponse<Role>
+        >(
+            `/companies/${companyId}/roles/${roleId}`,
             payload,
         );
 

@@ -60,19 +60,28 @@ export interface CreateRolePayload {
     status: RoleStatus;
 }
 
+export interface UpdateRolePayload {
+    name: string;
+    code: string;
+    description?: string;
+    permissionIds: string[];
+    // scopeType: "COMPANY";
+    status: RoleStatus;
+}
+
 export interface RolePagination {
     page: number;
     limit: number;
     // total: number;
-    totalRecords:number;
+    totalRecords: number;
     totalPages: number;
     hasNextPage: boolean;
     hasPreviousPage: boolean;
 }
 
 export interface RoleListData {
-  records: Role[];
-  pagination: RolePagination;
+    records: Role[];
+    pagination: RolePagination;
 }
 
 export interface RoleListParams {

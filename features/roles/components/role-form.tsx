@@ -15,19 +15,11 @@ import {
   type CreateRoleFormValues,
 } from "../validations/role.validation";
 import { RolePermissionSelector } from "./role-permission-selector";
-
+import type { Role } from "../types/role.types";
 interface RoleFormProps {
   companyId: string;
+  role?: Role;
 }
-
-const defaultValues: CreateRoleFormValues = {
-  name: "",
-  code: "",
-  description: "",
-  scopeType: "COMPANY",
-  permissionIds: [],
-  status: "ACTIVE",
-};
 
 function getErrorMessage(error: unknown): string {
   if (typeof error === "object" && error !== null && "response" in error) {
@@ -51,10 +43,24 @@ function getErrorMessage(error: unknown): string {
   return "Unable to create the role.";
 }
 
-export function RoleForm({ companyId }: RoleFormProps) {
+export function RoleForm({ companyId, role }: RoleFormProps) {
   const router = useRouter();
 
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const isEditMode = Boolean(role);
+
+  const defaultValues: CreateRoleFormValues = {
+    name: role?.name ?? "",
+    code: role?.code ?? "",
+    description: role?.description ?? "",
+    scopeType: "COMPANY",
+    permissionIds:
+      role?.permissionIds.map((permission) =>
+        typeof permission === "string" ? permission : permission._id,
+      ) ?? [],
+    status: role?.status ?? "ACTIVE",
+  };
 
   const {
     permissions,
@@ -74,7 +80,6 @@ export function RoleForm({ companyId }: RoleFormProps) {
     defaultValues,
     mode: "onBlur",
   });
-
   const handleRoleNameChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const roleName = event.target.value;
 
@@ -104,16 +109,28 @@ export function RoleForm({ companyId }: RoleFormProps) {
     try {
       setIsSubmitting(true);
 
-      await roleService.createRole(companyId, {
-        name: values.name.trim(),
-        code: values.code.trim().toUpperCase(),
-        description: values.description?.trim() || undefined,
-        permissionIds: values.permissionIds,
-        scopeType: "COMPANY",
-        status: values.status,
-      });
+      if (role) {
+        await roleService.updateRole(companyId, role._id, {
+          name: values.name.trim(),
+          code: values.code.trim().toUpperCase(),
+          description: values.description?.trim() || undefined,
+          permissionIds: values.permissionIds,
+          status: values.status,
+        });
 
-      toast.success("Role created successfully.");
+        toast.success("Role updated successfully.");
+      } else {
+        await roleService.createRole(companyId, {
+          name: values.name.trim(),
+          code: values.code.trim().toUpperCase(),
+          description: values.description?.trim() || undefined,
+          permissionIds: values.permissionIds,
+          scopeType: "COMPANY",
+          status: values.status,
+        });
+
+        toast.success("Role created successfully.");
+      }
 
       router.push("/roles");
       router.refresh();
@@ -143,12 +160,14 @@ export function RoleForm({ companyId }: RoleFormProps) {
               <ShieldPlus className="h-5 w-5 text-slate-700" />
 
               <h1 className="text-2xl font-bold tracking-tight text-slate-950">
-                Create Role
+                {isEditMode ? "Edit Role" : "Create Role"}
               </h1>
             </div>
 
             <p className="mt-1 text-sm text-slate-500">
-              Create a company role and assign the required permissions.
+              {isEditMode
+                ? "Update role information and assigned permissions."
+                : "Create a company role and assign the required permissions."}
             </p>
           </div>
         </div>
@@ -169,12 +188,12 @@ export function RoleForm({ companyId }: RoleFormProps) {
             {isSubmitting ? (
               <>
                 <Loader2 className="h-4 w-4 animate-spin" />
-                Creating...
+                {isEditMode ? "Updating..." : "Creating..."}
               </>
             ) : (
               <>
                 <Save className="h-4 w-4" />
-                Create Role
+                {isEditMode ? "Update Role" : "Create Role"}
               </>
             )}
           </button>
@@ -408,12 +427,12 @@ export function RoleForm({ companyId }: RoleFormProps) {
             {isSubmitting ? (
               <>
                 <Loader2 className="h-4 w-4 animate-spin" />
-                Creating...
+                {isEditMode ? "Updating..." : "Creating..."}
               </>
             ) : (
               <>
                 <Save className="h-4 w-4" />
-                Create Role
+                {isEditMode ? "Update Role" : "Create Role"}
               </>
             )}
           </button>

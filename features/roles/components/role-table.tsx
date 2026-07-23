@@ -113,10 +113,10 @@ export function RoleTable({
                     {canUpdate && role.isEditable && (
                       <Link
                         href={`/roles/${role._id}/edit`}
-                        className="inline-flex size-9 items-center justify-center rounded-lg border text-slate-600 transition hover:bg-slate-100 hover:text-slate-950"
+                        className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-300 text-slate-700 transition hover:bg-slate-100"
                         aria-label={`Edit ${role.name}`}
                       >
-                        <Pencil className="size-4" />
+                        <Pencil className="h-4 w-4" />
                       </Link>
                     )}
 
