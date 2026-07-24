@@ -70,7 +70,8 @@ export const dashboardNavigation: DashboardNavigationItem[] = [
         title: "Users",
         href: "/users",
         icon: Users,
-        permission: "user.read",
+        // permission: "user.read",
+        permission: "admin.read"
     },
     {
         title: "Profile",

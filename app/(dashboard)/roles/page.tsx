@@ -2,51 +2,97 @@
 
 import Link from "next/link";
 import { useState } from "react";
+import { toast } from "sonner";
 
-import {
-  Plus,
-  Search,
-  ShieldCheck,
-} from "lucide-react";
+import { Plus, Search, ShieldCheck } from "lucide-react";
 
 import { DashboardHeader } from "@/features/dashboard/components/dashboard-header";
 import { RoleTable } from "@/features/roles/components/role-table";
 import { useRoles } from "@/features/roles/hooks/use-roles";
 import { useAuthStore } from "@/store/auth.store";
+import { DeleteRoleDialog } from "@/features/roles/components/delete-role-dialog";
+import { roleService } from "@/features/roles/services/role.service";
+import type { Role } from "@/features/roles/types/role.types";
 
 export default function RolesPage() {
-  const company = useAuthStore(
-    (state) => state.company,
-  );
+  const company = useAuthStore((state) => state.company);
 
-  const permissions = useAuthStore(
-    (state) => state.permissions,
-  );
+  const permissions = useAuthStore((state) => state.permissions);
 
-  const [search, setSearch] =
-    useState("");
+  const [search, setSearch] = useState("");
 
-  const [page, setPage] =
-    useState(1);
+  const [page, setPage] = useState(1);
 
-  const {
-    data,
-    isLoading,
-    error,
-  } = useRoles(company?._id, {
+  const [selectedRole, setSelectedRole] = useState<Role | null>(null);
+
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
+
+  const { data, isLoading, error, refetch } = useRoles(company?._id, {
     page,
     limit: 10,
     search,
   });
 
-  const canCreate =
-    permissions.includes("role.create");
+  const canCreate = permissions.includes("role.create");
 
-  const canUpdate =
-    permissions.includes("role.update");
+  const canUpdate = permissions.includes("role.update");
 
-  const canDelete =
-    permissions.includes("role.delete");
+  const canDelete = permissions.includes("role.delete");
+
+  const handleStatusChange = async (role: Role) => {
+    if (!company?._id) {
+      toast.error("No active company found.");
+      return;
+    }
+
+    const nextStatus = role.status === "ACTIVE" ? "INACTIVE" : "ACTIVE";
+
+    try {
+      setIsUpdatingStatus(true);
+
+      await roleService.updateRoleStatus(company._id, role._id, nextStatus);
+
+      toast.success(
+        nextStatus === "ACTIVE"
+          ? "Role activated successfully."
+          : "Role deactivated successfully.",
+      );
+
+      await refetch();
+    } catch (error) {
+      console.error("Failed to update role status:", error);
+
+      toast.error("Unable to update role status.");
+    } finally {
+      setIsUpdatingStatus(false);
+    }
+  };
+
+  const handleDeleteRole = async () => {
+    if (!company?._id || !selectedRole) {
+      return;
+    }
+
+    try {
+      setIsDeleting(true);
+
+      await roleService.deleteRole(company._id, selectedRole._id);
+
+      toast.success("Role deleted successfully.");
+
+      setSelectedRole(null);
+
+      await refetch();
+    } catch (error) {
+      console.error("Failed to delete role:", error);
+
+      toast.error("Unable to delete role. It may still be assigned to users.");
+    } finally {
+      setIsDeleting(false);
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -71,9 +117,7 @@ export default function RolesPage() {
         <div className="rounded-2xl border bg-white p-5">
           <ShieldCheck className="size-5 text-slate-500" />
 
-          <p className="mt-4 text-sm text-slate-500">
-            Total roles
-          </p>
+          <p className="mt-4 text-sm text-slate-500">Total roles</p>
 
           <p className="mt-1 text-3xl font-bold">
             {data?.pagination.totalRecords ?? 0}
@@ -112,63 +156,54 @@ export default function RolesPage() {
           roles={data?.records ?? []}
           canUpdate={canUpdate}
           canDelete={canDelete}
+          isUpdatingStatus={isUpdatingStatus}
+          onStatusChange={(role) => {
+            void handleStatusChange(role);
+          }}
           onDelete={(role) => {
-            console.log(
-              "Delete role:",
-              role,
-            );
+            setSelectedRole(role);
           }}
         />
       )}
 
-      {data &&
-        data.pagination.totalPages > 1 && (
-          <div className="flex items-center justify-between">
-            <p className="text-sm text-slate-500">
-              Page{" "}
-              {data.pagination.page} of{" "}
-              {data.pagination.totalPages}
-            </p>
+      {data && data.pagination.totalPages > 1 && (
+        <div className="flex items-center justify-between">
+          <p className="text-sm text-slate-500">
+            Page {data.pagination.page} of {data.pagination.totalPages}
+          </p>
 
-            <div className="flex gap-2">
-              <button
-                type="button"
-                disabled={
-                  !data.pagination
-                    .hasPreviousPage
-                }
-                onClick={() =>
-                  setPage((current) =>
-                    Math.max(
-                      1,
-                      current - 1,
-                    ),
-                  )
-                }
-                className="rounded-lg border px-4 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                Previous
-              </button>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              disabled={!data.pagination.hasPreviousPage}
+              onClick={() => setPage((current) => Math.max(1, current - 1))}
+              className="rounded-lg border px-4 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Previous
+            </button>
 
-              <button
-                type="button"
-                disabled={
-                  !data.pagination
-                    .hasNextPage
-                }
-                onClick={() =>
-                  setPage(
-                    (current) =>
-                      current + 1,
-                  )
-                }
-                className="rounded-lg border px-4 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                Next
-              </button>
-            </div>
+            <button
+              type="button"
+              disabled={!data.pagination.hasNextPage}
+              onClick={() => setPage((current) => current + 1)}
+              className="rounded-lg border px-4 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Next
+            </button>
           </div>
-        )}
+        </div>
+      )}
+      <DeleteRoleDialog
+        role={selectedRole}
+        isOpen={Boolean(selectedRole)}
+        isDeleting={isDeleting}
+        onClose={() => {
+          if (!isDeleting) {
+            setSelectedRole(null);
+          }
+        }}
+        onConfirm={() => void handleDeleteRole()}
+      />
     </div>
   );
 }

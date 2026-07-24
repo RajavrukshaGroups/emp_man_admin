@@ -1,10 +1,10 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { useCallback, useState, type ReactNode } from "react";
 
+import { MobileSidebar } from "@/components/dashboard/mobile-sidebar";
 import { Sidebar } from "@/components/dashboard/sidebar";
 import { TopHeader } from "@/components/dashboard/top-header";
-import { MobileSidebar } from "@/components/dashboard/mobile-sidebar";
 
 interface DashboardShellProps {
   children: ReactNode;
@@ -13,21 +13,53 @@ interface DashboardShellProps {
 export function DashboardShell({ children }: DashboardShellProps) {
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
 
+  const [isDesktopSidebarCollapsed, setIsDesktopSidebarCollapsed] =
+    useState(false);
+
+  const openMobileSidebar = useCallback(() => {
+    setIsMobileSidebarOpen(true);
+  }, []);
+
+  const closeMobileSidebar = useCallback(() => {
+    setIsMobileSidebarOpen(false);
+  }, []);
+
+  const toggleDesktopSidebar = useCallback(() => {
+    setIsDesktopSidebarCollapsed((current) => !current);
+  }, []);
+
   return (
-    <div className="min-h-screen bg-slate-50">
-      <div className="fixed inset-y-0 left-0 hidden w-72 lg:block">
-        <Sidebar />
+    <div className="min-h-screen overflow-x-hidden bg-slate-50">
+      {/* Desktop sidebar */}
+      <div
+        className={[
+          "fixed inset-y-0 left-0 z-40 hidden transition-[width] duration-300 lg:block",
+          isDesktopSidebarCollapsed ? "w-20" : "w-72",
+        ].join(" ")}
+      >
+        <Sidebar
+          collapsed={isDesktopSidebarCollapsed}
+          onToggleCollapse={toggleDesktopSidebar}
+        />
       </div>
 
-      <MobileSidebar
-        open={isMobileSidebarOpen}
-        onClose={() => setIsMobileSidebarOpen(false)}
-      />
+      {/* Mobile sidebar */}
+      <MobileSidebar open={isMobileSidebarOpen} onClose={closeMobileSidebar} />
 
-      <div className="lg:pl-72">
-        <TopHeader onMenuClick={() => setIsMobileSidebarOpen(true)} />
+      {/* Main dashboard area */}
+      <div
+        className={[
+          "min-w-0 transition-[padding] duration-300",
+          isDesktopSidebarCollapsed ? "lg:pl-20" : "lg:pl-72",
+        ].join(" ")}
+      >
+        <TopHeader onMenuClick={openMobileSidebar} />
 
-        <main className="p-4 sm:p-6 lg:p-8">{children}</main>
+        <main className="min-w-0 overflow-x-hidden">
+          <div className="mx-auto w-full max-w-[1600px] p-4 sm:p-6 lg:p-8">
+            {children}
+          </div>
+        </main>
       </div>
     </div>
   );

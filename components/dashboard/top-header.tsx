@@ -44,8 +44,8 @@ export function TopHeader({ onMenuClick }: TopHeaderProps) {
       .toUpperCase() ?? "U";
 
   return (
-    <header className="sticky top-0 z-30 border-b border-slate-200 bg-white">
-      <div className="flex h-16 items-center justify-between px-4 sm:px-6">
+    <header className="sticky top-0 z-30 border-b border-slate-200 bg-white/95 backdrop-blur">
+      <div className="flex h-16 min-w-0 items-center justify-between gap-3 px-4 sm:px-6">
         <div className="flex items-center gap-3">
           <button
             type="button"
@@ -56,17 +56,16 @@ export function TopHeader({ onMenuClick }: TopHeaderProps) {
             <Menu className="h-5 w-5" />
           </button>
 
-          <div>
-            <p className="text-sm font-semibold text-slate-900">
+          <div className="min-w-0">
+            <p className="truncate text-sm font-semibold text-slate-900">
               Welcome, {user?.firstName ?? "User"}
             </p>
 
-            <p className="text-xs text-slate-500">
+            <p className="truncate text-xs text-slate-500">
               {companyAccess?.designation ?? role?.name}
             </p>
           </div>
         </div>
-
         <div className="flex items-center gap-2">
           <button
             type="button"
