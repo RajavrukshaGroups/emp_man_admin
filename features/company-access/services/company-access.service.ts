@@ -7,6 +7,7 @@ import type {
     CompanyAccessListData,
     CompanyAccessListParams,
     CreateCompanyAccessPayload,
+    UpdateCompanyAccessPayload
 } from "../types/company-access.types";
 
 export const companyAccessService = {
@@ -16,6 +17,19 @@ export const companyAccessService = {
     ): Promise<CompanyAccess> {
         const response = await apiClient.post<ApiResponse<CompanyAccess>>(
             `/companies/${companyId}/access`,
+            payload,
+        );
+
+        return response.data.data;
+    },
+
+    async updateCompanyAccess(
+        companyId: string,
+        accessId: string,
+        payload: UpdateCompanyAccessPayload,
+    ): Promise<CompanyAccess> {
+        const response = await apiClient.patch<ApiResponse<CompanyAccess>>(
+            `/companies/${companyId}/access/${accessId}`,
             payload,
         );
 

@@ -46,4 +46,17 @@ export const employeeService = {
 
         return response.data.data;
     },
+
+    async updateEmployee(
+        companyId: string,
+        employeeId: string,
+        payload: Partial<CreateEmployeePayload>,
+    ): Promise<Employee> {
+        const response = await apiClient.patch<ApiResponse<Employee>>(
+            `/companies/${companyId}/employees/${employeeId}`,
+            payload,
+        );
+
+        return response.data.data;
+    },
 };

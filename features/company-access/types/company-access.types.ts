@@ -40,40 +40,22 @@ export interface CompanyAccessCompany {
     status: string;
 }
 
-export interface ReportingManagerAccess {
-    _id: string;
-    employeeCode?: string | null;
-    designation?: string;
-    status: CompanyAccessStatus;
-    userId?: Pick<
-        User,
-        | "_id"
-        | "firstName"
-        | "middleName"
-        | "lastName"
-        | "displayName"
-        | "email"
-        | "mobile"
-        | "profilePhoto"
-    >;
-}
-
 export interface CompanyAccess {
     _id: string;
 
-    userId: User;
-    companyId: CompanyAccessCompany;
-    roleId: CompanyAccessRole;
+    userId: User | string;
+    companyId: CompanyAccessCompany | string;
+    roleId: CompanyAccessRole | string;
 
     employeeCode?: string | null;
     designation: string;
 
     employmentType: EmploymentType;
 
-    departmentId?: string | null;
-    teamId?: string | null;
+    departmentId?: CompanyAccessDepartment | string | null;
+    teamId?: CompanyAccessTeam | string | null;
 
-    reportingManagerId?: ReportingManagerAccess | null;
+    reportingManagerId?: ReportingManagerAccess | string | null;
 
     joiningDate?: string | null;
     probationEndDate?: string | null;
@@ -83,9 +65,7 @@ export interface CompanyAccess {
     workLocationName: string;
 
     isPrimaryCompany: boolean;
-
     status: CompanyAccessStatus;
-
     notes: string;
 
     createdBy?: string | null;
@@ -126,6 +106,29 @@ export interface CreateCompanyAccessPayload {
     notes?: string;
 }
 
+export interface UpdateCompanyAccessPayload {
+    roleId?: string;
+
+    employeeCode?: string | null;
+    designation?: string;
+
+    employmentType?: EmploymentType;
+
+    departmentId?: string | null;
+    teamId?: string | null;
+    reportingManagerId?: string | null;
+
+    joiningDate?: string | null;
+    probationEndDate?: string | null;
+
+    workLocationType?: WorkLocationType;
+    workLocationName?: string;
+
+    isPrimaryCompany?: boolean;
+
+    notes?: string;
+}
+
 export interface CompanyAccessPagination {
     page: number;
     limit: number;
@@ -146,8 +149,8 @@ export interface CompanyAccessListParams {
     search?: string;
 
     roleId?: string;
-    departmentId?: string;
-    teamId?: string;
+    departmentId?: string | null;
+    teamId?: string | null;
     reportingManagerId?: string;
 
     employmentType?: EmploymentType;
@@ -170,3 +173,42 @@ export interface CompanyAccessListParams {
 
     sortOrder?: "asc" | "desc";
 }
+
+export interface CompanyAccessDepartment {
+    _id: string;
+    name: string;
+    code: string;
+    status?: string;
+}
+
+export interface CompanyAccessTeam {
+    _id: string;
+    name: string;
+    code: string;
+    status?: string;
+}
+
+export interface ReportingManagerAccess {
+    _id: string;
+    employeeCode?: string | null;
+    designation?: string;
+    status: CompanyAccessStatus;
+
+    userId?:
+    | Pick<
+        User,
+        | "_id"
+        | "firstName"
+        | "middleName"
+        | "lastName"
+        | "displayName"
+        | "email"
+        | "mobile"
+        | "profilePhoto"
+    >
+    | string;
+
+    departmentId?: CompanyAccessDepartment | string | null;
+    teamId?: CompanyAccessTeam | string | null;
+}
+

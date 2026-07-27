@@ -125,6 +125,11 @@ export interface EmployeeUserReference {
     mobile?: string;
     profilePhoto?: string;
     status?: string;
+    onboardingStatus?:
+    | "USER_CREATED"
+    | "COMPANY_ACCESS_CREATED"
+    | "COMPLETED";
+    onboardingCompletedAt?: string | null;
 }
 
 export interface EmployeeCompanyReference {
