@@ -1,7 +1,7 @@
 "use client";
 
 import axios from "axios";
-import { useRouter } from "next/navigation";
+// import { useRouter } from "next/navigation";
 import {
   ArrowLeft,
   BadgeCheck,
@@ -72,7 +72,7 @@ export function EmployeeProfileStep({
   onBack,
   onSuccess,
 }: EmployeeProfileStepProps) {
-  const router = useRouter();
+  // const router = useRouter();
 
   const company = useAuthStore((state) => state.company);
 
@@ -245,9 +245,6 @@ export function EmployeeProfileStep({
       );
 
       onSuccess(createdEmployee._id);
-
-      router.push(`/employees/${createdEmployee._id}`);
-      router.refresh();
     } catch (error: unknown) {
       toast.error(
         getErrorMessage(error, "Unable to create the employee profile."),

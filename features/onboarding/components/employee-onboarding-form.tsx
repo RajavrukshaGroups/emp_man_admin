@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   ArrowLeft,
   BadgeCheck,
@@ -41,6 +42,7 @@ const stepNumber: Record<OnboardingStep, number> = {
 
 export function EmployeeOnboardingForm() {
   const [state, setState] = useState<OnboardingState>(initialState);
+  const router = useRouter();
 
   const currentStepNumber = stepNumber[state.currentStep];
 
@@ -65,6 +67,10 @@ export function EmployeeOnboardingForm() {
       ...currentState,
       employeeId,
     }));
+
+    // router.replace(`/employees/${employeeId}`);
+    router.replace(`/employees/${employeeId}/edit`);
+    router.refresh();
   }
 
   function goToUserAccount() {

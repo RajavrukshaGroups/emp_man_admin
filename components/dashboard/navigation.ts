@@ -8,6 +8,7 @@ import {
     UserRound,
     Settings,
     BriefcaseBusiness,
+    ClipboardCheck,
 } from "lucide-react";
 
 export interface DashboardNavigationItem {
@@ -54,6 +55,14 @@ export const dashboardNavigation: DashboardNavigationItem[] = [
         icon: UserRound,
         permission: "employee.read",
     },
+
+    {
+        title: "Onboarding",
+        href: "/onboarding",
+        icon: ClipboardCheck,
+        permission: "employee.read",
+    },
+
     {
         title: "Roles",
         href: "/roles",
@@ -70,8 +79,7 @@ export const dashboardNavigation: DashboardNavigationItem[] = [
         title: "Users",
         href: "/users",
         icon: Users,
-        // permission: "user.read",
-        permission: "admin.read"
+        permission: "admin.read",
     },
     {
         title: "Profile",

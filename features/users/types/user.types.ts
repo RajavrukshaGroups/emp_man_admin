@@ -103,6 +103,8 @@ export interface CreateUserPayload {
     dateOfBirth?: string;
 
     status: UserStatus;
+
+    forEmployeeOnboarding?: boolean;
 }
 
 export interface UpdateUserPayload {

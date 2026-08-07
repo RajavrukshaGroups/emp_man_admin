@@ -130,28 +130,32 @@ function getInitials(name?: string) {
     .join("");
 }
 
-function maskAccountNumber(value?: string) {
-  if (!value) {
-    return "—";
-  }
+// function maskAccountNumber(value?: string) {
+//   if (!value) {
+//     return "—";
+//   }
 
-  if (value.length <= 4) {
-    return value;
-  }
+//   if (value.length <= 4) {
+//     return value;
+//   }
 
-  return `${"•".repeat(Math.max(value.length - 4, 4))}${value.slice(-4)}`;
-}
+//   return `${"•".repeat(Math.max(value.length - 4, 4))}${value.slice(-4)}`;
+// }
 
-function maskAadhaarNumber(value?: string) {
-  if (!value) {
-    return "—";
-  }
+// function maskAadhaarNumber(value?: string) {
+//   if (!value) {
+//     return "—";
+//   }
 
-  if (value.length <= 4) {
-    return value;
-  }
+//   if (value.length <= 4) {
+//     return value;
+//   }
 
-  return `XXXX XXXX ${value.slice(-4)}`;
+//   return `XXXX XXXX ${value.slice(-4)}`;
+// }
+
+function displayMaskedValue(value?: string) {
+  return value || "—";
 }
 
 function formatAddress(address?: EmployeeAddress) {
@@ -666,7 +670,7 @@ export function EmployeeDetailsView({ employeeId }: EmployeeDetailsViewProps) {
 
             <DetailItem
               label="Account number"
-              value={maskAccountNumber(bankDetails?.accountNumber)}
+              value={displayMaskedValue(bankDetails?.accountNumber)}
             />
 
             <DetailItem label="IFSC code" value={bankDetails?.ifscCode} />
@@ -691,7 +695,7 @@ export function EmployeeDetailsView({ employeeId }: EmployeeDetailsViewProps) {
 
             <DetailItem
               label="Aadhaar number"
-              value={maskAadhaarNumber(statutoryDetails?.aadhaarNumber)}
+              value={displayMaskedValue(statutoryDetails?.aadhaarNumber)}
             />
 
             <DetailItem

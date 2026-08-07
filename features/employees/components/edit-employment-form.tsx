@@ -14,7 +14,6 @@ import {
   Save,
   ShieldCheck,
   UserRoundCog,
-  UsersRound,
 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { useForm, type SubmitHandler } from "react-hook-form";
@@ -23,11 +22,7 @@ import { toast } from "sonner";
 import { companyAccessService } from "@/features/company-access/services/company-access.service";
 import type {
   CompanyAccess,
-  CompanyAccessDepartment,
-  CompanyAccessRole,
-  CompanyAccessTeam,
   EmploymentType,
-  ReportingManagerAccess,
   UpdateCompanyAccessPayload,
   WorkLocationType,
 } from "@/features/company-access/types/company-access.types";
@@ -38,6 +33,15 @@ import type {
   EmployeeUserReference,
 } from "@/features/employees/types/employee.types";
 import { useAuthStore } from "@/store/auth.store";
+
+import { roleService } from "@/features/roles/services/role.service";
+import type { Role } from "@/features/roles/types/role.types";
+
+import { departmentService } from "@/features/departments/services/department.service";
+import type { Department } from "@/features/departments/types/department.types";
+
+import { teamService } from "@/features/teams/services/team.service";
+import type { Team } from "@/features/teams/types/team.types";
 
 interface EditEmploymentFormProps {
   employeeId: string;
@@ -141,49 +145,6 @@ function getEmployeeCompanyAccessId(employee: Employee) {
   return null;
 }
 
-function getRoleName(value: CompanyAccess["roleId"]) {
-  if (typeof value === "object" && value !== null) {
-    return (value as CompanyAccessRole).name;
-  }
-
-  return "";
-}
-
-function getDepartmentName(value: CompanyAccess["departmentId"]) {
-  if (typeof value === "object" && value !== null) {
-    return (value as CompanyAccessDepartment).name;
-  }
-
-  return "";
-}
-
-function getTeamName(value: CompanyAccess["teamId"]) {
-  if (typeof value === "object" && value !== null) {
-    return (value as CompanyAccessTeam).name;
-  }
-
-  return "";
-}
-
-function getReportingManagerName(value: CompanyAccess["reportingManagerId"]) {
-  if (typeof value !== "object" || value === null) {
-    return "";
-  }
-
-  const manager = value as ReportingManagerAccess;
-
-  if (typeof manager.userId === "object" && manager.userId !== null) {
-    return (
-      manager.userId.displayName ||
-      manager.userId.email ||
-      manager.employeeCode ||
-      ""
-    );
-  }
-
-  return manager.employeeCode || manager.designation || "";
-}
-
 export function EditEmploymentForm({ employeeId }: EditEmploymentFormProps) {
   const router = useRouter();
 
@@ -203,6 +164,8 @@ export function EditEmploymentForm({ employeeId }: EditEmploymentFormProps) {
     register,
     handleSubmit,
     reset,
+    watch,
+    setValue,
     formState: { errors, isSubmitting },
   } = useForm<EmploymentFormValues>({
     defaultValues: {
@@ -227,6 +190,19 @@ export function EditEmploymentForm({ employeeId }: EditEmploymentFormProps) {
     },
     mode: "onBlur",
   });
+
+  const selectedDepartmentId = watch("departmentId");
+
+  const [roles, setRoles] = useState<Role[]>([]);
+  const [departments, setDepartments] = useState<Department[]>([]);
+  const [teams, setTeams] = useState<Team[]>([]);
+
+  const [reportingManagers, setReportingManagers] = useState<CompanyAccess[]>(
+    [],
+  );
+
+  const [isLoadingOptions, setIsLoadingOptions] = useState(true);
+  const [isLoadingTeams, setIsLoadingTeams] = useState(false);
 
   const loadEmploymentInformation = useCallback(async () => {
     if (!company?._id) {
@@ -303,9 +279,110 @@ export function EditEmploymentForm({ employeeId }: EditEmploymentFormProps) {
     }
   }, [company?._id, employeeId, reset]);
 
+  const loadOrganisationOptions = useCallback(async () => {
+    if (!company?._id) {
+      return;
+    }
+
+    try {
+      setIsLoadingOptions(true);
+
+      const [roleResult, departmentResult, companyAccessResult] =
+        await Promise.all([
+          roleService.getRoles(company._id, {
+            page: 1,
+            limit: 100,
+            status: "ACTIVE",
+            sortBy: "name",
+            sortOrder: "asc",
+          }),
+
+          departmentService.getDepartments(company._id, {
+            page: 1,
+            limit: 100,
+            status: "ACTIVE",
+            sortBy: "name",
+            sortOrder: "asc",
+          }),
+
+          companyAccessService.getCompanyAccessList(company._id, {
+            page: 1,
+            limit: 100,
+            status: "ACTIVE",
+            sortBy: "createdAt",
+            sortOrder: "asc",
+          }),
+        ]);
+
+      setRoles(
+        roleResult.records.filter(
+          (role) => role.scopeType === "COMPANY" && role.status === "ACTIVE",
+        ),
+      );
+
+      setDepartments(departmentResult.departments);
+
+      setReportingManagers(
+        companyAccessResult.records.filter(
+          (access) => access._id !== companyAccess?._id,
+        ),
+      );
+    } catch (error: unknown) {
+      toast.error(
+        getErrorMessage(
+          error,
+          "Unable to load organisation assignment options.",
+        ),
+      );
+    } finally {
+      setIsLoadingOptions(false);
+    }
+  }, [company?._id, companyAccess?._id]);
+
   useEffect(() => {
     void loadEmploymentInformation();
   }, [loadEmploymentInformation]);
+
+  useEffect(() => {
+    void loadOrganisationOptions();
+  }, [loadOrganisationOptions]);
+
+  useEffect(() => {
+    async function loadTeams() {
+      if (!company?._id || !selectedDepartmentId) {
+        setTeams([]);
+        return;
+      }
+
+      try {
+        setIsLoadingTeams(true);
+
+        const result = await teamService.getTeams(company._id, {
+          page: 1,
+          limit: 100,
+          departmentId: selectedDepartmentId,
+          status: "ACTIVE",
+          sortBy: "name",
+          sortOrder: "asc",
+        });
+
+        setTeams(result.teams);
+      } catch (error: unknown) {
+        setTeams([]);
+
+        toast.error(
+          getErrorMessage(
+            error,
+            "Unable to load teams for the selected department.",
+          ),
+        );
+      } finally {
+        setIsLoadingTeams(false);
+      }
+    }
+
+    void loadTeams();
+  }, [company?._id, selectedDepartmentId]);
 
   const onSubmit: SubmitHandler<EmploymentFormValues> = async (values) => {
     if (!company?._id) {
@@ -406,16 +483,6 @@ export function EditEmploymentForm({ employeeId }: EditEmploymentFormProps) {
 
   const employeeName = employeeUser?.displayName || "Employee";
 
-  const roleName = getRoleName(companyAccess.roleId);
-
-  const departmentName = getDepartmentName(companyAccess.departmentId);
-
-  const teamName = getTeamName(companyAccess.teamId);
-
-  const reportingManagerName = getReportingManagerName(
-    companyAccess.reportingManagerId,
-  );
-
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-6" noValidate>
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
@@ -478,8 +545,8 @@ export function EditEmploymentForm({ employeeId }: EditEmploymentFormProps) {
             {...register("designation", {
               required: "Designation is required.",
               maxLength: {
-                value: 120,
-                message: "Designation cannot exceed 120 characters.",
+                value: 100,
+                message: "Designation cannot exceed 100 characters.",
               },
             })}
           />
@@ -511,69 +578,119 @@ export function EditEmploymentForm({ employeeId }: EditEmploymentFormProps) {
       <Section
         icon={Building2}
         title="Organisation assignment"
-        description="Update role, department, team and reporting manager IDs."
+        description="Assign the employee's role, department, team and reporting manager."
       >
-        <Field
-          label="Role ID"
-          error={errors.roleId?.message}
-          hint={roleName ? `Current role: ${roleName}` : undefined}
-        >
-          <input
-            type="text"
-            disabled={isSubmitting}
-            className={inputClassName}
+        <Field label="Role" error={errors.roleId?.message}>
+          <select
+            disabled={isSubmitting || isLoadingOptions}
+            className={selectClassName}
             {...register("roleId", {
-              required: "Role ID is required.",
+              required: "Role is required.",
             })}
-          />
+          >
+            <option value="">
+              {isLoadingOptions ? "Loading roles..." : "Select role"}
+            </option>
+
+            {roles.map((role) => (
+              <option key={role._id} value={role._id}>
+                {role.name} ({role.code})
+              </option>
+            ))}
+          </select>
+
+          {!isLoadingOptions && roles.length === 0 && (
+            <p className="mt-1.5 text-xs font-medium text-amber-600">
+              No active company roles are available.
+            </p>
+          )}
+        </Field>
+
+        <Field label="Department">
+          <select
+            disabled={isSubmitting || isLoadingOptions}
+            className={selectClassName}
+            {...register("departmentId", {
+              onChange: () => {
+                setValue("teamId", "");
+              },
+            })}
+          >
+            <option value="">
+              {isLoadingOptions ? "Loading departments..." : "No department"}
+            </option>
+
+            {departments.map((department) => (
+              <option key={department._id} value={department._id}>
+                {department.name} ({department.code})
+              </option>
+            ))}
+          </select>
         </Field>
 
         <Field
-          label="Department ID"
+          label="Team"
           hint={
-            departmentName
-              ? `Current department: ${departmentName}`
-              : "Leave empty to remove the department."
+            !selectedDepartmentId ? "Select a department first." : undefined
           }
         >
-          <input
-            type="text"
-            disabled={isSubmitting}
-            className={inputClassName}
-            {...register("departmentId")}
-          />
-        </Field>
-
-        <Field
-          label="Team ID"
-          hint={
-            teamName
-              ? `Current team: ${teamName}`
-              : "Leave empty to remove the team."
-          }
-        >
-          <input
-            type="text"
-            disabled={isSubmitting}
-            className={inputClassName}
+          <select
+            disabled={isSubmitting || !selectedDepartmentId || isLoadingTeams}
+            className={selectClassName}
             {...register("teamId")}
-          />
+          >
+            <option value="">
+              {!selectedDepartmentId
+                ? "Select department first"
+                : isLoadingTeams
+                  ? "Loading teams..."
+                  : "No team"}
+            </option>
+
+            {teams.map((team) => (
+              <option key={team._id} value={team._id}>
+                {team.name} ({team.code})
+              </option>
+            ))}
+          </select>
+
+          {selectedDepartmentId && !isLoadingTeams && teams.length === 0 && (
+            <p className="mt-1.5 text-xs font-medium text-amber-600">
+              No active teams are available for this department.
+            </p>
+          )}
         </Field>
 
-        <Field
-          label="Reporting manager access ID"
-          hint={
-            reportingManagerName
-              ? `Current manager: ${reportingManagerName}`
-              : "Leave empty if no reporting manager is assigned."
-          }
-        >
-          <input
-            type="text"
-            disabled={isSubmitting}
-            className={inputClassName}
+        <Field label="Reporting Manager">
+          <select
+            disabled={isSubmitting || isLoadingOptions}
+            className={selectClassName}
             {...register("reportingManagerId")}
-          />
+          >
+            <option value="">No reporting manager</option>
+
+            {reportingManagers.map((manager) => {
+              const managerUser =
+                typeof manager.userId === "object" && manager.userId !== null
+                  ? manager.userId
+                  : null;
+
+              const managerName =
+                managerUser?.displayName ||
+                managerUser?.email ||
+                "Unnamed employee";
+
+              const designation = manager.designation || "No designation";
+
+              const employeeCode = manager.employeeCode || "No employee code";
+
+              return (
+                <option key={manager._id} value={manager._id}>
+                  {managerName} — {designation} ({employeeCode})
+                </option>
+              );
+            })}
+          </select>
         </Field>
       </Section>
 
@@ -697,8 +814,8 @@ export function EditEmploymentForm({ employeeId }: EditEmploymentFormProps) {
               className={textAreaClassName}
               {...register("notes", {
                 maxLength: {
-                  value: 2000,
-                  message: "Notes cannot exceed 2,000 characters.",
+                  value: 1000,
+                  message: "Notes cannot exceed 1,000 characters.",
                 },
               })}
             />

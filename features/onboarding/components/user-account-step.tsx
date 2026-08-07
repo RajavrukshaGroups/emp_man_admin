@@ -122,6 +122,8 @@ export function UserAccountStep({ onSuccess }: UserAccountStepProps) {
         gender: payload.gender,
         dateOfBirth: payload.dateOfBirth,
         status: payload.status,
+
+        forEmployeeOnboarding: true,
       });
 
       toast.success(`${previewName} created successfully.`);
