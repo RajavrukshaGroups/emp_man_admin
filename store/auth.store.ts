@@ -14,11 +14,13 @@ import type {
     AuthState,
     ChangePasswordRequest,
     LoginRequest,
+    LoginResponseData,
 } from "@/types/auth";
 
 interface AuthActions {
-    login: (payload: LoginRequest) => Promise<void>;
-
+    login: (
+        payload: LoginRequest,
+    ) => Promise<LoginResponseData>;
     initializeAuth: () => Promise<void>;
 
     logout: () => Promise<void>;
@@ -49,20 +51,38 @@ const extractPermissions = (
 const getSessionState = (
     session: AuthSessionData,
 ) => ({
+    accessType: session.accessType,
+
     user: session.user,
+
+    platformAccess: session.platformAccess,
+
     companyAccess: session.companyAccess,
+
     company: session.company,
+
     role: session.role,
+
     permissions: extractPermissions(session),
+
     isAuthenticated: true,
 });
 
 const emptySessionState = {
+    accessType: null,
+
     user: null,
+
+    platformAccess: null,
+
     companyAccess: null,
+
     company: null,
+
     role: null,
+
     permissions: [],
+
     isAuthenticated: false,
 };
 
@@ -87,9 +107,13 @@ export const useAuthStore = create<AuthStore>()(
 
                     set({
                         ...getSessionState(data),
+
                         isLoading: false,
+
                         isInitializing: false,
                     });
+
+                    return data;
                 } catch (error) {
                     set({
                         isLoading: false,
@@ -221,11 +245,20 @@ export const useAuthStore = create<AuthStore>()(
             ),
 
             partialize: (state) => ({
+                accessType: state.accessType,
+
                 user: state.user,
+
+                platformAccess: state.platformAccess,
+
                 companyAccess: state.companyAccess,
+
                 company: state.company,
+
                 role: state.role,
+
                 permissions: state.permissions,
+
                 isAuthenticated: state.isAuthenticated,
             }),
 
