@@ -1,8 +1,7 @@
 "use client";
 
-import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Eye, EyeOff, Loader2, Save, UserCog } from "lucide-react";
+import { Loader2, Save, UserCog } from "lucide-react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
@@ -12,129 +11,142 @@ import { getApiErrorMessage } from "@/lib/axios";
 import { companyAdministratorService } from "../services/company-administrator.service";
 
 import {
-  companyAdministratorSchema,
-  type CompanyAdministratorFormInput,
-  type CompanyAdministratorFormValues,
+  companyAdministratorEditSchema,
+  type CompanyAdministratorEditFormInput,
+  type CompanyAdministratorEditFormValues,
 } from "../validations/company-administrator.schema";
 
-import type { CompanyAdministrator } from "../types/company-administrator.types";
+import type {
+  CompanyAdministrator,
+  UpdateCompanyAdministratorPayload,
+} from "../types/company-administrator.types";
 
-interface CompanyAdministratorFormProps {
+interface CompanyAdministratorEditFormProps {
   companyId: string;
-  mode?: "create" | "edit";
-  administrator?: CompanyAdministrator;
+  administrator: CompanyAdministrator;
 }
 
-export function CompanyAdministratorForm({
+export function CompanyAdministratorEditForm({
   companyId,
-}: CompanyAdministratorFormProps) {
+  administrator,
+}: CompanyAdministratorEditFormProps) {
   const router = useRouter();
-
-  const [showPassword, setShowPassword] = useState(false);
-
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   const {
     register,
     handleSubmit,
     formState: { errors, isSubmitting },
   } = useForm<
-    CompanyAdministratorFormInput,
+    CompanyAdministratorEditFormInput,
     unknown,
-    CompanyAdministratorFormValues
+    CompanyAdministratorEditFormValues
   >({
-    resolver: zodResolver(companyAdministratorSchema),
+    resolver: zodResolver(companyAdministratorEditSchema),
 
     defaultValues: {
-      firstName: "",
-      middleName: "",
-      lastName: "",
-      displayName: "",
+      firstName: administrator.user.firstName ?? "",
 
-      email: "",
-      mobile: "",
+      middleName: administrator.user.middleName ?? "",
 
-      password: "",
-      confirmPassword: "",
+      lastName: administrator.user.lastName ?? "",
 
-      gender: "PREFER_NOT_TO_SAY",
-      dateOfBirth: "",
+      displayName: administrator.user.displayName ?? "",
 
-      employeeCode: "",
+      email: administrator.user.email ?? "",
 
-      designation: "Company Administrator",
+      mobile: administrator.user.mobile ?? "",
 
-      employmentType: "FULL_TIME",
+      gender: administrator.user.gender ?? "PREFER_NOT_TO_SAY",
 
-      joiningDate: new Date().toISOString().split("T")[0],
+      dateOfBirth: administrator.user.dateOfBirth
+        ? administrator.user.dateOfBirth.split("T")[0]
+        : "",
 
-      workLocationType: "HEAD_OFFICE",
+      employeeCode: administrator.companyAccess.employeeCode ?? "",
 
-      workLocationName: "",
+      designation:
+        administrator.companyAccess.designation ?? "Company Administrator",
 
-      notes: "Primary administrator created by platform Super Admin.",
+      employmentType: administrator.companyAccess.employmentType ?? "FULL_TIME",
 
-      emailVerified: true,
-      mobileVerified: true,
+      joiningDate: administrator.companyAccess.joiningDate
+        ? administrator.companyAccess.joiningDate.split("T")[0]
+        : "",
 
-      status: "ACTIVE",
+      workLocationType:
+        administrator.companyAccess.workLocationType ?? "HEAD_OFFICE",
+
+      workLocationName: administrator.companyAccess.workLocationName ?? "",
+
+      notes: administrator.companyAccess.notes ?? "",
+
+      emailVerified: administrator.user.emailVerified ?? false,
+
+      mobileVerified: administrator.user.mobileVerified ?? false,
     },
   });
 
-  const onSubmit = async (values: CompanyAdministratorFormValues) => {
+  const onSubmit = async (values: CompanyAdministratorEditFormValues) => {
+    const payload: UpdateCompanyAdministratorPayload = {
+      firstName: values.firstName,
+
+      middleName: values.middleName || "",
+
+      lastName: values.lastName,
+
+      displayName: values.displayName || "",
+
+      email: values.email,
+
+      mobile: values.mobile || "",
+
+      gender: values.gender,
+
+      dateOfBirth: values.dateOfBirth || null,
+
+      employeeCode: values.employeeCode,
+
+      designation: values.designation,
+
+      employmentType: values.employmentType,
+
+      joiningDate: values.joiningDate || null,
+
+      workLocationType: values.workLocationType,
+
+      workLocationName: values.workLocationName || "",
+
+      emailVerified: values.emailVerified,
+
+      mobileVerified: values.mobileVerified,
+
+      notes: values.notes || "",
+    };
+
     try {
-      await companyAdministratorService.createCompanyAdministrator(companyId, {
-        firstName: values.firstName,
-        middleName: values.middleName || "",
-        lastName: values.lastName,
-        displayName: values.displayName || "",
+      await companyAdministratorService.updateCompanyAdministrator(
+        companyId,
+        payload,
+      );
 
-        email: values.email,
-        mobile: values.mobile || undefined,
-
-        password: values.password,
-
-        gender: values.gender,
-        dateOfBirth: values.dateOfBirth || undefined,
-
-        employeeCode: values.employeeCode,
-        designation: values.designation,
-
-        employmentType: values.employmentType,
-
-        joiningDate: values.joiningDate || undefined,
-
-        workLocationType: values.workLocationType,
-
-        workLocationName: values.workLocationName || "",
-
-        emailVerified: values.emailVerified,
-
-        mobileVerified: values.mobileVerified,
-
-        notes: values.notes || "",
-      });
-
-      toast.success("Company administrator created successfully.");
+      toast.success("Company administrator updated successfully.");
 
       router.replace(`/platform/companies/${companyId}`);
 
       router.refresh();
     } catch (error) {
       toast.error(
-        getApiErrorMessage(error, "Unable to create company administrator."),
+        getApiErrorMessage(error, "Unable to update company administrator."),
       );
     }
   };
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-6" noValidate>
-      {/* Personal information */}
-
       <FormSection
         icon={UserCog}
         title="Administrator information"
-        description="Enter the personal and login information for the company's primary administrator."
+        description="Update the primary administrator's personal information."
       >
         <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
           <FormField
@@ -144,6 +156,7 @@ export function CompanyAdministratorForm({
           >
             <input
               type="text"
+              disabled={isSubmitting}
               placeholder="Enter first name"
               {...register("firstName")}
               className={inputClass}
@@ -153,6 +166,7 @@ export function CompanyAdministratorForm({
           <FormField label="Middle name" error={errors.middleName?.message}>
             <input
               type="text"
+              disabled={isSubmitting}
               placeholder="Enter middle name"
               {...register("middleName")}
               className={inputClass}
@@ -166,6 +180,7 @@ export function CompanyAdministratorForm({
           >
             <input
               type="text"
+              disabled={isSubmitting}
               placeholder="Enter last name"
               {...register("lastName")}
               className={inputClass}
@@ -175,14 +190,19 @@ export function CompanyAdministratorForm({
           <FormField label="Display name" error={errors.displayName?.message}>
             <input
               type="text"
-              placeholder="Example: Anup Admin"
+              disabled={isSubmitting}
+              placeholder="Example: Shashi Reddy"
               {...register("displayName")}
               className={inputClass}
             />
           </FormField>
 
           <FormField label="Gender" error={errors.gender?.message}>
-            <select {...register("gender")} className={inputClass}>
+            <select
+              disabled={isSubmitting}
+              {...register("gender")}
+              className={inputClass}
+            >
               <option value="PREFER_NOT_TO_SAY">Prefer not to say</option>
 
               <option value="MALE">Male</option>
@@ -196,6 +216,7 @@ export function CompanyAdministratorForm({
           <FormField label="Date of birth" error={errors.dateOfBirth?.message}>
             <input
               type="date"
+              disabled={isSubmitting}
               {...register("dateOfBirth")}
               className={inputClass}
             />
@@ -203,11 +224,9 @@ export function CompanyAdministratorForm({
         </div>
       </FormSection>
 
-      {/* Contact and login */}
-
       <FormSection
-        title="Contact & login credentials"
-        description="These credentials will be used by the administrator to sign in to the Employee Management System."
+        title="Contact information"
+        description="Update the administrator's email and mobile number. Password is managed separately."
       >
         <div className="grid gap-5 md:grid-cols-2">
           <FormField
@@ -217,6 +236,7 @@ export function CompanyAdministratorForm({
           >
             <input
               type="email"
+              disabled={isSubmitting}
               autoComplete="email"
               placeholder="admin@company.com"
               {...register("email")}
@@ -227,71 +247,29 @@ export function CompanyAdministratorForm({
           <FormField label="Mobile number" error={errors.mobile?.message}>
             <input
               type="text"
+              disabled={isSubmitting}
               placeholder="Enter mobile number"
               {...register("mobile")}
               className={inputClass}
             />
           </FormField>
+        </div>
 
-          <FormField label="Password" required error={errors.password?.message}>
-            <div className="relative">
-              <input
-                type={showPassword ? "text" : "password"}
-                autoComplete="new-password"
-                placeholder="Enter password"
-                {...register("password")}
-                className={`${inputClass} pr-11`}
-              />
+        <div className="mt-5 rounded-xl border border-blue-100 bg-blue-50 p-4">
+          <p className="text-sm font-semibold text-blue-950">
+            Password is not changed here
+          </p>
 
-              <button
-                type="button"
-                onClick={() => setShowPassword((current) => !current)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 transition hover:text-slate-700"
-              >
-                {showPassword ? (
-                  <EyeOff className="h-4 w-4" />
-                ) : (
-                  <Eye className="h-4 w-4" />
-                )}
-              </button>
-            </div>
-          </FormField>
-
-          <FormField
-            label="Confirm password"
-            required
-            error={errors.confirmPassword?.message}
-          >
-            <div className="relative">
-              <input
-                type={showConfirmPassword ? "text" : "password"}
-                autoComplete="new-password"
-                placeholder="Re-enter password"
-                {...register("confirmPassword")}
-                className={`${inputClass} pr-11`}
-              />
-
-              <button
-                type="button"
-                onClick={() => setShowConfirmPassword((current) => !current)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 transition hover:text-slate-700"
-              >
-                {showConfirmPassword ? (
-                  <EyeOff className="h-4 w-4" />
-                ) : (
-                  <Eye className="h-4 w-4" />
-                )}
-              </button>
-            </div>
-          </FormField>
+          <p className="mt-1 text-sm leading-6 text-blue-700">
+            Use the separate Reset Password option when the administrator's
+            login password needs to be changed.
+          </p>
         </div>
       </FormSection>
 
-      {/* Employment information */}
-
       <FormSection
         title="Company access"
-        description="Configure the administrator's employment and company access information."
+        description="Update the administrator's employment and company-specific information."
       >
         <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
           <FormField
@@ -301,15 +279,21 @@ export function CompanyAdministratorForm({
           >
             <input
               type="text"
-              placeholder="Example: TTC-ADM-001"
+              disabled={isSubmitting}
+              placeholder="Example: NBS-ADM-001"
               {...register("employeeCode")}
               className={`${inputClass} uppercase`}
             />
           </FormField>
 
-          <FormField label="Designation" error={errors.designation?.message}>
+          <FormField
+            label="Designation"
+            required
+            error={errors.designation?.message}
+          >
             <input
               type="text"
+              disabled={isSubmitting}
               {...register("designation")}
               className={inputClass}
             />
@@ -319,7 +303,11 @@ export function CompanyAdministratorForm({
             label="Employment type"
             error={errors.employmentType?.message}
           >
-            <select {...register("employmentType")} className={inputClass}>
+            <select
+              disabled={isSubmitting}
+              {...register("employmentType")}
+              className={inputClass}
+            >
               <option value="FULL_TIME">Full time</option>
 
               <option value="PART_TIME">Part time</option>
@@ -341,6 +329,7 @@ export function CompanyAdministratorForm({
           >
             <input
               type="date"
+              disabled={isSubmitting}
               {...register("joiningDate")}
               className={inputClass}
             />
@@ -350,7 +339,11 @@ export function CompanyAdministratorForm({
             label="Work location type"
             error={errors.workLocationType?.message}
           >
-            <select {...register("workLocationType")} className={inputClass}>
+            <select
+              disabled={isSubmitting}
+              {...register("workLocationType")}
+              className={inputClass}
+            >
               <option value="HEAD_OFFICE">Head office</option>
 
               <option value="BRANCH">Branch</option>
@@ -369,6 +362,7 @@ export function CompanyAdministratorForm({
           >
             <input
               type="text"
+              disabled={isSubmitting}
               placeholder="Example: Bengaluru"
               {...register("workLocationName")}
               className={inputClass}
@@ -377,17 +371,16 @@ export function CompanyAdministratorForm({
         </div>
       </FormSection>
 
-      {/* Account options */}
-
       <FormSection
-        title="Account configuration"
-        description="Configure the initial account status and verification settings."
+        title="Verification settings"
+        description="Manage the administrator's email and mobile verification state."
       >
         <div className="grid gap-5 lg:grid-cols-2">
           <div className="rounded-xl border border-slate-200 bg-slate-50 p-5">
             <label className="flex cursor-pointer items-start gap-3">
               <input
                 type="checkbox"
+                disabled={isSubmitting}
                 {...register("emailVerified")}
                 className="mt-1 h-4 w-4 rounded border-slate-300"
               />
@@ -396,8 +389,7 @@ export function CompanyAdministratorForm({
                 <p className="font-semibold text-slate-800">Email verified</p>
 
                 <p className="mt-1 text-sm leading-6 text-slate-500">
-                  Mark the administrator's email address as verified
-                  immediately.
+                  Mark the administrator's current email address as verified.
                 </p>
               </div>
             </label>
@@ -407,6 +399,7 @@ export function CompanyAdministratorForm({
             <label className="flex cursor-pointer items-start gap-3">
               <input
                 type="checkbox"
+                disabled={isSubmitting}
                 {...register("mobileVerified")}
                 className="mt-1 h-4 w-4 rounded border-slate-300"
               />
@@ -415,42 +408,28 @@ export function CompanyAdministratorForm({
                 <p className="font-semibold text-slate-800">Mobile verified</p>
 
                 <p className="mt-1 text-sm leading-6 text-slate-500">
-                  Mark the administrator's mobile number as verified
-                  immediately.
+                  Mark the administrator's current mobile number as verified.
                 </p>
               </div>
             </label>
           </div>
         </div>
-
-        <div className="mt-5 grid gap-5 md:grid-cols-2">
-          <FormField label="Account status" error={errors.status?.message}>
-            <select {...register("status")} className={inputClass}>
-              <option value="ACTIVE">Active</option>
-
-              <option value="INACTIVE">Inactive</option>
-            </select>
-          </FormField>
-        </div>
       </FormSection>
-
-      {/* Notes */}
 
       <FormSection
         title="Administrative notes"
-        description="Internal notes related to this administrator assignment."
+        description="Update internal notes related to this administrator assignment."
       >
         <FormField label="Notes" error={errors.notes?.message}>
           <textarea
             rows={4}
+            disabled={isSubmitting}
             placeholder="Enter optional notes"
             {...register("notes")}
-            className="w-full resize-none rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10"
+            className="w-full resize-none rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 disabled:cursor-not-allowed disabled:bg-slate-50"
           />
         </FormField>
       </FormSection>
-
-      {/* Submit actions */}
 
       <div className="flex flex-col-reverse gap-3 border-t border-slate-200 pt-6 sm:flex-row sm:justify-end">
         <button
@@ -470,12 +449,12 @@ export function CompanyAdministratorForm({
           {isSubmitting ? (
             <>
               <Loader2 className="h-4 w-4 animate-spin" />
-              Creating administrator...
+              Saving changes...
             </>
           ) : (
             <>
               <Save className="h-4 w-4" />
-              Create administrator
+              Save changes
             </>
           )}
         </button>
@@ -485,7 +464,7 @@ export function CompanyAdministratorForm({
 }
 
 const inputClass =
-  "h-11 w-full rounded-xl border border-slate-300 bg-white px-4 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10";
+  "h-11 w-full rounded-xl border border-slate-300 bg-white px-4 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 disabled:cursor-not-allowed disabled:bg-slate-50";
 
 function FormSection({
   icon: Icon,

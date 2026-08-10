@@ -20,9 +20,16 @@ import { toast } from "sonner";
 
 import { companyService } from "@/features/companies/services/company.service";
 import type {
+  Company,
   CompanyStatus,
   CreateCompanyPayload,
+  UpdateCompanyPayload,
 } from "@/features/companies/types/company.types";
+
+interface CompanyFormProps {
+  mode?: "create" | "edit";
+  company?: Company;
+}
 
 interface CompanyFormValues {
   name: string;
@@ -77,8 +84,12 @@ function getErrorMessage(error: unknown, fallbackMessage: string) {
   return fallbackMessage;
 }
 
-export function CreateCompanyForm() {
+export function CreateCompanyForm({
+  mode = "create",
+  company,
+}: CompanyFormProps) {
   const router = useRouter();
+  const isEditMode = mode === "edit";
 
   const {
     register,
@@ -86,38 +97,38 @@ export function CreateCompanyForm() {
     formState: { errors, isSubmitting },
   } = useForm<CompanyFormValues>({
     defaultValues: {
-      name: "",
-      legalName: "",
-      code: "",
+      name: company?.name ?? "",
+      legalName: company?.legalName ?? "",
+      code: company?.code ?? "",
 
-      logo: "",
+      logo: company?.logo ?? "",
 
-      email: "",
-      phone: "",
-      website: "",
+      email: company?.email ?? "",
+      phone: company?.phone ?? "",
+      website: company?.website ?? "",
 
-      addressLine1: "",
-      addressLine2: "",
-      city: "",
-      state: "",
-      country: "India",
-      postalCode: "",
+      addressLine1: company?.address?.addressLine1 ?? "",
+      addressLine2: company?.address?.addressLine2 ?? "",
+      city: company?.address?.city ?? "",
+      state: company?.address?.state ?? "",
+      country: company?.address?.country ?? "India",
+      postalCode: company?.address?.postalCode ?? "",
 
-      timezone: "Asia/Kolkata",
-      currency: "INR",
+      timezone: company?.timezone ?? "Asia/Kolkata",
+      currency: company?.currency ?? "INR",
 
-      dateFormat: "DD/MM/YYYY",
+      dateFormat: company?.dateFormat ?? "DD/MM/YYYY",
 
-      timeFormat: "12_HOUR",
+      timeFormat: company?.timeFormat ?? "12_HOUR",
 
-      status: "ACTIVE",
+      status: company?.status ?? "ACTIVE",
     },
 
     mode: "onBlur",
   });
 
   const onSubmit: SubmitHandler<CompanyFormValues> = async (values) => {
-    const payload: CreateCompanyPayload = {
+    const payload: CreateCompanyPayload | UpdateCompanyPayload = {
       name: values.name.trim(),
 
       legalName: values.legalName.trim() || undefined,
@@ -158,16 +169,40 @@ export function CreateCompanyForm() {
     };
 
     try {
-      const company = await companyService.createCompany(payload);
+      if (isEditMode) {
+        if (!company?._id) {
+          toast.error("Company information is unavailable.");
+          return;
+        }
 
-      toast.success("Company created successfully.");
+        const updatedCompany = await companyService.updateCompany(
+          company._id,
+          payload,
+        );
 
-      //   router.push(`/platform/companies/${company._id}`);
-      router.push("/platform/companies");
+        toast.success("Company updated successfully.");
+
+        router.push(`/platform/companies/${updatedCompany._id}`);
+      } else {
+        const createdCompany = await companyService.createCompany(
+          payload as CreateCompanyPayload,
+        );
+
+        toast.success("Company created successfully.");
+
+        router.push(`/platform/companies/${createdCompany._id}`);
+      }
 
       router.refresh();
     } catch (error: unknown) {
-      toast.error(getErrorMessage(error, "Unable to create company."));
+      toast.error(
+        getErrorMessage(
+          error,
+          isEditMode
+            ? "Unable to update company."
+            : "Unable to create company.",
+        ),
+      );
     }
   };
 
@@ -184,12 +219,13 @@ export function CreateCompanyForm() {
           </Link>
 
           <h1 className="mt-3 text-3xl font-bold tracking-tight text-slate-950">
-            Create company
+            {isEditMode ? "Edit company" : "Create company"}
           </h1>
 
           <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-500">
-            Register a new company in the Employee Management System. The
-            company administrator can be assigned after the company is created.
+            {isEditMode
+              ? "Update company information, contact details, address and regional configuration."
+              : "Register a new company in the Employee Management System. The company administrator can be assigned after the company is created."}
           </p>
         </div>
 
@@ -199,7 +235,9 @@ export function CreateCompanyForm() {
           </p>
 
           <p className="mt-1 text-sm font-semibold text-blue-950">
-            Step 1 · Company information
+            {isEditMode
+              ? "Company configuration"
+              : "Step 1 · Company information"}
           </p>
         </div>
       </div>
@@ -562,13 +600,13 @@ export function CreateCompanyForm() {
 
           <div>
             <h2 className="text-sm font-semibold text-blue-950">
-              What happens next?
+              {isEditMode ? "Company configuration" : "What happens next?"}
             </h2>
-
             <p className="mt-1 text-sm leading-6 text-blue-800">
-              After creating the company, we will configure its first company
-              administrator and company access.
-            </p>
+              {isEditMode
+                ? "Changes made here will update the company's platform configuration."
+                : "After creating the company, we will configure its first company administrator and company access."}
+            </p>{" "}
           </div>
         </div>
       </section>
@@ -576,8 +614,9 @@ export function CreateCompanyForm() {
       <div className="sticky bottom-0 z-20 rounded-2xl border border-slate-200 bg-white/95 p-4 shadow-lg backdrop-blur sm:flex sm:items-center sm:justify-between">
         <div className="mb-3 sm:mb-0">
           <p className="text-xs font-medium text-slate-600">
-            The company slug will be generated automatically from the company
-            name and code.
+            {isEditMode
+              ? "Changing the company name or code will regenerate its slug automatically."
+              : "The company slug will be generated automatically from the company name and code."}
           </p>
         </div>
 
@@ -598,12 +637,14 @@ export function CreateCompanyForm() {
             {isSubmitting ? (
               <>
                 <Loader2 className="h-4 w-4 animate-spin" />
-                Creating company...
+
+                {isEditMode ? "Saving changes..." : "Creating company..."}
               </>
             ) : (
               <>
                 <Save className="h-4 w-4" />
-                Create company
+
+                {isEditMode ? "Save changes" : "Create company"}
               </>
             )}
           </button>

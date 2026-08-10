@@ -12,6 +12,10 @@ import {
   RefreshCcw,
   Settings2,
   UserCog,
+  Pencil,
+  KeyRound,
+  Power,
+  PowerOff,
 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
@@ -21,6 +25,8 @@ import type {
   Company,
   CompanyAdministrator,
 } from "@/features/companies/types/company.types";
+import { CompanyAdministratorResetPasswordDialog } from "@/features/company-administrators/components/company-administrator-reset-password-dialog";
+import { CompanyAdministratorStatusDialog } from "@/features/company-administrators/components/company-administrator-status-dialog";
 
 interface CompanyDetailsViewProps {
   companyId: string;
@@ -88,6 +94,8 @@ export function CompanyDetailsView({ companyId }: CompanyDetailsViewProps) {
     useState<CompanyAdministrator | null>(null);
 
   const [isLoading, setIsLoading] = useState(true);
+  const [isResetPasswordOpen, setIsResetPasswordOpen] = useState(false);
+  const [isStatusDialogOpen, setIsStatusDialogOpen] = useState(false);
 
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
@@ -336,39 +344,103 @@ export function CompanyDetailsView({ companyId }: CompanyDetailsViewProps) {
         >
           {administrator ? (
             <div className="space-y-6">
-              <div className="flex items-start gap-4 rounded-xl border border-slate-200 bg-slate-50 p-4">
-                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-blue-100 text-blue-700">
-                  <UserCog className="h-6 w-6" />
-                </div>
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-5">
+                <div className="flex flex-col gap-5">
+                  {/* Administrator identity */}
+                  <div className="flex min-w-0 items-start gap-4">
+                    <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-blue-100 text-blue-700">
+                      <UserCog className="h-6 w-6" />
+                    </div>
 
-                <div className="min-w-0 flex-1">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <h3 className="font-bold text-slate-950">
-                      {administrator.user.displayName ||
-                        `${administrator.user.firstName} ${administrator.user.lastName}`}
-                    </h3>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="text-base font-bold text-slate-950">
+                          {administrator.user.displayName ||
+                            `${administrator.user.firstName} ${administrator.user.lastName}`}
+                        </p>
 
-                    <span
-                      className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${
-                        administrator.companyAccess.status === "ACTIVE"
-                          ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-                          : "border-amber-200 bg-amber-50 text-amber-700"
-                      }`}
-                    >
-                      {administrator.companyAccess.status}
-                    </span>
+                        <span
+                          className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${
+                            administrator.companyAccess.status === "ACTIVE"
+                              ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                              : "border-red-200 bg-red-50 text-red-700"
+                          }`}
+                        >
+                          {administrator.companyAccess.status}
+                        </span>
+                      </div>
+
+                      <p className="mt-1 break-all text-sm text-slate-500">
+                        {administrator.user.email}
+                      </p>
+
+                      <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-slate-500">
+                        <span>
+                          {administrator.companyAccess.employeeCode || "—"}
+                        </span>
+
+                        <span className="hidden text-slate-300 sm:inline">
+                          •
+                        </span>
+
+                        <span>
+                          {administrator.companyAccess.designation || "—"}
+                        </span>
+                      </div>
+                    </div>
                   </div>
 
-                  <p className="mt-1 text-sm text-slate-500">
-                    {administrator.role.name}
-                  </p>
+                  {/* Administrator actions */}
+                  <div className="flex flex-wrap items-center gap-2 border-t border-slate-200 pt-4">
+                    <Link
+                      href={`/platform/companies/${company._id}/administrator/edit`}
+                      className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-4 text-sm font-semibold text-blue-700 transition hover:bg-blue-100"
+                    >
+                      <Pencil className="h-4 w-4" />
+                      Edit
+                    </Link>
+
+                    <button
+                      type="button"
+                      onClick={() => setIsResetPasswordOpen(true)}
+                      className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 transition hover:bg-slate-100"
+                    >
+                      <KeyRound className="h-4 w-4" />
+                      Reset password
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setIsStatusDialogOpen(true)}
+                      className={`inline-flex h-10 items-center justify-center gap-2 rounded-xl border px-4 text-sm font-semibold transition ${
+                        administrator.companyAccess.status === "ACTIVE"
+                          ? "border-red-200 bg-red-50 text-red-700 hover:bg-red-100"
+                          : "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
+                      }`}
+                    >
+                      {administrator.companyAccess.status === "ACTIVE" ? (
+                        <>
+                          <PowerOff className="h-4 w-4" />
+                          Deactivate
+                        </>
+                      ) : (
+                        <>
+                          <Power className="h-4 w-4" />
+                          Activate
+                        </>
+                      )}
+                    </button>
+                  </div>
                 </div>
               </div>
 
               <DetailsGrid>
                 <DetailItem
                   label="Administrator name"
-                  value={administrator.user.displayName}
+                  value={
+                    administrator.user.displayName ||
+                    `${administrator.user.firstName} ${administrator.user.lastName}`
+                  }
                 />
 
                 <DetailItem
@@ -376,7 +448,11 @@ export function CompanyDetailsView({ companyId }: CompanyDetailsViewProps) {
                   value={administrator.companyAccess.employeeCode}
                 />
 
-                <DetailItem label="Email" value={administrator.user.email} />
+                <DetailItem
+                  label="Email"
+                  value={administrator.user.email}
+                  breakWords
+                />
 
                 <DetailItem label="Mobile" value={administrator.user.mobile} />
 
@@ -434,6 +510,33 @@ export function CompanyDetailsView({ companyId }: CompanyDetailsViewProps) {
           )}
         </DetailsSection>
       </div>
+      {administrator && (
+        <CompanyAdministratorResetPasswordDialog
+          companyId={company._id}
+          administratorName={
+            administrator.user.displayName ||
+            `${administrator.user.firstName} ${administrator.user.lastName}`
+          }
+          isOpen={isResetPasswordOpen}
+          onClose={() => setIsResetPasswordOpen(false)}
+        />
+      )}
+
+      {administrator && (
+        <CompanyAdministratorStatusDialog
+          companyId={company._id}
+          administratorName={
+            administrator.user.displayName ||
+            `${administrator.user.firstName} ${administrator.user.lastName}`
+          }
+          currentStatus={
+            administrator.companyAccess.status as "ACTIVE" | "INACTIVE"
+          }
+          isOpen={isStatusDialogOpen}
+          onClose={() => setIsStatusDialogOpen(false)}
+          onUpdated={loadCompany}
+        />
+      )}
     </div>
   );
 }

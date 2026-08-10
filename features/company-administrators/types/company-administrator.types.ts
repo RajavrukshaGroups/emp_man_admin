@@ -182,3 +182,31 @@ export interface CreateCompanyAdministratorResponse {
 
     role: CompanyAdministratorRole;
 }
+
+export interface UpdateCompanyAdministratorPayload {
+  firstName?: string;
+  middleName?: string;
+  lastName?: string;
+  displayName?: string;
+
+  email?: string;
+  mobile?: string;
+
+  gender?: AdministratorGender;
+  dateOfBirth?: string | null;
+
+  employeeCode?: string;
+  designation?: string;
+
+  employmentType?: EmploymentType;
+
+  joiningDate?: string | null;
+
+  workLocationType?: WorkLocationType;
+  workLocationName?: string;
+
+  emailVerified?: boolean;
+  mobileVerified?: boolean;
+
+  notes?: string;
+}
