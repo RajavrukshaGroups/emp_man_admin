@@ -251,6 +251,9 @@ const employeeStatusClassNames = {
 
 export function EmployeeDetailsView({ employeeId }: EmployeeDetailsViewProps) {
   const company = useAuthStore((state) => state.company);
+  const permissions = useAuthStore((state) => state.permissions);
+
+  const canUpdateEmployee = permissions.includes("employee.update");
 
   const [employee, setEmployee] = useState<Employee | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -373,20 +376,25 @@ export function EmployeeDetailsView({ employeeId }: EmployeeDetailsViewProps) {
             Refresh
           </button>
 
-          <Link
-            href={`/employees/${employee._id}/edit`}
-            className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 text-sm font-semibold text-white transition hover:bg-blue-700"
-          >
-            <Pencil className="h-4 w-4" />
-            Edit employee
-          </Link>
-          <Link
-            href={`/employees/${employee._id}/employment/edit`}
-            className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-5 text-sm font-semibold text-blue-700 transition hover:bg-blue-100"
-          >
-            <UserRoundCog className="h-4 w-4" />
-            Edit employment
-          </Link>
+          {canUpdateEmployee && (
+            <>
+              <Link
+                href={`/employees/${employee._id}/edit`}
+                className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 text-sm font-semibold text-white transition hover:bg-blue-700"
+              >
+                <Pencil className="h-4 w-4" />
+                Edit employee
+              </Link>
+
+              <Link
+                href={`/employees/${employee._id}/employment/edit`}
+                className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-5 text-sm font-semibold text-blue-700 transition hover:bg-blue-100"
+              >
+                <UserRoundCog className="h-4 w-4" />
+                Edit employment
+              </Link>
+            </>
+          )}
         </div>
       </div>
 

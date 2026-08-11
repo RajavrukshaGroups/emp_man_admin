@@ -127,6 +127,9 @@ export function ManageTeamLeads({ teamId }: ManageTeamLeadsProps) {
   const router = useRouter();
 
   const company = useAuthStore((state) => state.company);
+  const permissions = useAuthStore((state) => state.permissions);
+
+  const canAssignTeamLead = permissions.includes("team.assign_lead");
 
   const [team, setTeam] = useState<Team | null>(null);
 
@@ -143,6 +146,11 @@ export function ManageTeamLeads({ teamId }: ManageTeamLeadsProps) {
   const [loadError, setLoadError] = useState<string | null>(null);
 
   const loadData = useCallback(async () => {
+    if (!canAssignTeamLead) {
+      setIsLoading(false);
+      return;
+    }
+
     if (!company?._id) {
       setIsLoading(false);
 
@@ -184,7 +192,7 @@ export function ManageTeamLeads({ teamId }: ManageTeamLeadsProps) {
     } finally {
       setIsLoading(false);
     }
-  }, [company?._id, teamId]);
+  }, [canAssignTeamLead, company?._id, teamId]);
 
   useEffect(() => {
     void loadData();
@@ -216,6 +224,11 @@ export function ManageTeamLeads({ teamId }: ManageTeamLeadsProps) {
   }
 
   async function handleSave() {
+    if (!canAssignTeamLead) {
+      toast.error("You do not have permission to manage team leads.");
+      return;
+    }
+
     if (!company?._id || !team) {
       return;
     }
@@ -237,6 +250,25 @@ export function ManageTeamLeads({ teamId }: ManageTeamLeadsProps) {
     } finally {
       setIsSaving(false);
     }
+  }
+
+  if (!canAssignTeamLead) {
+    return (
+      <div className="rounded-2xl border border-red-200 bg-red-50 px-6 py-14 text-center">
+        <h1 className="text-xl font-bold text-red-950">Access denied</h1>
+
+        <p className="mt-2 text-sm text-red-700">
+          You do not have permission to manage team leads.
+        </p>
+
+        <Link
+          href={`/teams/${teamId}`}
+          className="mt-5 inline-flex h-10 items-center justify-center rounded-xl bg-slate-950 px-4 text-sm font-semibold text-white transition hover:bg-slate-800"
+        >
+          Back to team
+        </Link>
+      </div>
+    );
   }
 
   if (isLoading) {

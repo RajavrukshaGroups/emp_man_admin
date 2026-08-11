@@ -56,7 +56,7 @@ export interface CreateRolePayload {
     code: string;
     description?: string;
     permissionIds: string[];
-    scopeType: "COMPANY";
+    // scopeType: "COMPANY";
     status: RoleStatus;
 }
 

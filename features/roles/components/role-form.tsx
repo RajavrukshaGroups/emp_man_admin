@@ -54,11 +54,12 @@ export function RoleForm({ companyId, role }: RoleFormProps) {
     name: role?.name ?? "",
     code: role?.code ?? "",
     description: role?.description ?? "",
-    scopeType: "COMPANY",
+
     permissionIds:
       role?.permissionIds.map((permission) =>
         typeof permission === "string" ? permission : permission._id,
       ) ?? [],
+
     status: role?.status ?? "ACTIVE",
   };
 
@@ -125,7 +126,6 @@ export function RoleForm({ companyId, role }: RoleFormProps) {
           code: values.code.trim().toUpperCase(),
           description: values.description?.trim() || undefined,
           permissionIds: values.permissionIds,
-          scopeType: "COMPANY",
           status: values.status,
         });
 
@@ -326,8 +326,6 @@ export function RoleForm({ companyId, role }: RoleFormProps) {
               disabled
               className="h-10 w-full cursor-not-allowed rounded-lg border border-slate-200 bg-slate-100 px-3 text-sm text-slate-500"
             />
-
-            <input type="hidden" {...register("scopeType")} />
           </div>
 
           <div className="space-y-2 md:col-span-2">

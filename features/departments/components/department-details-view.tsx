@@ -134,6 +134,11 @@ export function DepartmentDetailsView({
   const router = useRouter();
   const company = useAuthStore((state) => state.company);
 
+  const permissions = useAuthStore((state) => state.permissions);
+
+  const canUpdateDepartment = permissions.includes("department.update");
+  const canDeleteDepartment = permissions.includes("department.delete");
+
   const [department, setDepartment] = useState<Department | null>(null);
 
   const [isLoading, setIsLoading] = useState(true);
@@ -307,46 +312,51 @@ export function DepartmentDetailsView({
             <RefreshCcw className="h-4 w-4" />
             Refresh
           </button>
+          {canUpdateDepartment && (
+            <Link
+              href={`/departments/${department._id}/edit`}
+              className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 text-sm font-semibold text-white transition hover:bg-blue-700"
+            >
+              <Edit3 className="h-4 w-4" />
+              Edit department
+            </Link>
+          )}
+          {canUpdateDepartment && (
+            <Link
+              href={`/departments/${department._id}/head`}
+              className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-5 text-sm font-semibold text-blue-700 transition hover:bg-blue-100"
+            >
+              <UserRoundCog className="h-4 w-4" />
+              Manage head
+            </Link>
+          )}
+          {canUpdateDepartment && (
+            <button
+              type="button"
+              onClick={() => setShowStatusConfirmation(true)}
+              disabled={isUpdatingStatus || isDeleting}
+              className={`inline-flex h-11 items-center justify-center gap-2 rounded-xl border px-5 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-60 ${
+                department.status === "ACTIVE"
+                  ? "border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100"
+                  : "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
+              }`}
+            >
+              <Power className="h-4 w-4" />
 
-          <Link
-            href={`/departments/${department._id}/edit`}
-            className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 text-sm font-semibold text-white transition hover:bg-blue-700"
-          >
-            <Edit3 className="h-4 w-4" />
-            Edit department
-          </Link>
-          <Link
-            href={`/departments/${department._id}/head`}
-            className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-5 text-sm font-semibold text-blue-700 transition hover:bg-blue-100"
-          >
-            <UserRoundCog className="h-4 w-4" />
-            Manage head
-          </Link>
-
-          <button
-            type="button"
-            onClick={() => setShowStatusConfirmation(true)}
-            disabled={isUpdatingStatus || isDeleting}
-            className={`inline-flex h-11 items-center justify-center gap-2 rounded-xl border px-5 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-60 ${
-              department.status === "ACTIVE"
-                ? "border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100"
-                : "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
-            }`}
-          >
-            <Power className="h-4 w-4" />
-
-            {department.status === "ACTIVE" ? "Inactivate" : "Activate"}
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setShowDeleteConfirmation(true)}
-            disabled={isDeleting || isUpdatingStatus}
-            className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-red-200 bg-red-50 px-5 text-sm font-semibold text-red-700 transition hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            <Trash2 className="h-4 w-4" />
-            Delete
-          </button>
+              {department.status === "ACTIVE" ? "Inactivate" : "Activate"}
+            </button>
+          )}
+          {canDeleteDepartment && (
+            <button
+              type="button"
+              onClick={() => setShowDeleteConfirmation(true)}
+              disabled={isDeleting || isUpdatingStatus}
+              className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-red-200 bg-red-50 px-5 text-sm font-semibold text-red-700 transition hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              <Trash2 className="h-4 w-4" />
+              Delete
+            </button>
+          )}
         </div>
       </div>
 
@@ -498,7 +508,7 @@ export function DepartmentDetailsView({
           </DetailsGrid>
         </DetailsSection>
       </div>
-      {showStatusConfirmation && (
+      {canUpdateDepartment && showStatusConfirmation && (
         <ConfirmationModal
           title={
             department.status === "ACTIVE"
@@ -522,7 +532,7 @@ export function DepartmentDetailsView({
         />
       )}
 
-      {showDeleteConfirmation && (
+      {canDeleteDepartment && showDeleteConfirmation && (
         <ConfirmationModal
           title="Delete department?"
           description="This action soft-deletes the department. The department cannot be deleted while active employees or child departments are assigned to it."

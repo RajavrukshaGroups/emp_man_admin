@@ -150,6 +150,10 @@ export function EditEmploymentForm({ employeeId }: EditEmploymentFormProps) {
 
   const company = useAuthStore((state) => state.company);
 
+  const permissions = useAuthStore((state) => state.permissions);
+
+  const canUpdateEmployee = permissions.includes("employee.update");
+
   const [employee, setEmployee] = useState<Employee | null>(null);
 
   const [companyAccess, setCompanyAccess] = useState<CompanyAccess | null>(
@@ -205,6 +209,10 @@ export function EditEmploymentForm({ employeeId }: EditEmploymentFormProps) {
   const [isLoadingTeams, setIsLoadingTeams] = useState(false);
 
   const loadEmploymentInformation = useCallback(async () => {
+    if (!canUpdateEmployee) {
+      setIsLoading(false);
+      return;
+    }
     if (!company?._id) {
       setIsLoading(false);
       setLoadError("Active company context is unavailable.");
@@ -277,9 +285,13 @@ export function EditEmploymentForm({ employeeId }: EditEmploymentFormProps) {
     } finally {
       setIsLoading(false);
     }
-  }, [company?._id, employeeId, reset]);
+  }, [canUpdateEmployee, company?._id, employeeId, reset]);
 
   const loadOrganisationOptions = useCallback(async () => {
+    if (!canUpdateEmployee) {
+      setIsLoadingOptions(false);
+      return;
+    }
     if (!company?._id) {
       return;
     }
@@ -337,7 +349,7 @@ export function EditEmploymentForm({ employeeId }: EditEmploymentFormProps) {
     } finally {
       setIsLoadingOptions(false);
     }
-  }, [company?._id, companyAccess?._id]);
+  }, [canUpdateEmployee, company?._id, companyAccess?._id]);
 
   useEffect(() => {
     void loadEmploymentInformation();
@@ -349,6 +361,10 @@ export function EditEmploymentForm({ employeeId }: EditEmploymentFormProps) {
 
   useEffect(() => {
     async function loadTeams() {
+      if (!canUpdateEmployee) {
+        setTeams([]);
+        return;
+      }
       if (!company?._id || !selectedDepartmentId) {
         setTeams([]);
         return;
@@ -382,9 +398,13 @@ export function EditEmploymentForm({ employeeId }: EditEmploymentFormProps) {
     }
 
     void loadTeams();
-  }, [company?._id, selectedDepartmentId]);
+  }, [canUpdateEmployee, company?._id, selectedDepartmentId]);
 
   const onSubmit: SubmitHandler<EmploymentFormValues> = async (values) => {
+    if (!canUpdateEmployee) {
+      toast.error("You do not have permission to update employee information.");
+      return;
+    }
     if (!company?._id) {
       toast.error("Active company context is unavailable.");
       return;
@@ -441,6 +461,25 @@ export function EditEmploymentForm({ employeeId }: EditEmploymentFormProps) {
       );
     }
   };
+
+  if (!canUpdateEmployee) {
+    return (
+      <div className="rounded-2xl border border-red-200 bg-red-50 px-6 py-14 text-center">
+        <h1 className="text-xl font-bold text-red-950">Access denied</h1>
+
+        <p className="mt-2 text-sm text-red-700">
+          You do not have permission to update employment information.
+        </p>
+
+        <Link
+          href={`/employees/${employeeId}`}
+          className="mt-5 inline-flex h-10 items-center justify-center rounded-xl bg-slate-950 px-4 text-sm font-semibold text-white"
+        >
+          Back to employee
+        </Link>
+      </div>
+    );
+  }
 
   if (isLoading) {
     return <EmploymentFormSkeleton />;

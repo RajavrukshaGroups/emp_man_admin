@@ -1,5 +1,4 @@
 import {
-    Building2,
     LayoutDashboard,
     Network,
     ShieldCheck,
@@ -7,7 +6,6 @@ import {
     Users,
     UserRound,
     Settings,
-    BriefcaseBusiness,
     ClipboardCheck,
 } from "lucide-react";
 
@@ -24,18 +22,6 @@ export const dashboardNavigation: DashboardNavigationItem[] = [
         title: "Dashboard",
         href: "/dashboard",
         icon: LayoutDashboard,
-    },
-    {
-        title: "Companies",
-        href: "/companies",
-        icon: Building2,
-        permission: "company.read",
-    },
-    {
-        title: "Company Access",
-        href: "/company-access",
-        icon: BriefcaseBusiness,
-        permission: "company_access.read",
     },
     {
         title: "Departments",
@@ -55,14 +41,12 @@ export const dashboardNavigation: DashboardNavigationItem[] = [
         icon: UserRound,
         permission: "employee.read",
     },
-
     {
         title: "Onboarding",
         href: "/onboarding",
         icon: ClipboardCheck,
-        permission: "employee.read",
+        permission: "employee.create",
     },
-
     {
         title: "Roles",
         href: "/roles",
@@ -90,5 +74,6 @@ export const dashboardNavigation: DashboardNavigationItem[] = [
         title: "Settings",
         href: "/settings",
         icon: Settings,
+        permission: "settings.read",
     },
 ];

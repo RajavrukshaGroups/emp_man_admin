@@ -86,6 +86,10 @@ export function EditEmployeeForm({ employeeId }: EditEmployeeFormProps) {
 
   const company = useAuthStore((state) => state.company);
 
+  const permissions = useAuthStore((state) => state.permissions);
+
+  const canUpdateEmployee = permissions.includes("employee.update");
+
   const [employee, setEmployee] = useState<Employee | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -151,6 +155,11 @@ export function EditEmployeeForm({ employeeId }: EditEmployeeFormProps) {
   });
 
   const loadEmployee = useCallback(async () => {
+    if (!canUpdateEmployee) {
+      setIsLoading(false);
+      return;
+    }
+
     if (!company?._id) {
       setIsLoading(false);
       setLoadError("Active company context is unavailable.");
@@ -265,7 +274,7 @@ export function EditEmployeeForm({ employeeId }: EditEmployeeFormProps) {
     } finally {
       setIsLoading(false);
     }
-  }, [company?._id, employeeId, reset]);
+  }, [canUpdateEmployee, company?._id, employeeId, reset]);
 
   useEffect(() => {
     void loadEmployee();
@@ -275,6 +284,10 @@ export function EditEmployeeForm({ employeeId }: EditEmployeeFormProps) {
   const isPermanentAddressSame = watch("isPermanentAddressSame");
 
   async function onSubmit(values: CreateEmployeeFormValues) {
+    if (!canUpdateEmployee) {
+      toast.error("You do not have permission to update employees.");
+      return;
+    }
     if (!company?._id) {
       toast.error("Active company context is unavailable.");
       return;
@@ -378,6 +391,25 @@ export function EditEmployeeForm({ employeeId }: EditEmployeeFormProps) {
         getErrorMessage(error, "Unable to update the employee profile."),
       );
     }
+  }
+
+  if (!canUpdateEmployee) {
+    return (
+      <div className="rounded-2xl border border-red-200 bg-red-50 px-6 py-14 text-center">
+        <h1 className="text-xl font-bold text-red-950">Access denied</h1>
+
+        <p className="mt-2 text-sm text-red-700">
+          You do not have permission to update employee information.
+        </p>
+
+        <Link
+          href={`/employees/${employeeId}`}
+          className="mt-5 inline-flex h-10 items-center justify-center rounded-xl bg-slate-950 px-4 text-sm font-semibold text-white"
+        >
+          Back to employee
+        </Link>
+      </div>
+    );
   }
 
   if (isLoading) {

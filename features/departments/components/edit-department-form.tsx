@@ -111,6 +111,10 @@ export function EditDepartmentForm({ departmentId }: EditDepartmentFormProps) {
 
   const company = useAuthStore((state) => state.company);
 
+  const permissions = useAuthStore((state) => state.permissions);
+
+  const canUpdateDepartment = permissions.includes("department.update");
+
   const [department, setDepartment] = useState<Department | null>(null);
 
   const [departments, setDepartments] = useState<Department[]>([]);
@@ -146,6 +150,11 @@ export function EditDepartmentForm({ departmentId }: EditDepartmentFormProps) {
   });
 
   const loadDepartment = useCallback(async () => {
+    if (!canUpdateDepartment) {
+      setIsLoading(false);
+      return;
+    }
+
     if (!company?._id) {
       setIsLoading(false);
       setLoadError("Active company context is unavailable.");
@@ -189,9 +198,14 @@ export function EditDepartmentForm({ departmentId }: EditDepartmentFormProps) {
     } finally {
       setIsLoading(false);
     }
-  }, [company?._id, departmentId, reset]);
+  }, [canUpdateDepartment, company?._id, departmentId, reset]);
 
   const loadOptions = useCallback(async () => {
+    if (!canUpdateDepartment) {
+      setIsLoadingOptions(false);
+      return;
+    }
+
     if (!company?._id) {
       return;
     }
@@ -233,7 +247,7 @@ export function EditDepartmentForm({ departmentId }: EditDepartmentFormProps) {
     } finally {
       setIsLoadingOptions(false);
     }
-  }, [company?._id, departmentId]);
+  }, [canUpdateDepartment, company?._id, departmentId]);
 
   useEffect(() => {
     void loadDepartment();
@@ -296,6 +310,25 @@ export function EditDepartmentForm({ departmentId }: EditDepartmentFormProps) {
       toast.error(getErrorMessage(error, "Unable to update department."));
     }
   };
+
+  if (!canUpdateDepartment) {
+    return (
+      <div className="rounded-2xl border border-red-200 bg-red-50 px-6 py-14 text-center">
+        <h1 className="text-xl font-bold text-red-950">Access denied</h1>
+
+        <p className="mt-2 text-sm text-red-700">
+          You do not have permission to update departments.
+        </p>
+
+        <Link
+          href="/departments"
+          className="mt-5 inline-flex h-10 items-center justify-center rounded-xl bg-slate-950 px-4 text-sm font-semibold text-white transition hover:bg-slate-800"
+        >
+          Back to departments
+        </Link>
+      </div>
+    );
+  }
 
   if (isLoading) {
     return <DepartmentFormSkeleton />;

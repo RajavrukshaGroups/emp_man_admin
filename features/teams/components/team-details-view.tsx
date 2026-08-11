@@ -125,6 +125,13 @@ export function TeamDetailsView({ teamId }: TeamDetailsViewProps) {
 
   const company = useAuthStore((state) => state.company);
 
+  const permissions = useAuthStore((state) => state.permissions);
+
+  const canUpdateTeam = permissions.includes("team.update");
+  const canAssignTeamLead = permissions.includes("team.assign_lead");
+  const canAssignTeamMember = permissions.includes("team.assign_member");
+  const canDeleteTeam = permissions.includes("team.delete");
+
   const [team, setTeam] = useState<Team | null>(null);
 
   const [isLoading, setIsLoading] = useState(true);
@@ -297,54 +304,62 @@ export function TeamDetailsView({ teamId }: TeamDetailsViewProps) {
             Refresh
           </button>
 
-          <Link
-            href={`/teams/${team._id}/edit`}
-            className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 text-sm font-semibold text-white transition hover:bg-blue-700"
-          >
-            <Edit3 className="h-4 w-4" />
-            Edit team
-          </Link>
+          {canUpdateTeam && (
+            <Link
+              href={`/teams/${team._id}/edit`}
+              className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 text-sm font-semibold text-white transition hover:bg-blue-700"
+            >
+              <Edit3 className="h-4 w-4" />
+              Edit team
+            </Link>
+          )}
+          {canAssignTeamLead && (
+            <Link
+              href={`/teams/${team._id}/leads`}
+              className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-5 text-sm font-semibold text-blue-700 transition hover:bg-blue-100"
+            >
+              <UserRoundCheck className="h-4 w-4" />
+              Manage leads
+            </Link>
+          )}
 
-          <Link
-            href={`/teams/${team._id}/leads`}
-            className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-5 text-sm font-semibold text-blue-700 transition hover:bg-blue-100"
-          >
-            <UserRoundCheck className="h-4 w-4" />
-            Manage leads
-          </Link>
+          {canAssignTeamMember && (
+            <Link
+              href={`/teams/${team._id}/members`}
+              className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-violet-200 bg-violet-50 px-5 text-sm font-semibold text-violet-700 transition hover:bg-violet-100"
+            >
+              <UsersRound className="h-4 w-4" />
+              Manage members
+            </Link>
+          )}
 
-          <Link
-            href={`/teams/${team._id}/members`}
-            className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-violet-200 bg-violet-50 px-5 text-sm font-semibold text-violet-700 transition hover:bg-violet-100"
-          >
-            <UsersRound className="h-4 w-4" />
-            Manage members
-          </Link>
+          {canUpdateTeam && (
+            <button
+              type="button"
+              onClick={() => setShowStatusConfirmation(true)}
+              disabled={isUpdatingStatus || isDeleting}
+              className={`inline-flex h-11 items-center justify-center gap-2 rounded-xl border px-5 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-60 ${
+                team.status === "ACTIVE"
+                  ? "border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100"
+                  : "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
+              }`}
+            >
+              <Power className="h-4 w-4" />
+              {team.status === "ACTIVE" ? "Inactivate" : "Activate"}
+            </button>
+          )}
 
-          <button
-            type="button"
-            onClick={() => setShowStatusConfirmation(true)}
-            disabled={isUpdatingStatus || isDeleting}
-            className={`inline-flex h-11 items-center justify-center gap-2 rounded-xl border px-5 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-60 ${
-              team.status === "ACTIVE"
-                ? "border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100"
-                : "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
-            }`}
-          >
-            <Power className="h-4 w-4" />
-
-            {team.status === "ACTIVE" ? "Inactivate" : "Activate"}
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setShowDeleteConfirmation(true)}
-            disabled={isDeleting || isUpdatingStatus}
-            className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-red-200 bg-red-50 px-5 text-sm font-semibold text-red-700 transition hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            <Trash2 className="h-4 w-4" />
-            Delete
-          </button>
+          {canDeleteTeam && (
+            <button
+              type="button"
+              onClick={() => setShowDeleteConfirmation(true)}
+              disabled={isDeleting || isUpdatingStatus}
+              className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-red-200 bg-red-50 px-5 text-sm font-semibold text-red-700 transition hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              <Trash2 className="h-4 w-4" />
+              Delete
+            </button>
+          )}
         </div>
       </div>
 
@@ -528,7 +543,7 @@ export function TeamDetailsView({ teamId }: TeamDetailsViewProps) {
         </DetailsGrid>
       </DetailsSection>
 
-      {showStatusConfirmation && (
+      {canUpdateTeam && showStatusConfirmation && (
         <ConfirmationModal
           title={
             team.status === "ACTIVE" ? "Inactivate team?" : "Activate team?"
@@ -548,7 +563,7 @@ export function TeamDetailsView({ teamId }: TeamDetailsViewProps) {
         />
       )}
 
-      {showDeleteConfirmation && (
+      {canDeleteTeam && showDeleteConfirmation && (
         <ConfirmationModal
           title="Delete team?"
           description="This action soft-deletes the team. The backend will prevent deletion while active or onboarding employees are still assigned to this team."

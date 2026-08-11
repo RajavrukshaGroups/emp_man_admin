@@ -76,6 +76,11 @@ const statusClassNames: Record<DepartmentStatus, string> = {
 export function DepartmentList() {
   const company = useAuthStore((state) => state.company);
 
+  const permissions = useAuthStore((state) => state.permissions);
+
+  const canCreateDepartment = permissions.includes("department.create");
+  const canUpdateDepartment = permissions.includes("department.update");
+
   const [result, setResult] = useState<DepartmentListData>({
     departments: [],
     pagination: {
@@ -157,13 +162,15 @@ export function DepartmentList() {
           </p>
         </div>
 
-        <Link
-          href="/departments/create"
-          className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 text-sm font-semibold text-white transition hover:bg-blue-700"
-        >
-          <Plus className="h-4 w-4" />
-          Add department
-        </Link>
+        {canCreateDepartment && (
+          <Link
+            href="/departments/create"
+            className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 text-sm font-semibold text-white transition hover:bg-blue-700"
+          >
+            <Plus className="h-4 w-4" />
+            Add department
+          </Link>
+        )}
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
@@ -263,7 +270,10 @@ export function DepartmentList() {
             </button>
           </div>
         ) : result.departments.length === 0 ? (
-          <DepartmentEmptyState hasFilters={Boolean(search || status)} />
+          <DepartmentEmptyState
+            hasFilters={Boolean(search || status)}
+            canCreateDepartment={canCreateDepartment}
+          />
         ) : (
           <>
             <div className="overflow-x-auto">
@@ -332,13 +342,15 @@ export function DepartmentList() {
                             <Eye className="h-4 w-4" />
                           </Link>
 
-                          <Link
-                            href={`/departments/${department._id}/edit`}
-                            title="Edit department"
-                            className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 text-slate-600 transition hover:border-amber-200 hover:bg-amber-50 hover:text-amber-600"
-                          >
-                            <Pencil className="h-4 w-4" />
-                          </Link>
+                          {canUpdateDepartment && (
+                            <Link
+                              href={`/departments/${department._id}/edit`}
+                              title="Edit department"
+                              className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 text-slate-600 transition hover:border-amber-200 hover:bg-amber-50 hover:text-amber-600"
+                            >
+                              <Pencil className="h-4 w-4" />
+                            </Link>
+                          )}
                         </div>
                       </TableCell>
                     </tr>
@@ -466,7 +478,13 @@ function DepartmentTableSkeleton() {
   );
 }
 
-function DepartmentEmptyState({ hasFilters }: { hasFilters: boolean }) {
+function DepartmentEmptyState({
+  hasFilters,
+  canCreateDepartment,
+}: {
+  hasFilters: boolean;
+  canCreateDepartment: boolean;
+}) {
   return (
     <div className="px-6 py-16 text-center">
       <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-slate-100 text-slate-500">
@@ -483,7 +501,7 @@ function DepartmentEmptyState({ hasFilters }: { hasFilters: boolean }) {
           : "Create your first department to organise employees and teams."}
       </p>
 
-      {!hasFilters && (
+      {!hasFilters && canCreateDepartment && (
         <Link
           href="/departments/create"
           className="mt-5 inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 text-sm font-semibold text-white"

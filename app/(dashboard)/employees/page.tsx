@@ -131,6 +131,10 @@ const statusClassNames: Record<EmployeeStatus, string> = {
 export default function EmployeesPage() {
   const company = useAuthStore((state) => state.company);
 
+  const permissions = useAuthStore((state) => state.permissions);
+
+  const canCreateEmployee = permissions.includes("employee.create");
+  const canUpdateEmployee = permissions.includes("employee.update");
   const [result, setResult] = useState<EmployeeListResult>({
     records: [],
     pagination: {
@@ -211,13 +215,15 @@ export default function EmployeesPage() {
           </p>
         </div>
 
-        <Link
-          href="/onboarding/new"
-          className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 text-sm font-semibold text-white transition hover:bg-blue-700"
-        >
-          <Plus className="h-4 w-4" />
-          Add employee
-        </Link>
+        {canCreateEmployee && (
+          <Link
+            href="/onboarding/new"
+            className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 text-sm font-semibold text-white transition hover:bg-blue-700"
+          >
+            <Plus className="h-4 w-4" />
+            Add employee
+          </Link>
+        )}
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
@@ -318,7 +324,10 @@ export default function EmployeesPage() {
             </button>
           </div>
         ) : result.records.length === 0 ? (
-          <EmployeeEmptyState hasFilters={Boolean(search || status)} />
+          <EmployeeEmptyState
+            hasFilters={Boolean(search || status)}
+            canCreateEmployee={canCreateEmployee}
+          />
         ) : (
           <>
             <div className="overflow-x-auto">
@@ -420,13 +429,15 @@ export default function EmployeesPage() {
                               <Eye className="h-4 w-4" />
                             </Link>
 
-                            <Link
-                              href={`/employees/${employee._id}/edit`}
-                              title="Edit employee"
-                              className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 text-slate-600 transition hover:border-amber-200 hover:bg-amber-50 hover:text-amber-600"
-                            >
-                              <Pencil className="h-4 w-4" />
-                            </Link>
+                            {canUpdateEmployee && (
+                              <Link
+                                href={`/employees/${employee._id}/edit`}
+                                title="Edit employee"
+                                className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 text-slate-600 transition hover:border-amber-200 hover:bg-amber-50 hover:text-amber-600"
+                              >
+                                <Pencil className="h-4 w-4" />
+                              </Link>
+                            )}
                           </div>
                         </TableCell>
                       </tr>
@@ -555,7 +566,13 @@ function EmployeesTableSkeleton() {
   );
 }
 
-function EmployeeEmptyState({ hasFilters }: { hasFilters: boolean }) {
+function EmployeeEmptyState({
+  hasFilters,
+  canCreateEmployee,
+}: {
+  hasFilters: boolean;
+  canCreateEmployee: boolean;
+}) {
   return (
     <div className="px-6 py-16 text-center">
       <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-slate-100 text-slate-500">
@@ -572,7 +589,7 @@ function EmployeeEmptyState({ hasFilters }: { hasFilters: boolean }) {
           : "Create the first employee account and complete the onboarding process."}
       </p>
 
-      {!hasFilters && (
+      {!hasFilters && canCreateEmployee && (
         <Link
           href="/onboarding/new"
           className="mt-5 inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 text-sm font-semibold text-white"

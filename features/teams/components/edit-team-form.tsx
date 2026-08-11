@@ -86,6 +86,10 @@ export function EditTeamForm({ teamId }: EditTeamFormProps) {
 
   const company = useAuthStore((state) => state.company);
 
+  const permissions = useAuthStore((state) => state.permissions);
+
+  const canUpdateTeam = permissions.includes("team.update");
+
   const [team, setTeam] = useState<Team | null>(null);
 
   const [departments, setDepartments] = useState<Department[]>([]);
@@ -111,6 +115,11 @@ export function EditTeamForm({ teamId }: EditTeamFormProps) {
   });
 
   const loadTeamInformation = useCallback(async () => {
+    if (!canUpdateTeam) {
+      setIsLoading(false);
+      return;
+    }
+
     if (!company?._id) {
       setIsLoading(false);
 
@@ -161,7 +170,7 @@ export function EditTeamForm({ teamId }: EditTeamFormProps) {
     } finally {
       setIsLoading(false);
     }
-  }, [company?._id, teamId, reset]);
+  }, [canUpdateTeam, company?._id, teamId, reset]);
 
   useEffect(() => {
     void loadTeamInformation();
@@ -202,6 +211,25 @@ export function EditTeamForm({ teamId }: EditTeamFormProps) {
       toast.error(getErrorMessage(error, "Unable to update team."));
     }
   };
+
+  if (!canUpdateTeam) {
+    return (
+      <div className="rounded-2xl border border-red-200 bg-red-50 px-6 py-14 text-center">
+        <h1 className="text-xl font-bold text-red-950">Access denied</h1>
+
+        <p className="mt-2 text-sm text-red-700">
+          You do not have permission to update teams.
+        </p>
+
+        <Link
+          href="/teams"
+          className="mt-5 inline-flex h-10 items-center justify-center rounded-xl bg-slate-950 px-4 text-sm font-semibold text-white transition hover:bg-slate-800"
+        >
+          Back to teams
+        </Link>
+      </div>
+    );
+  }
 
   if (isLoading) {
     return <EditTeamSkeleton />;

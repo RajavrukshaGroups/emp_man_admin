@@ -25,6 +25,7 @@ import type {
   TeamStatus,
 } from "@/features/teams/types/team.types";
 import { useAuthStore } from "@/store/auth.store";
+import { permission } from "process";
 
 const PAGE_SIZE = 10;
 
@@ -100,6 +101,10 @@ const statusClassNames: Record<TeamStatus, string> = {
 export default function TeamsPage() {
   const company = useAuthStore((state) => state.company);
 
+  const permissions = useAuthStore((state) => state.permissions);
+
+  const canCreateTeam = permissions.includes("team.create");
+  const canUpdateTeam = permissions.includes("team.update");
   const [result, setResult] = useState<TeamListData>({
     teams: [],
 
@@ -192,13 +197,15 @@ export default function TeamsPage() {
           </p>
         </div>
 
-        <Link
-          href="/teams/create"
-          className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 text-sm font-semibold text-white transition hover:bg-blue-700"
-        >
-          <Plus className="h-4 w-4" />
-          Add team
-        </Link>
+        {canCreateTeam && (
+          <Link
+            href="/teams/create"
+            className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 text-sm font-semibold text-white transition hover:bg-blue-700"
+          >
+            <Plus className="h-4 w-4" />
+            Add team
+          </Link>
+        )}
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
@@ -300,7 +307,10 @@ export default function TeamsPage() {
             </button>
           </div>
         ) : result.teams.length === 0 ? (
-          <TeamEmptyState hasFilters={Boolean(search || status)} />
+          <TeamEmptyState
+            hasFilters={Boolean(search || status)}
+            canCreateTeam={canCreateTeam}
+          />
         ) : (
           <>
             <div className="overflow-x-auto">
@@ -396,13 +406,15 @@ export default function TeamsPage() {
                               <Eye className="h-4 w-4" />
                             </Link>
 
-                            <Link
-                              href={`/teams/${team._id}/edit`}
-                              title="Edit team"
-                              className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 text-slate-600 transition hover:border-amber-200 hover:bg-amber-50 hover:text-amber-600"
-                            >
-                              <Pencil className="h-4 w-4" />
-                            </Link>
+                            {canUpdateTeam && (
+                              <Link
+                                href={`/teams/${team._id}/edit`}
+                                title="Edit team"
+                                className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 text-slate-600 transition hover:border-amber-200 hover:bg-amber-50 hover:text-amber-600"
+                              >
+                                <Pencil className="h-4 w-4" />
+                              </Link>
+                            )}
                           </div>
                         </TableCell>
                       </tr>
@@ -534,7 +546,13 @@ function TeamsTableSkeleton() {
   );
 }
 
-function TeamEmptyState({ hasFilters }: { hasFilters: boolean }) {
+function TeamEmptyState({
+  hasFilters,
+  canCreateTeam,
+}: {
+  hasFilters: boolean;
+  canCreateTeam: boolean;
+}) {
   return (
     <div className="px-6 py-16 text-center">
       <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-slate-100 text-slate-500">
@@ -551,7 +569,7 @@ function TeamEmptyState({ hasFilters }: { hasFilters: boolean }) {
           : "Create the first team and assign it to an active department."}
       </p>
 
-      {!hasFilters && (
+      {!hasFilters && canCreateTeam && (
         <Link
           href="/teams/create"
           className="mt-5 inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 text-sm font-semibold text-white"

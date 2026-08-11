@@ -108,6 +108,9 @@ export function CreateTeamForm() {
   const router = useRouter();
 
   const company = useAuthStore((state) => state.company);
+  const permissions = useAuthStore((state) => state.permissions);
+
+  const canCreateTeam = permissions.includes("team.create");
 
   const [departments, setDepartments] = useState<Department[]>([]);
 
@@ -159,6 +162,15 @@ export function CreateTeamForm() {
   }, [companyAccessRecords, selectedDepartmentId]);
 
   const loadOptions = useCallback(async () => {
+    if (!canCreateTeam) {
+      setIsLoadingOptions(false);
+      return;
+    }
+
+    if (!company?._id) {
+      setIsLoadingOptions(false);
+      return;
+    }
     if (!company?._id) {
       return;
     }
@@ -194,7 +206,7 @@ export function CreateTeamForm() {
     } finally {
       setIsLoadingOptions(false);
     }
-  }, [company?._id]);
+  }, [canCreateTeam, company?._id]);
 
   useEffect(() => {
     void loadOptions();
@@ -278,6 +290,25 @@ export function CreateTeamForm() {
       toast.error(getErrorMessage(error, "Unable to create team."));
     }
   };
+
+  if (!canCreateTeam) {
+    return (
+      <div className="rounded-2xl border border-red-200 bg-red-50 px-6 py-14 text-center">
+        <h1 className="text-xl font-bold text-red-950">Access denied</h1>
+
+        <p className="mt-2 text-sm text-red-700">
+          You do not have permission to create teams.
+        </p>
+
+        <Link
+          href="/teams"
+          className="mt-5 inline-flex h-10 items-center justify-center rounded-xl bg-slate-950 px-4 text-sm font-semibold text-white transition hover:bg-slate-800"
+        >
+          Back to teams
+        </Link>
+      </div>
+    );
+  }
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-6" noValidate>
