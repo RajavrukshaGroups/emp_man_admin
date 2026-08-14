@@ -1,12 +1,18 @@
 "use client";
 
-import { CalendarCheck, ClipboardList, UserCheck, Users } from "lucide-react";
-
+import {
+  Building2,
+  ClipboardList,
+  Network,
+  UserCheck,
+  Users,
+} from "lucide-react";
 import { useAuthStore } from "@/store/auth.store";
 
 import { DashboardHeader } from "./dashboard-header";
 import { QuickActions } from "./quick-actions";
 import { StatCard } from "./stat-card";
+import { useTeamLeadDashboardSummary } from "../hooks/use-team-lead-dashboard-summary";
 
 const teamLeadQuickActions = [
   {
@@ -27,6 +33,9 @@ const teamLeadQuickActions = [
 
 export function TeamLeadDashboard() {
   const user = useAuthStore((state) => state.user);
+  const company = useAuthStore((state) => state.company);
+
+  const { data, isLoading, error } = useTeamLeadDashboardSummary(company?._id);
 
   return (
     <div className="space-y-6">
@@ -37,34 +46,55 @@ export function TeamLeadDashboard() {
         }`}
         description="Monitor your team members and day-to-day workforce activity."
       />
+      {error && (
+        <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm font-medium text-red-700">
+          {error}
+        </div>
+      )}
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard
           title="Team members"
-          value={12}
+          value={data?.members.total ?? 0}
           icon={Users}
+          description="Employees assigned to your team"
           href="/employees"
+          isLoading={isLoading}
         />
 
         <StatCard
           title="Active members"
-          value={11}
+          value={data?.members.active ?? 0}
           icon={UserCheck}
-          description="Currently active"
+          description={`${data?.members.inactive ?? 0} inactive`}
+          href="/employees?status=ACTIVE"
+          isLoading={isLoading}
         />
 
         <StatCard
-          title="Present today"
-          value={10}
-          icon={CalendarCheck}
-          description="Attendance summary"
+          title="Team"
+          value={data?.team?.name ?? "Not assigned"}
+          icon={Network}
+          description={
+            data?.team
+              ? `${data.team.code} • ${data.team.status}`
+              : "No team assigned"
+          }
+          href="/teams"
+          isLoading={isLoading}
         />
 
         <StatCard
-          title="Pending requests"
-          value={2}
-          icon={ClipboardList}
-          description="Awaiting review"
+          title="Department"
+          value={data?.department?.name ?? "Not assigned"}
+          icon={Building2}
+          description={
+            data?.department
+              ? `${data.department.code} • ${data.department.status}`
+              : "No department assigned"
+          }
+          href="/departments"
+          isLoading={isLoading}
         />
       </div>
 
