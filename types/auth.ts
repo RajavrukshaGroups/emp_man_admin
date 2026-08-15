@@ -14,8 +14,9 @@ export type AccessType =
 
 export type RoleScope =
   | "GLOBAL"
-  | "COMPANY";
-
+  | "COMPANY"
+  | "DEPARTMENT"
+  | "TEAM";
 export interface Permission {
   _id: string;
   name: string;

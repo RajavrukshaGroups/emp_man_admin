@@ -133,6 +133,10 @@ export default function EmployeesPage() {
 
   const permissions = useAuthStore((state) => state.permissions);
 
+  const role = useAuthStore((state) => state.role);
+
+  const isTeamScoped = role?.scopeType === "TEAM";
+  const isDepartmentScoped = role?.scopeType === "DEPARTMENT";
   const canCreateEmployee = permissions.includes("employee.create");
   const canUpdateEmployee = permissions.includes("employee.update");
   const [result, setResult] = useState<EmployeeListResult>({
@@ -211,7 +215,11 @@ export default function EmployeesPage() {
           </h1>
 
           <p className="mt-1 text-sm text-slate-500">
-            Manage employee profiles, employment information and company access.
+            {isTeamScoped
+              ? "View employees assigned to your team."
+              : isDepartmentScoped
+                ? "View employees assigned to your department."
+                : "Manage employee profiles, employment information and company access."}
           </p>
         </div>
 
@@ -229,16 +237,21 @@ export default function EmployeesPage() {
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
         <SummaryCard
           icon={UsersRound}
-          label="Total employees"
+          label={
+            isTeamScoped
+              ? "Team members"
+              : isDepartmentScoped
+                ? "Department employees"
+                : "Total employees"
+          }
           value={result.pagination.totalRecords}
         />
 
         <SummaryCard
           icon={UserRound}
-          label="Displayed employees"
+          label={isTeamScoped ? "Displayed members" : "Displayed employees"}
           value={result.records.length}
         />
-
         <SummaryCard
           icon={BriefcaseBusiness}
           label="Current page"
@@ -327,6 +340,7 @@ export default function EmployeesPage() {
           <EmployeeEmptyState
             hasFilters={Boolean(search || status)}
             canCreateEmployee={canCreateEmployee}
+            isTeamScoped={isTeamScoped}
           />
         ) : (
           <>
@@ -457,7 +471,7 @@ export default function EmployeesPage() {
                 <span className="font-semibold text-slate-700">
                   {result.pagination.totalRecords}
                 </span>{" "}
-                employees
+                {isTeamScoped ? "team members" : "employees"}
               </p>
 
               <div className="flex items-center gap-2">
@@ -569,9 +583,11 @@ function EmployeesTableSkeleton() {
 function EmployeeEmptyState({
   hasFilters,
   canCreateEmployee,
+  isTeamScoped,
 }: {
   hasFilters: boolean;
   canCreateEmployee: boolean;
+  isTeamScoped: boolean;
 }) {
   return (
     <div className="px-6 py-16 text-center">
@@ -586,7 +602,9 @@ function EmployeeEmptyState({
       <p className="mx-auto mt-2 max-w-md text-sm text-slate-500">
         {hasFilters
           ? "No employee matches the selected search or status filter."
-          : "Create the first employee account and complete the onboarding process."}
+          : isTeamScoped
+            ? "No employees are currently assigned to your team."
+            : "Create the first employee account and complete the onboarding process."}
       </p>
 
       {!hasFilters && canCreateEmployee && (
