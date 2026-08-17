@@ -7,6 +7,7 @@ import {
     UserRound,
     Settings,
     ClipboardCheck,
+    ListTodo,
 } from "lucide-react";
 
 export interface DashboardNavigationItem {
@@ -40,6 +41,12 @@ export const dashboardNavigation: DashboardNavigationItem[] = [
         href: "/employees",
         icon: UserRound,
         permission: "employee.read",
+    },
+    {
+        title: "Tasks",
+        href: "/tasks",
+        icon: ListTodo,
+        permission: "task.read",
     },
     {
         title: "Onboarding",
