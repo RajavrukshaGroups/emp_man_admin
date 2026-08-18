@@ -4,6 +4,7 @@ import type {
     CancelTaskRequest,
     CompleteTaskRequest,
     CreateTaskRequest,
+    ReassignTaskRequest,
     ReopenTaskRequest,
     SubmitTaskRequest,
     Task,
@@ -13,7 +14,6 @@ import type {
     UpdateTaskProgressRequest,
     UpdateTaskRequest,
 } from "../types/task.types";
-
 interface ApiResponse<T> {
     success: boolean;
     statusCode: number;
@@ -186,12 +186,11 @@ export const taskService = {
      * - description
      * - priority
      * - due date
-     * - reassignment
      *
      * NOT workflow status.
+     * NOT reassignment.
      * ==========================================================
      */
-
     async updateTask(
         companyId: string,
         taskId: string,
@@ -199,6 +198,38 @@ export const taskService = {
     ): Promise<Task> {
         const response = await apiClient.patch<ApiResponse<Task>>(
             `/companies/${companyId}/tasks/${taskId}`,
+            payload,
+        );
+
+        return response.data.data;
+    },
+
+    /**
+ * ==========================================================
+ * REASSIGN TASK
+ *
+ * Transfers the current ticket to another employee.
+ *
+ * Existing:
+ * - status
+ * - progress
+ * - start date
+ * - work note
+ * - ticket history
+ *
+ * are preserved by the backend.
+ *
+ * PATCH /companies/:companyId/tasks/:taskId/reassign
+ * ==========================================================
+ */
+
+    async reassignTask(
+        companyId: string,
+        taskId: string,
+        payload: ReassignTaskRequest,
+    ): Promise<Task> {
+        const response = await apiClient.patch<ApiResponse<Task>>(
+            `/companies/${companyId}/tasks/${taskId}/reassign`,
             payload,
         );
 

@@ -13,6 +13,7 @@ import {
   Loader2,
   Play,
   RefreshCcw,
+  Repeat2,
   RotateCcw,
   Send,
   UserRound,
@@ -20,7 +21,14 @@ import {
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
+import { employeeService } from "@/features/employees/services/employee.service";
 import { taskService } from "@/features/tasks/services/task.service";
+
+import type {
+  Employee,
+  EmployeeCompanyAccessReference,
+  EmployeeUserReference,
+} from "@/features/employees/types/employee.types";
 
 import type {
   Task,
@@ -125,7 +133,7 @@ function formatDateTime(value?: string | null) {
 
 /**
  * ============================================================
- * POPULATED REFERENCES
+ * TASK POPULATED REFERENCES
  * ============================================================
  */
 
@@ -191,6 +199,54 @@ function getReferenceName(value: Task["departmentId"] | Task["teamId"]) {
 
 /**
  * ============================================================
+ * EMPLOYEE POPULATED REFERENCES
+ * ============================================================
+ */
+
+function isPopulatedEmployeeUser(
+  value: Employee["userId"],
+): value is EmployeeUserReference {
+  return typeof value === "object" && value !== null && "_id" in value;
+}
+
+function isPopulatedEmployeeAccess(
+  value: Employee["companyAccessId"],
+): value is EmployeeCompanyAccessReference {
+  return typeof value === "object" && value !== null && "_id" in value;
+}
+
+function getEmployeeAccess(employee: Employee) {
+  return isPopulatedEmployeeAccess(employee.companyAccessId)
+    ? employee.companyAccessId
+    : null;
+}
+
+function getEmployeeName(employee: Employee) {
+  if (!isPopulatedEmployeeUser(employee.userId)) {
+    return "Unnamed employee";
+  }
+
+  return employee.userId.displayName || "Unnamed employee";
+}
+
+function getEmployeeReferenceId(
+  value:
+    | EmployeeCompanyAccessReference["departmentId"]
+    | EmployeeCompanyAccessReference["teamId"],
+) {
+  if (!value) {
+    return null;
+  }
+
+  if (typeof value === "string") {
+    return value;
+  }
+
+  return value._id;
+}
+
+/**
+ * ============================================================
  * ACTIVITY DISPLAY
  * ============================================================
  */
@@ -199,9 +255,6 @@ function getActivityTitle(activity: TaskActivity) {
   switch (activity.activityType) {
     case "CREATED":
       return "Created ticket";
-
-    case "ASSIGNED":
-      return "Assigned ticket";
 
     case "STARTED":
       return "Started work";
@@ -244,6 +297,9 @@ function getActivityTitle(activity: TaskActivity) {
 function getActivityDescription(activity: TaskActivity) {
   const metadata = activity.metadata ?? {};
 
+  /**
+   * Progress update.
+   */
   if (activity.activityType === "PROGRESS_UPDATED") {
     const previousProgress = metadata.previousProgress;
     const newProgress = metadata.newProgress;
@@ -256,6 +312,40 @@ function getActivityDescription(activity: TaskActivity) {
     }
   }
 
+  /**
+   * Reassignment.
+   *
+   * The activity API currently stores CompanyAccess IDs
+   * in metadata, so we display the most useful information
+   * available here: status + progress at handoff.
+   */
+  if (activity.activityType === "REASSIGNED") {
+    const progressAtReassignment = metadata.progressAtReassignment;
+    const statusAtReassignment = metadata.statusAtReassignment;
+
+    const parts: string[] = [];
+
+    if (
+      typeof statusAtReassignment === "string" &&
+      statusAtReassignment in statusLabels
+    ) {
+      parts.push(`Status: ${statusLabels[statusAtReassignment as TaskStatus]}`);
+    }
+
+    if (typeof progressAtReassignment === "number") {
+      parts.push(`Progress: ${progressAtReassignment}%`);
+    }
+
+    if (parts.length > 0) {
+      return parts.join(" • ");
+    }
+
+    return "Ticket ownership transferred";
+  }
+
+  /**
+   * Status transition.
+   */
   if (activity.fromStatus && activity.toStatus) {
     return `${statusLabels[activity.fromStatus]} → ${
       statusLabels[activity.toStatus]
@@ -280,6 +370,12 @@ export default function TaskDetailsPage() {
 
   const taskId = params.taskId;
 
+  /**
+   * ==========================================================
+   * TASK + ACTIVITY STATE
+   * ==========================================================
+   */
+
   const [task, setTask] = useState<Task | null>(null);
 
   const [activities, setActivities] = useState<TaskActivityListResult>({
@@ -295,8 +391,11 @@ export default function TaskDetailsPage() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   /**
-   * Employee work state.
+   * ==========================================================
+   * EMPLOYEE WORK STATE
+   * ==========================================================
    */
+
   const [progressPercentage, setProgressPercentage] = useState(0);
 
   const [workNote, setWorkNote] = useState("");
@@ -304,8 +403,11 @@ export default function TaskDetailsPage() {
   const [submissionNote, setSubmissionNote] = useState("");
 
   /**
-   * Manager workflow state.
+   * ==========================================================
+   * MANAGER WORKFLOW STATE
+   * ==========================================================
    */
+
   const [completionNote, setCompletionNote] = useState("");
 
   const [reopenReason, setReopenReason] = useState("");
@@ -313,8 +415,25 @@ export default function TaskDetailsPage() {
   const [cancellationReason, setCancellationReason] = useState("");
 
   /**
-   * Permissions.
+   * ==========================================================
+   * REASSIGNMENT STATE
+   * ==========================================================
    */
+
+  const [employees, setEmployees] = useState<Employee[]>([]);
+
+  const [isLoadingEmployees, setIsLoadingEmployees] = useState(false);
+
+  const [newAssigneeId, setNewAssigneeId] = useState("");
+
+  const [reassignmentReason, setReassignmentReason] = useState("");
+
+  /**
+   * ==========================================================
+   * PERMISSIONS
+   * ==========================================================
+   */
+
   const canUpdate = permissions.includes("task.update");
 
   const canSubmit = permissions.includes("task.submit");
@@ -325,61 +444,7 @@ export default function TaskDetailsPage() {
 
   const canCancel = permissions.includes("task.cancel");
 
-  /**
-   * ==========================================================
-   * LOAD TICKET
-   * ==========================================================
-   */
-
-  const loadTask = useCallback(async () => {
-    if (!company?._id || !taskId) {
-      setIsLoading(false);
-
-      setErrorMessage("Ticket context is unavailable.");
-
-      return;
-    }
-
-    try {
-      setIsLoading(true);
-
-      setErrorMessage(null);
-
-      const [taskResult, activityResult] = await Promise.all([
-        taskService.getTaskById(company._id, taskId),
-
-        taskService.getTaskActivities(company._id, taskId),
-      ]);
-
-      setTask(taskResult);
-
-      setActivities(activityResult);
-
-      setProgressPercentage(taskResult.progressPercentage);
-
-      setWorkNote(taskResult.workNote || "");
-
-      setSubmissionNote("");
-
-      setCompletionNote("");
-
-      setReopenReason("");
-
-      setCancellationReason("");
-    } catch (error: unknown) {
-      const message = getErrorMessage(error);
-
-      setErrorMessage(message);
-
-      toast.error(message);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [company?._id, taskId]);
-
-  useEffect(() => {
-    void loadTask();
-  }, [loadTask]);
+  const canReassign = permissions.includes("task.reassign");
 
   /**
    * ==========================================================
@@ -427,6 +492,165 @@ export default function TaskDetailsPage() {
     !["COMPLETED", "CANCELLED"].includes(task?.status ?? "");
 
   /**
+   * Reassignment is allowed by our backend only for:
+   *
+   * ASSIGNED
+   * IN_PROGRESS
+   * REOPENED
+   */
+  const canReassignTask =
+    canReassign &&
+    Boolean(task) &&
+    ["ASSIGNED", "IN_PROGRESS", "REOPENED"].includes(task?.status ?? "");
+
+  /**
+   * ==========================================================
+   * LOAD TICKET
+   * ==========================================================
+   */
+
+  const loadTask = useCallback(async () => {
+    if (!company?._id || !taskId) {
+      setIsLoading(false);
+
+      setErrorMessage("Ticket context is unavailable.");
+
+      return;
+    }
+
+    try {
+      setIsLoading(true);
+
+      setErrorMessage(null);
+
+      const [taskResult, activityResult] = await Promise.all([
+        taskService.getTaskById(company._id, taskId),
+
+        taskService.getTaskActivities(company._id, taskId),
+      ]);
+
+      setTask(taskResult);
+
+      setActivities(activityResult);
+
+      setProgressPercentage(taskResult.progressPercentage);
+
+      setWorkNote(taskResult.workNote || "");
+
+      setSubmissionNote("");
+
+      setCompletionNote("");
+
+      setReopenReason("");
+
+      setCancellationReason("");
+
+      setNewAssigneeId("");
+
+      setReassignmentReason("");
+    } catch (error: unknown) {
+      const message = getErrorMessage(error);
+
+      setErrorMessage(message);
+
+      toast.error(message);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [company?._id, taskId]);
+
+  useEffect(() => {
+    void loadTask();
+  }, [loadTask]);
+
+  /**
+   * ==========================================================
+   * LOAD EMPLOYEES FOR REASSIGNMENT
+   * ==========================================================
+   */
+
+  const loadEmployeesForReassignment = useCallback(async () => {
+    if (!company?._id || !task || !canReassignTask) {
+      setEmployees([]);
+
+      return;
+    }
+
+    try {
+      setIsLoadingEmployees(true);
+
+      const result = await employeeService.getEmployees(company._id, {
+        page: 1,
+        limit: 100,
+        status: "ACTIVE",
+        sortBy: "createdAt",
+        sortOrder: "desc",
+      });
+
+      /**
+       * Current ticket team.
+       */
+      const taskTeamId =
+        typeof task.teamId === "string" ? task.teamId : task.teamId._id;
+
+      /**
+       * Current assignee CompanyAccess ID.
+       */
+      const currentAssigneeId =
+        typeof task.assigneeId === "string"
+          ? task.assigneeId
+          : task.assigneeId._id;
+
+      /**
+       * Frontend safety:
+       *
+       * - same team only
+       * - active employee only
+       * - current assignee excluded
+       *
+       * Backend still remains the source of truth.
+       */
+      const filteredEmployees = result.records.filter((employee) => {
+        const access = getEmployeeAccess(employee);
+
+        if (!access) {
+          return false;
+        }
+
+        const employeeTeamId = getEmployeeReferenceId(access.teamId);
+
+        return (
+          employeeTeamId === taskTeamId &&
+          access._id !== currentAssigneeId &&
+          access.status === "ACTIVE"
+        );
+      });
+
+      setEmployees(filteredEmployees);
+    } catch (error: unknown) {
+      setEmployees([]);
+
+      toast.error(getErrorMessage(error));
+    } finally {
+      setIsLoadingEmployees(false);
+    }
+  }, [company?._id, task, canReassignTask]);
+
+  useEffect(() => {
+    if (!canReassignTask) {
+      setEmployees([]);
+
+      setNewAssigneeId("");
+
+      setReassignmentReason("");
+
+      return;
+    }
+
+    void loadEmployeesForReassignment();
+  }, [canReassignTask, loadEmployeesForReassignment]);
+
+  /**
    * ==========================================================
    * COMMON ACTION RUNNER
    * ==========================================================
@@ -455,9 +679,13 @@ export default function TaskDetailsPage() {
 
       setCancellationReason("");
 
+      setNewAssigneeId("");
+
+      setReassignmentReason("");
+
       /**
-       * Refresh activity stream after every
-       * ticket operation.
+       * Refresh Jira-style activity stream
+       * after every ticket operation.
        */
       if (company?._id) {
         const activityResult = await taskService.getTaskActivities(
@@ -469,8 +697,12 @@ export default function TaskDetailsPage() {
       }
 
       toast.success(successMessage);
+
+      return updatedTask;
     } catch (error: unknown) {
       toast.error(getErrorMessage(error));
+
+      return null;
     } finally {
       setIsActionLoading(false);
     }
@@ -586,6 +818,57 @@ export default function TaskDetailsPage() {
 
       "Ticket reopened successfully.",
     );
+  }
+
+  /**
+   * ==========================================================
+   * REASSIGN
+   * ==========================================================
+   */
+
+  async function handleReassignTask() {
+    if (!company?._id || !task) {
+      return;
+    }
+
+    if (!canReassignTask) {
+      toast.error("You do not have permission to reassign this ticket.");
+
+      return;
+    }
+
+    if (!newAssigneeId) {
+      toast.error("Please select a new assignee.");
+
+      return;
+    }
+
+    if (!reassignmentReason.trim()) {
+      toast.error("Reassignment reason is required.");
+
+      return;
+    }
+
+    await runAction(
+      () =>
+        taskService.reassignTask(company._id, task._id, {
+          newAssigneeId,
+
+          reassignmentReason: reassignmentReason.trim(),
+        }),
+
+      "Ticket reassigned successfully.",
+    );
+
+    /**
+     * No manual employee reload is required here.
+     *
+     * runAction updates `task`.
+     *
+     * Since task.assigneeId changes,
+     * loadEmployeesForReassignment will automatically
+     * run again through the useEffect above.
+     */
   }
 
   /**
@@ -772,7 +1055,9 @@ export default function TaskDetailsPage() {
         ==================================================== */}
 
         <div className="space-y-6">
-          {/* Ticket details */}
+          {/* ==================================================
+              TICKET DETAILS
+          ================================================== */}
 
           <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
             <div>
@@ -864,6 +1149,144 @@ export default function TaskDetailsPage() {
               </div>
             )}
           </section>
+
+          {/* ==================================================
+              REASSIGNMENT
+          ================================================== */}
+
+          {canReassignTask && (
+            <section className="rounded-2xl border border-indigo-100 bg-indigo-50/30 p-6">
+              <div className="flex items-start gap-3">
+                <Repeat2 className="mt-0.5 h-5 w-5 shrink-0 text-indigo-600" />
+
+                <div className="min-w-0 flex-1">
+                  <h2 className="font-semibold text-slate-950">
+                    Reassign ticket
+                  </h2>
+
+                  <p className="mt-1 text-sm leading-6 text-slate-500">
+                    Transfer this ticket to another employee in the same team.
+                    Existing progress, start time, work notes and ticket history
+                    will be preserved.
+                  </p>
+
+                  <div className="mt-5 rounded-xl border border-indigo-100 bg-white/70 p-4">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-indigo-500">
+                      Current assignee
+                    </p>
+
+                    <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1">
+                      <span className="font-semibold text-slate-900">
+                        {getAccessUserName(task.assigneeId)}
+                      </span>
+
+                      <span className="text-xs text-slate-400">
+                        {getAccessEmployeeCode(task.assigneeId)}
+                      </span>
+
+                      <span className="text-xs font-medium text-slate-500">
+                        • {task.progressPercentage}% progress
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="mt-5">
+                    <label
+                      htmlFor="newAssigneeId"
+                      className="mb-2 block text-sm font-semibold text-slate-700"
+                    >
+                      New assignee
+                    </label>
+
+                    <select
+                      id="newAssigneeId"
+                      value={newAssigneeId}
+                      onChange={(event) => setNewAssigneeId(event.target.value)}
+                      disabled={isLoadingEmployees || isActionLoading}
+                      className="h-11 w-full rounded-xl border border-slate-300 bg-white px-4 text-sm text-slate-700 outline-none transition focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 disabled:cursor-not-allowed disabled:bg-slate-100"
+                    >
+                      <option value="">
+                        {isLoadingEmployees
+                          ? "Loading employees..."
+                          : "Select employee"}
+                      </option>
+
+                      {employees.map((employee) => {
+                        const access = getEmployeeAccess(employee);
+
+                        if (!access) {
+                          return null;
+                        }
+
+                        return (
+                          <option key={employee._id} value={access._id}>
+                            {getEmployeeName(employee)}
+                            {access.employeeCode
+                              ? ` (${access.employeeCode})`
+                              : ""}
+                          </option>
+                        );
+                      })}
+                    </select>
+
+                    {!isLoadingEmployees && employees.length === 0 && (
+                      <p className="mt-2 text-xs text-slate-500">
+                        No other active employee is currently available in this
+                        team.
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="mt-5">
+                    <label
+                      htmlFor="reassignmentReason"
+                      className="mb-2 block text-sm font-semibold text-slate-700"
+                    >
+                      Reassignment reason
+                    </label>
+
+                    <textarea
+                      id="reassignmentReason"
+                      value={reassignmentReason}
+                      onChange={(event) =>
+                        setReassignmentReason(event.target.value)
+                      }
+                      placeholder="Explain why this ticket is being reassigned"
+                      rows={4}
+                      maxLength={3000}
+                      disabled={isActionLoading}
+                      className="w-full resize-y rounded-xl border border-indigo-200 bg-white px-4 py-3 text-sm leading-6 outline-none transition placeholder:text-slate-400 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 disabled:bg-slate-100"
+                    />
+
+                    <div className="mt-1 text-right text-xs text-slate-400">
+                      {reassignmentReason.length}/3000
+                    </div>
+                  </div>
+
+                  <div className="mt-5 flex justify-end">
+                    <button
+                      type="button"
+                      disabled={
+                        isActionLoading ||
+                        isLoadingEmployees ||
+                        !newAssigneeId ||
+                        !reassignmentReason.trim()
+                      }
+                      onClick={() => void handleReassignTask()}
+                      className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-indigo-600 px-5 text-sm font-semibold text-white transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {isActionLoading ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Repeat2 className="h-4 w-4" />
+                      )}
+                      Reassign ticket
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </section>
+          )}
 
           {/* ==================================================
               ASSIGNEE START
@@ -1318,13 +1741,19 @@ function ActivityItem({
 
   const description = getActivityDescription(activity);
 
+  const isReassignment = activity.activityType === "REASSIGNED";
+
   return (
     <div className="relative flex gap-3 pb-6">
       {!isLast && (
         <div className="absolute left-[7px] top-4 h-full w-px bg-slate-200" />
       )}
 
-      <div className="relative z-10 mt-1 h-3.5 w-3.5 shrink-0 rounded-full border-2 border-white bg-blue-500 shadow ring-1 ring-slate-200" />
+      <div
+        className={`relative z-10 mt-1 h-3.5 w-3.5 shrink-0 rounded-full border-2 border-white shadow ring-1 ring-slate-200 ${
+          isReassignment ? "bg-indigo-500" : "bg-blue-500"
+        }`}
+      />
 
       <div className="min-w-0 flex-1">
         <p className="text-sm leading-5 text-slate-700">
@@ -1333,13 +1762,21 @@ function ActivityItem({
         </p>
 
         {description && (
-          <p className="mt-1 text-xs font-medium text-slate-500">
+          <p
+            className={`mt-1 text-xs font-medium ${
+              isReassignment ? "text-indigo-600" : "text-slate-500"
+            }`}
+          >
             {description}
           </p>
         )}
 
         {activity.note && (
-          <div className="mt-2 rounded-lg bg-slate-50 px-3 py-2">
+          <div
+            className={`mt-2 rounded-lg px-3 py-2 ${
+              isReassignment ? "bg-indigo-50" : "bg-slate-50"
+            }`}
+          >
             <p className="whitespace-pre-wrap text-xs leading-5 text-slate-600">
               {activity.note}
             </p>

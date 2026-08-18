@@ -196,6 +196,40 @@ export interface TaskStatusHistoryItem {
 
 /**
  * ============================================================
+ * REASSIGNMENT HISTORY
+ * ============================================================
+ *
+ * Preserves every ownership transfer of the ticket.
+ *
+ * Example:
+ * Anand -> Rahul
+ * Rahul -> Anand
+ */
+
+export interface TaskReassignmentHistoryItem {
+    _id?: string;
+
+    fromAssigneeId:
+    | string
+    | TaskCompanyAccessReference;
+
+    toAssigneeId:
+    | string
+    | TaskCompanyAccessReference;
+
+    reassignedById:
+    | string
+    | TaskCompanyAccessReference;
+
+    reason: string;
+
+    progressAtReassignment: number;
+
+    reassignedAt: string;
+}
+
+/**
+ * ============================================================
  * TASK
  * ============================================================
  */
@@ -235,6 +269,11 @@ export interface Task {
     assignedById:
     | string
     | TaskCompanyAccessReference;
+
+    /**
+ * Complete ticket ownership-transfer history.
+ */
+    reassignmentHistory: TaskReassignmentHistoryItem[];
 
     /**
      * First actual time the employee started work.
@@ -464,17 +503,32 @@ export interface CreateTaskRequest {
 
 export interface UpdateTaskRequest {
     title?: string;
-
     description?: string;
-
     priority?: TaskPriority;
-
-    /**
-     * Reassignment uses CompanyAccess ID.
-     */
-    assigneeId?: string;
-
     dueDate?: string;
+}
+
+/**
+ * ============================================================
+ * REASSIGN TASK
+ * ============================================================
+ *
+ * Transfers responsibility for an existing ticket
+ * to another employee.
+ *
+ * assigneeId:
+ * CompanyAccess ID of the new assignee.
+ *
+ * reason:
+ * Required audit reason for the transfer.
+ *
+ * Existing task progress, work note, start date and
+ * lifecycle status are preserved by the backend.
+ */
+
+export interface ReassignTaskRequest {
+    newAssigneeId: string;
+    reassignmentReason: string;
 }
 
 /**
@@ -562,7 +616,6 @@ export interface CancelTaskRequest {
 
 export type TaskActivityType =
     | "CREATED"
-    | "ASSIGNED"
     | "STARTED"
     | "PROGRESS_UPDATED"
     | "SUBMITTED"
@@ -574,7 +627,6 @@ export type TaskActivityType =
     | "PRIORITY_CHANGED"
     | "CANCELLED"
     | "DELETED";
-
 /**
  * Flexible metadata because different activity
  * types store different structured data.
