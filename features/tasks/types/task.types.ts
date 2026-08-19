@@ -14,22 +14,6 @@ export type TaskPriority =
  * ============================================================
  * JIRA-STYLE TASK STATUS
  * ============================================================
- *
- * Backend lifecycle:
- *
- * ASSIGNED
- *    ↓
- * IN_PROGRESS
- *    ↓
- * SUBMITTED
- *    ↓
- * COMPLETED
- *
- * SUBMITTED / COMPLETED
- *    ↓
- * REOPENED
- *    ↓
- * IN_PROGRESS
  */
 
 export type TaskStatus =
@@ -123,6 +107,66 @@ export interface TaskCompanyReference {
 }
 
 /**
+ * ============================================================
+ * CLIENT REFERENCE
+ * ============================================================
+ */
+
+export interface TaskClientReference {
+    _id: string;
+
+    name: string;
+
+    code: string;
+
+    clientType?: string;
+
+    engagementType?: string;
+
+    contactPerson?: string;
+
+    email?: string;
+
+    mobile?: string;
+
+    website?: string;
+
+    industry?: string;
+
+    status: string;
+}
+
+/**
+ * ============================================================
+ * WORK CATEGORY REFERENCE
+ * ============================================================
+ */
+
+export interface TaskWorkCategoryReference {
+    _id: string;
+
+    departmentId:
+    | string
+    | TaskDepartmentReference;
+
+    teamId:
+    | string
+    | TaskTeamReference;
+
+    name: string;
+
+    code: string;
+
+    description?: string;
+
+    unitLabel: string;
+
+    workloadWeight: number;
+
+    status: string;
+}
+
+/**
  * References CompanyAccess.
  *
  * Task assignment always uses CompanyAccess ID,
@@ -170,12 +214,6 @@ export interface TaskAuditUserReference {
  * ============================================================
  * STATUS HISTORY
  * ============================================================
- *
- * Lightweight lifecycle history stored directly
- * on the Task document.
- *
- * Detailed Jira-style activity history is stored
- * separately in TaskActivity.
  */
 
 export interface TaskStatusHistoryItem {
@@ -198,16 +236,10 @@ export interface TaskStatusHistoryItem {
  * ============================================================
  * REASSIGNMENT HISTORY
  * ============================================================
- *
- * Preserves every ownership transfer of the ticket.
- *
- * Example:
- * Anand -> Rahul
- * Rahul -> Anand
  */
 
 export interface TaskReassignmentHistoryItem {
-    _id?: string;
+    _id: string;
 
     fromAssigneeId:
     | string
@@ -241,6 +273,13 @@ export interface Task {
     | string
     | TaskCompanyReference;
 
+    /**
+     * Client for whom this task is being performed.
+     */
+    clientId:
+    | string
+    | TaskClientReference;
+
     departmentId:
     | string
     | TaskDepartmentReference;
@@ -249,9 +288,26 @@ export interface Task {
     | string
     | TaskTeamReference;
 
+    /**
+     * Work category assigned to this ticket.
+     */
+    workCategoryId:
+    | string
+    | TaskWorkCategoryReference;
+
     title: string;
 
     description: string;
+
+    /**
+     * Number of work units represented by the ticket.
+     *
+     * Example:
+     * 5 creatives
+     * 3 reels
+     * 2 landing pages
+     */
+    quantity: number;
 
     priority: TaskPriority;
 
@@ -271,15 +327,12 @@ export interface Task {
     | TaskCompanyAccessReference;
 
     /**
- * Complete ticket ownership-transfer history.
- */
+     * Complete ownership-transfer history.
+     */
     reassignmentHistory: TaskReassignmentHistoryItem[];
 
     /**
      * First actual time the employee started work.
-     *
-     * This remains preserved even when a ticket
-     * is later reopened.
      */
     startDate: string | null;
 
@@ -333,9 +386,6 @@ export interface Task {
      * ==========================================================
      * REOPEN
      * ==========================================================
-     *
-     * A ticket may be reopened multiple times,
-     * including after completion.
      */
 
     reopenCount: number;
@@ -437,9 +487,19 @@ export interface TaskListQuery {
 
     priority?: TaskPriority;
 
+    /**
+     * Client ID.
+     */
+    clientId?: string;
+
     departmentId?: string;
 
     teamId?: string;
+
+    /**
+     * WorkCategory ID.
+     */
+    workCategoryId?: string;
 
     /**
      * CompanyAccess ID.
@@ -459,8 +519,10 @@ export interface TaskListQuery {
 
     sortBy?:
     | "title"
+    | "quantity"
     | "priority"
     | "status"
+    | "progressPercentage"
     | "startDate"
     | "dueDate"
     | "submittedAt"
@@ -478,14 +540,28 @@ export interface TaskListQuery {
  */
 
 export interface CreateTaskRequest {
+    /**
+     * Client ID.
+     */
+    clientId: string;
+
+    /**
+     * WorkCategory ID.
+     */
+    workCategoryId: string;
+
     title: string;
 
     description?: string;
 
+    /**
+     * Number of units being assigned.
+     */
+    quantity?: number;
+
     priority?: TaskPriority;
 
     /**
-     * IMPORTANT:
      * CompanyAccess ID.
      */
     assigneeId: string;
@@ -498,13 +574,22 @@ export interface CreateTaskRequest {
  * UPDATE TASK METADATA
  * ============================================================
  *
- * Workflow status must never be changed through this request.
+ * Workflow status and reassignment must not be changed here.
  */
 
 export interface UpdateTaskRequest {
+    clientId?: string;
+
+    workCategoryId?: string;
+
     title?: string;
+
     description?: string;
+
+    quantity?: number;
+
     priority?: TaskPriority;
+
     dueDate?: string;
 }
 
@@ -512,22 +597,11 @@ export interface UpdateTaskRequest {
  * ============================================================
  * REASSIGN TASK
  * ============================================================
- *
- * Transfers responsibility for an existing ticket
- * to another employee.
- *
- * assigneeId:
- * CompanyAccess ID of the new assignee.
- *
- * reason:
- * Required audit reason for the transfer.
- *
- * Existing task progress, work note, start date and
- * lifecycle status are preserved by the backend.
  */
 
 export interface ReassignTaskRequest {
     newAssigneeId: string;
+
     reassignmentReason: string;
 }
 
@@ -535,11 +609,6 @@ export interface ReassignTaskRequest {
  * ============================================================
  * START TASK
  * ============================================================
- *
- * ASSIGNED → IN_PROGRESS
- * REOPENED → IN_PROGRESS
- *
- * No request body required.
  */
 
 export type StartTaskRequest = Record<
@@ -563,8 +632,6 @@ export interface UpdateTaskProgressRequest {
  * ============================================================
  * SUBMIT TASK
  * ============================================================
- *
- * IN_PROGRESS → SUBMITTED
  */
 
 export interface SubmitTaskRequest {
@@ -575,8 +642,6 @@ export interface SubmitTaskRequest {
  * ============================================================
  * COMPLETE TASK
  * ============================================================
- *
- * SUBMITTED → COMPLETED
  */
 
 export interface CompleteTaskRequest {
@@ -587,9 +652,6 @@ export interface CompleteTaskRequest {
  * ============================================================
  * REOPEN TASK
  * ============================================================
- *
- * SUBMITTED → REOPENED
- * COMPLETED → REOPENED
  */
 
 export interface ReopenTaskRequest {
@@ -610,8 +672,6 @@ export interface CancelTaskRequest {
  * ============================================================
  * TASK ACTIVITY
  * ============================================================
- *
- * Detailed Jira-style ticket activity timeline.
  */
 
 export type TaskActivityType =
@@ -627,9 +687,10 @@ export type TaskActivityType =
     | "PRIORITY_CHANGED"
     | "CANCELLED"
     | "DELETED";
+
 /**
- * Flexible metadata because different activity
- * types store different structured data.
+ * Flexible metadata because different activities
+ * store different structured evidence.
  */
 export type TaskActivityMetadata =
     Record<string, unknown>;
@@ -673,10 +734,11 @@ export interface TaskActivity {
 }
 
 /**
- * Response returned from:
- *
- * GET /companies/:companyId/tasks/:taskId/activities
+ * ============================================================
+ * ACTIVITY LIST RESULT
+ * ============================================================
  */
+
 export interface TaskActivityListResult {
     taskId: string;
 

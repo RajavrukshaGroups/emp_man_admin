@@ -8,6 +8,8 @@ import {
     Settings,
     ClipboardCheck,
     ListTodo,
+    Tags,
+    Building2
 } from "lucide-react";
 
 export interface DashboardNavigationItem {
@@ -47,6 +49,18 @@ export const dashboardNavigation: DashboardNavigationItem[] = [
         href: "/tasks",
         icon: ListTodo,
         permission: "task.read",
+    },
+    {
+        title: "Work Categories",
+        href: "/work-categories",
+        icon: Tags,
+        permission: "work_category.read",
+    },
+    {
+        title: "Clients",
+        href: "/clients",
+        icon: Building2,
+        permission: "client.read",
     },
     {
         title: "Onboarding",

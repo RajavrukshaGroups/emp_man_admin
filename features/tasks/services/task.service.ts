@@ -50,12 +50,20 @@ function buildTaskQuery(query: TaskListQuery = {}) {
         params.set("priority", query.priority);
     }
 
+    if (query.clientId) {
+        params.set("clientId", query.clientId);
+    }
+
     if (query.departmentId) {
         params.set("departmentId", query.departmentId);
     }
 
     if (query.teamId) {
         params.set("teamId", query.teamId);
+    }
+
+    if (query.workCategoryId) {
+        params.set("workCategoryId", query.workCategoryId);
     }
 
     if (query.assigneeId) {
@@ -181,15 +189,18 @@ export const taskService = {
      *
      * PATCH /companies/:companyId/tasks/:taskId
      *
-     * Used for:
-     * - title
-     * - description
-     * - priority
-     * - due date
-     *
-     * NOT workflow status.
-     * NOT reassignment.
-     * ==========================================================
+ * Used for:
+ * - client
+ * - work category
+ * - quantity
+ * - title
+ * - description
+ * - priority
+ * - due date
+ *
+ * NOT workflow status.
+ * NOT reassignment.
+ *      * ==========================================================
      */
     async updateTask(
         companyId: string,

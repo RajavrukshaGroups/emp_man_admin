@@ -139,6 +139,66 @@ function getReferenceName(value: Task["departmentId"] | Task["teamId"]) {
   return value.name || "—";
 }
 
+function getClientName(task: Task) {
+  const client = task.clientId;
+
+  if (!client || typeof client === "string") {
+    return "—";
+  }
+
+  return client.name || "—";
+}
+
+function getClientCode(task: Task) {
+  const client = task.clientId;
+
+  if (!client || typeof client === "string") {
+    return "—";
+  }
+
+  return client.code || "—";
+}
+
+function getWorkCategoryName(task: Task) {
+  const category = task.workCategoryId;
+
+  if (!category || typeof category === "string") {
+    return "—";
+  }
+
+  return category.name || "—";
+}
+
+function getWorkCategoryCode(task: Task) {
+  const category = task.workCategoryId;
+
+  if (!category || typeof category === "string") {
+    return "—";
+  }
+
+  return category.code || "—";
+}
+
+function getQuantityLabel(task: Task) {
+  if (task.quantity === undefined || task.quantity === null) {
+    return "—";
+  }
+
+  const category = task.workCategoryId;
+
+  if (!category || typeof category === "string") {
+    return String(task.quantity);
+  }
+
+  const unit = category.unitLabel?.trim();
+
+  if (!unit) {
+    return String(task.quantity);
+  }
+
+  return `${task.quantity} ${unit}`;
+}
+
 function isOverdue(task: Task) {
   if (["COMPLETED", "CANCELLED"].includes(task.status)) {
     return false;
@@ -301,8 +361,11 @@ export default function TasksPage() {
           value={result.pagination.totalRecords}
         />
 
-        <SummaryCard icon={UserRound} label="In review" value={inReviewCount} />
-
+        <SummaryCard
+          icon={UserRound}
+          label="In review on page"
+          value={inReviewCount}
+        />
         <SummaryCard
           icon={CheckCircle2}
           label="Done on page"
@@ -419,15 +482,15 @@ export default function TasksPage() {
                 <thead className="bg-slate-50">
                   <tr className="border-b border-slate-200">
                     <TableHeading>Ticket</TableHeading>
-
                     {!isEmployee && <TableHeading>Assignee</TableHeading>}
-
-                    <TableHeading>Team</TableHeading>
+                    <TableHeading>Client</TableHeading>
+                    <TableHeading>Work Category</TableHeading>
+                    <TableHeading>Quantity</TableHeading>
+                    {!isEmployee && <TableHeading>Team</TableHeading>}
                     <TableHeading>Priority</TableHeading>
                     <TableHeading>Progress</TableHeading>
                     <TableHeading>Due date</TableHeading>
                     <TableHeading>Status</TableHeading>
-
                     <TableHeading align="right">Actions</TableHeading>
                   </tr>
                 </thead>
@@ -474,8 +537,39 @@ export default function TasksPage() {
                           </TableCell>
                         )}
 
-                        <TableCell>{getReferenceName(task.teamId)}</TableCell>
+                        <TableCell>
+                          <div>
+                            <p className="font-medium text-slate-800">
+                              {getClientName(task)}
+                            </p>
 
+                            <p className="mt-0.5 text-xs text-slate-400">
+                              {getClientCode(task)}
+                            </p>
+                          </div>
+                        </TableCell>
+
+                        <TableCell>
+                          <div>
+                            <p className="font-medium text-slate-800">
+                              {getWorkCategoryName(task)}
+                            </p>
+
+                            <p className="mt-0.5 text-xs text-slate-400">
+                              {getWorkCategoryCode(task)}
+                            </p>
+                          </div>
+                        </TableCell>
+
+                        <TableCell>
+                          <span className="font-medium text-slate-800">
+                            {getQuantityLabel(task)}
+                          </span>
+                        </TableCell>
+
+                        {!isEmployee && (
+                          <TableCell>{getReferenceName(task.teamId)}</TableCell>
+                        )}
                         <TableCell>
                           <span
                             className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${

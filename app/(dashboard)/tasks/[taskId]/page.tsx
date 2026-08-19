@@ -197,6 +197,66 @@ function getReferenceName(value: Task["departmentId"] | Task["teamId"]) {
   return value.name || "—";
 }
 
+function getClientName(task: Task) {
+  const client = task.clientId;
+
+  if (!client || typeof client === "string") {
+    return "—";
+  }
+
+  return client.name || "—";
+}
+
+function getClientCode(task: Task) {
+  const client = task.clientId;
+
+  if (!client || typeof client === "string") {
+    return "—";
+  }
+
+  return client.code || "—";
+}
+
+function getWorkCategoryName(task: Task) {
+  const category = task.workCategoryId;
+
+  if (!category || typeof category === "string") {
+    return "—";
+  }
+
+  return category.name || "—";
+}
+
+function getWorkCategoryCode(task: Task) {
+  const category = task.workCategoryId;
+
+  if (!category || typeof category === "string") {
+    return "—";
+  }
+
+  return category.code || "—";
+}
+
+function getQuantityLabel(task: Task) {
+  if (task.quantity === undefined || task.quantity === null) {
+    return "—";
+  }
+
+  const category = task.workCategoryId;
+
+  if (!category || typeof category === "string") {
+    return String(task.quantity);
+  }
+
+  const unitLabel = category.unitLabel?.trim();
+
+  if (!unitLabel) {
+    return String(task.quantity);
+  }
+
+  return `${task.quantity} ${unitLabel}`;
+}
+
 /**
  * ============================================================
  * EMPLOYEE POPULATED REFERENCES
@@ -464,7 +524,16 @@ export default function TaskDetailsPage() {
     return task.assigneeId._id === companyAccess._id;
   }, [task, companyAccess?._id]);
 
-  /**
+  const latestReassignment = task?.reassignmentHistory?.length
+    ? task.reassignmentHistory[task.reassignmentHistory.length - 1]
+    : null;
+
+  const showReassignmentNotice =
+    isOwnTask &&
+    Boolean(latestReassignment) &&
+    typeof latestReassignment?.toAssigneeId === "object" &&
+    latestReassignment.toAssigneeId !== null &&
+    latestReassignment.toAssigneeId._id === companyAccess?._id; /**
    * ==========================================================
    * AVAILABLE ACTIONS
    * ==========================================================
@@ -1043,6 +1112,12 @@ export default function TaskDetailsPage() {
               : "Never reopened"
           }
         />
+        {/* <InfoCard
+          icon={UserRound}
+          label="Client"
+          value={getClientName(task)}
+          description={getClientCode(task)}
+        /> */}
       </div>
 
       {/* ======================================================
@@ -1071,6 +1146,24 @@ export default function TaskDetailsPage() {
             </div>
 
             <div className="mt-6 grid gap-5 sm:grid-cols-2">
+              <DetailItem
+                label="Client"
+                value={`${getClientName(task)}${
+                  getClientCode(task) !== "—" ? ` (${getClientCode(task)})` : ""
+                }`}
+              />
+
+              <DetailItem
+                label="Work category"
+                value={`${getWorkCategoryName(task)}${
+                  getWorkCategoryCode(task) !== "—"
+                    ? ` (${getWorkCategoryCode(task)})`
+                    : ""
+                }`}
+              />
+
+              <DetailItem label="Quantity" value={getQuantityLabel(task)} />
+
               <DetailItem label="Priority" value={task.priority} />
 
               <DetailItem
@@ -1079,6 +1172,11 @@ export default function TaskDetailsPage() {
               />
 
               <DetailItem label="Team" value={getReferenceName(task.teamId)} />
+
+              <DetailItem
+                label="Assignee"
+                value={getAccessUserName(task.assigneeId)}
+              />
 
               <DetailItem
                 label="Assigned by"
@@ -1327,6 +1425,44 @@ export default function TaskDetailsPage() {
             </section>
           )}
 
+          {showReassignmentNotice && latestReassignment && (
+            <section className="rounded-2xl border border-indigo-100 bg-indigo-50/40 p-5">
+              <div className="flex items-start gap-3">
+                <Repeat2 className="mt-0.5 h-5 w-5 shrink-0 text-indigo-600" />
+
+                <div className="min-w-0 flex-1">
+                  <h2 className="font-semibold text-slate-950">
+                    Ticket reassigned to you
+                  </h2>
+
+                  <p className="mt-1 text-sm leading-6 text-slate-600">
+                    This ticket was transferred to you at{" "}
+                    <span className="font-semibold text-indigo-700">
+                      {latestReassignment.progressAtReassignment}% progress
+                    </span>
+                    . Existing work notes, start time and activity history have
+                    been preserved.
+                  </p>
+
+                  <div className="mt-3 rounded-xl border border-indigo-100 bg-white p-4">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-indigo-500">
+                      Reassignment reason
+                    </p>
+
+                    <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-slate-700">
+                      {latestReassignment.reason || "No reason provided."}
+                    </p>
+
+                    <p className="mt-2 text-xs text-slate-400">
+                      Reassigned on{" "}
+                      {formatDateTime(latestReassignment.reassignedAt)}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </section>
+          )}
+
           {/* ==================================================
               PROGRESS
           ================================================== */}
@@ -1367,20 +1503,8 @@ export default function TaskDetailsPage() {
                   onChange={(event) =>
                     setProgressPercentage(Number(event.target.value))
                   }
-                  className="mt-4 w-full"
+                  className="mt-4 w-full accent-blue-600"
                 />
-
-                <div className="mt-3 h-2 overflow-hidden rounded-full bg-slate-100">
-                  <div
-                    className="h-full rounded-full bg-blue-600 transition-all"
-                    style={{
-                      width: `${Math.min(
-                        Math.max(progressPercentage, 0),
-                        100,
-                      )}%`,
-                    }}
-                  />
-                </div>
               </div>
 
               <div className="mt-5">
