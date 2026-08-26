@@ -1,8 +1,10 @@
 export type RoleStatus = "ACTIVE" | "INACTIVE";
 
 export type RoleScopeType =
-    | "PLATFORM"
-    | "COMPANY";
+    | "GLOBAL"
+    | "COMPANY"
+    | "DEPARTMENT"
+    | "TEAM";
 
 export interface RolePermission {
     _id: string;
@@ -42,8 +44,27 @@ export interface Role {
         string | RolePermission
     >;
 
+    /**
+     * System roles cannot be deleted.
+     */
     isSystemRole: boolean;
+
+    /**
+     * Controls whether structural role details
+     * can be modified.
+     */
     isEditable: boolean;
+
+    /**
+     * Controls whether the permission set
+     * can be modified.
+     *
+     * COMPANY_ADMIN -> false
+     * TEAM_LEAD     -> true
+     * EMPLOYEE      -> true
+     * Custom roles  -> true
+     */
+    isPermissionEditable: boolean;
 
     status: RoleStatus;
 
@@ -56,23 +77,20 @@ export interface CreateRolePayload {
     code: string;
     description?: string;
     permissionIds: string[];
-    // scopeType: "COMPANY";
+    scopeType: Exclude<RoleScopeType, "GLOBAL">;
     status: RoleStatus;
 }
 
 export interface UpdateRolePayload {
-    name: string;
-    code: string;
+    name?: string;
+    code?: string;
     description?: string;
-    permissionIds: string[];
-    // scopeType: "COMPANY";
-    status: RoleStatus;
+    status?: RoleStatus;
 }
 
 export interface RolePagination {
     page: number;
     limit: number;
-    // total: number;
     totalRecords: number;
     totalPages: number;
     hasNextPage: boolean;
@@ -89,10 +107,13 @@ export interface RoleListParams {
     limit?: number;
     search?: string;
     status?: RoleStatus;
+    scopeType?: Exclude<RoleScopeType, "GLOBAL">;
+    isSystemRole?: boolean;
     sortBy?:
     | "name"
     | "code"
     | "status"
+    | "scopeType"
     | "createdAt"
     | "updatedAt";
     sortOrder?: "asc" | "desc";

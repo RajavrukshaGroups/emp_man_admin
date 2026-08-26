@@ -13,35 +13,47 @@ import {
   RefreshCcw,
   Save,
   ShieldCheck,
-  UserRoundCog,
 } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useMemo, useState, useEffect } from "react";
 import { useForm, type SubmitHandler } from "react-hook-form";
 import { toast } from "sonner";
 
 import { companyAccessService } from "@/features/company-access/services/company-access.service";
+
 import type {
   CompanyAccess,
   EmploymentType,
   UpdateCompanyAccessPayload,
   WorkLocationType,
 } from "@/features/company-access/types/company-access.types";
+
 import { employeeService } from "@/features/employees/services/employee.service";
+
 import type {
   Employee,
   EmployeeCompanyAccessReference,
   EmployeeUserReference,
 } from "@/features/employees/types/employee.types";
-import { useAuthStore } from "@/store/auth.store";
 
 import { roleService } from "@/features/roles/services/role.service";
+
 import type { Role } from "@/features/roles/types/role.types";
 
 import { departmentService } from "@/features/departments/services/department.service";
+
 import type { Department } from "@/features/departments/types/department.types";
 
 import { teamService } from "@/features/teams/services/team.service";
+
 import type { Team } from "@/features/teams/types/team.types";
+
+import { useAuthStore } from "@/store/auth.store";
+
+/**
+ * ============================================================
+ * TYPES
+ * ============================================================
+ */
 
 interface EditEmploymentFormProps {
   employeeId: string;
@@ -65,8 +77,15 @@ interface EmploymentFormValues {
   workLocationName: string;
 
   isPrimaryCompany: boolean;
+
   notes: string;
 }
+
+/**
+ * ============================================================
+ * STYLES
+ * ============================================================
+ */
 
 const inputClassName =
   "h-11 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 disabled:cursor-not-allowed disabled:bg-slate-50";
@@ -79,6 +98,12 @@ const textAreaClassName =
 const labelClassName = "mb-2 block text-sm font-semibold text-slate-700";
 
 const errorClassName = "mt-1.5 text-xs font-medium text-red-600";
+
+/**
+ * ============================================================
+ * HELPERS
+ * ============================================================
+ */
 
 function getErrorMessage(error: unknown, fallbackMessage: string) {
   if (axios.isAxiosError(error)) {
@@ -110,7 +135,15 @@ function formatDateForInput(value?: string | null) {
   return date.toISOString().split("T")[0];
 }
 
-function getReferenceId(value: { _id: string } | string | null | undefined) {
+function getReferenceId(
+  value:
+    | string
+    | {
+        _id: string;
+      }
+    | null
+    | undefined,
+) {
   if (!value) {
     return "";
   }
@@ -145,6 +178,12 @@ function getEmployeeCompanyAccessId(employee: Employee) {
   return null;
 }
 
+/**
+ * ============================================================
+ * COMPONENT
+ * ============================================================
+ */
+
 export function EditEmploymentForm({ employeeId }: EditEmploymentFormProps) {
   const router = useRouter();
 
@@ -154,15 +193,53 @@ export function EditEmploymentForm({ employeeId }: EditEmploymentFormProps) {
 
   const canUpdateEmployee = permissions.includes("employee.update");
 
+  /**
+   * ==========================================================
+   * PRIMARY RECORDS
+   * ==========================================================
+   */
+
   const [employee, setEmployee] = useState<Employee | null>(null);
 
   const [companyAccess, setCompanyAccess] = useState<CompanyAccess | null>(
     null,
   );
 
+  /**
+   * ==========================================================
+   * OPTION DATA
+   * ==========================================================
+   */
+
+  const [roles, setRoles] = useState<Role[]>([]);
+
+  const [departments, setDepartments] = useState<Department[]>([]);
+
+  const [teams, setTeams] = useState<Team[]>([]);
+
+  const [reportingManagers, setReportingManagers] = useState<CompanyAccess[]>(
+    [],
+  );
+
+  /**
+   * ==========================================================
+   * LOADING / ERROR
+   * ==========================================================
+   */
+
   const [isLoading, setIsLoading] = useState(true);
 
+  const [isLoadingOptions, setIsLoadingOptions] = useState(true);
+
+  const [isLoadingTeams, setIsLoadingTeams] = useState(false);
+
   const [loadError, setLoadError] = useState<string | null>(null);
+
+  /**
+   * ==========================================================
+   * FORM
+   * ==========================================================
+   */
 
   const {
     register,
@@ -190,38 +267,138 @@ export function EditEmploymentForm({ employeeId }: EditEmploymentFormProps) {
       workLocationName: "",
 
       isPrimaryCompany: false,
+
       notes: "",
     },
+
     mode: "onBlur",
   });
 
+  /**
+   * ==========================================================
+   * WATCHED VALUES
+   * ==========================================================
+   */
+
+  const selectedRoleId = watch("roleId");
+
   const selectedDepartmentId = watch("departmentId");
 
-  const [roles, setRoles] = useState<Role[]>([]);
-  const [departments, setDepartments] = useState<Department[]>([]);
-  const [teams, setTeams] = useState<Team[]>([]);
+  const selectedTeamId = watch("teamId");
 
-  const [reportingManagers, setReportingManagers] = useState<CompanyAccess[]>(
-    [],
+  /**
+   * ==========================================================
+   * SELECTED ROLE
+   * ==========================================================
+   */
+
+  const selectedRole =
+    roles.find((role) => role._id === selectedRoleId) ?? null;
+
+  const selectedRoleScope = selectedRole?.scopeType ?? null;
+
+  /**
+   * ==========================================================
+   * LOAD TEAMS FOR A DEPARTMENT
+   * ==========================================================
+   *
+   * Used when the user manually changes department.
+   * ==========================================================
+   */
+
+  const loadTeamsForDepartment = useCallback(
+    async (departmentId: string): Promise<Team[]> => {
+      if (!company?._id || !departmentId) {
+        setTeams([]);
+
+        return [];
+      }
+
+      try {
+        setIsLoadingTeams(true);
+
+        const result = await teamService.getTeams(company._id, {
+          page: 1,
+          limit: 100,
+
+          departmentId,
+
+          status: "ACTIVE",
+
+          sortBy: "name",
+
+          sortOrder: "asc",
+        });
+
+        setTeams(result.teams);
+
+        return result.teams;
+      } catch (error: unknown) {
+        setTeams([]);
+
+        toast.error(
+          getErrorMessage(
+            error,
+            "Unable to load teams for the selected department.",
+          ),
+        );
+
+        return [];
+      } finally {
+        setIsLoadingTeams(false);
+      }
+    },
+    [company?._id],
   );
 
-  const [isLoadingOptions, setIsLoadingOptions] = useState(true);
-  const [isLoadingTeams, setIsLoadingTeams] = useState(false);
+  /**
+   * ==========================================================
+   * INITIAL PAGE LOAD
+   * ==========================================================
+   *
+   * IMPORTANT:
+   *
+   * We deliberately load data in this order:
+   *
+   * 1. Employee
+   * 2. Company Access
+   * 3. Roles / Departments / Managers
+   * 4. Teams belonging to SAVED department
+   * 5. Populate option state
+   * 6. Reset form values
+   *
+   * This avoids the previous race condition where teamId
+   * existed before the team option existed.
+   * ==========================================================
+   */
 
-  const loadEmploymentInformation = useCallback(async () => {
+  const loadPageData = useCallback(async () => {
     if (!canUpdateEmployee) {
       setIsLoading(false);
+
       return;
     }
+
     if (!company?._id) {
       setIsLoading(false);
+
       setLoadError("Active company context is unavailable.");
+
       return;
     }
 
     try {
       setIsLoading(true);
+
+      setIsLoadingOptions(true);
+
       setLoadError(null);
+
+      /**
+       * ----------------------------------------------------
+       * 1. EMPLOYEE
+       * ----------------------------------------------------
+       */
 
       const employeeData = await employeeService.getEmployeeById(
         company._id,
@@ -236,26 +413,157 @@ export function EditEmploymentForm({ employeeId }: EditEmploymentFormProps) {
         );
       }
 
+      /**
+       * ----------------------------------------------------
+       * 2. COMPANY ACCESS
+       * ----------------------------------------------------
+       */
+
       const accessData = await companyAccessService.getCompanyAccessById(
         company._id,
         companyAccessId,
       );
 
+      /**
+       * ----------------------------------------------------
+       * 3. MASTER OPTIONS
+       * ----------------------------------------------------
+       */
+
+      const [roleResult, departmentResult, companyAccessResult] =
+        await Promise.all([
+          roleService.getRoles(company._id, {
+            page: 1,
+            limit: 100,
+
+            status: "ACTIVE",
+
+            sortBy: "name",
+
+            sortOrder: "asc",
+          }),
+
+          departmentService.getDepartments(company._id, {
+            page: 1,
+            limit: 100,
+
+            status: "ACTIVE",
+
+            sortBy: "name",
+
+            sortOrder: "asc",
+          }),
+
+          companyAccessService.getCompanyAccessList(company._id, {
+            page: 1,
+            limit: 100,
+
+            status: "ACTIVE",
+
+            sortBy: "createdAt",
+
+            sortOrder: "asc",
+          }),
+        ]);
+
+      /**
+       * ----------------------------------------------------
+       * 4. SAVED IDs
+       * ----------------------------------------------------
+       */
+
+      const savedRoleId = getReferenceId(accessData.roleId);
+
+      const savedDepartmentId = getReferenceId(accessData.departmentId);
+
+      const savedTeamId = getReferenceId(accessData.teamId);
+
+      const savedReportingManagerId = getReferenceId(
+        accessData.reportingManagerId,
+      );
+
+      /**
+       * ----------------------------------------------------
+       * 5. LOAD SAVED DEPARTMENT TEAMS
+       * ----------------------------------------------------
+       */
+
+      let savedDepartmentTeams: Team[] = [];
+
+      if (savedDepartmentId) {
+        const teamResult = await teamService.getTeams(company._id, {
+          page: 1,
+          limit: 100,
+
+          departmentId: savedDepartmentId,
+
+          status: "ACTIVE",
+
+          sortBy: "name",
+
+          sortOrder: "asc",
+        });
+
+        savedDepartmentTeams = teamResult.teams;
+      }
+
+      /**
+       * ----------------------------------------------------
+       * VALIDATE SAVED TEAM
+       * ----------------------------------------------------
+       */
+
+      const savedTeamExists =
+        !savedTeamId ||
+        savedDepartmentTeams.some((team) => team._id === savedTeamId);
+
+      if (savedTeamId && !savedTeamExists) {
+        console.warn("Saved team does not belong to the saved department.", {
+          savedDepartmentId,
+          savedTeamId,
+        });
+      }
+
+      /**
+       * ----------------------------------------------------
+       * 6. SET STATE FIRST
+       * ----------------------------------------------------
+       */
+
       setEmployee(employeeData);
+
       setCompanyAccess(accessData);
+
+      setRoles(roleResult.records.filter((role) => role.status === "ACTIVE"));
+
+      setDepartments(departmentResult.departments);
+
+      setTeams(savedDepartmentTeams);
+
+      setReportingManagers(
+        companyAccessResult.records.filter(
+          (access) => access._id !== accessData._id,
+        ),
+      );
+
+      /**
+       * ----------------------------------------------------
+       * 7. RESET FORM AFTER OPTIONS EXIST
+       * ----------------------------------------------------
+       */
 
       reset({
         employeeCode: accessData.employeeCode ?? "",
 
         designation: accessData.designation ?? "",
 
-        roleId: getReferenceId(accessData.roleId),
+        roleId: savedRoleId,
 
-        departmentId: getReferenceId(accessData.departmentId),
+        departmentId: savedDepartmentId,
 
-        teamId: getReferenceId(accessData.teamId),
+        teamId: savedTeamExists ? savedTeamId : "",
 
-        reportingManagerId: getReferenceId(accessData.reportingManagerId),
+        reportingManagerId: savedReportingManagerId,
 
         employmentType: accessData.employmentType ?? "FULL_TIME",
 
@@ -278,142 +586,177 @@ export function EditEmploymentForm({ employeeId }: EditEmploymentFormProps) {
       );
 
       setEmployee(null);
+
       setCompanyAccess(null);
+
+      setRoles([]);
+
+      setDepartments([]);
+
+      setTeams([]);
+
+      setReportingManagers([]);
+
       setLoadError(message);
 
       toast.error(message);
     } finally {
       setIsLoading(false);
+
+      setIsLoadingOptions(false);
     }
   }, [canUpdateEmployee, company?._id, employeeId, reset]);
 
-  const loadOrganisationOptions = useCallback(async () => {
-    if (!canUpdateEmployee) {
-      setIsLoadingOptions(false);
-      return;
-    }
-    if (!company?._id) {
-      return;
-    }
-
-    try {
-      setIsLoadingOptions(true);
-
-      const [roleResult, departmentResult, companyAccessResult] =
-        await Promise.all([
-          roleService.getRoles(company._id, {
-            page: 1,
-            limit: 100,
-            status: "ACTIVE",
-            sortBy: "name",
-            sortOrder: "asc",
-          }),
-
-          departmentService.getDepartments(company._id, {
-            page: 1,
-            limit: 100,
-            status: "ACTIVE",
-            sortBy: "name",
-            sortOrder: "asc",
-          }),
-
-          companyAccessService.getCompanyAccessList(company._id, {
-            page: 1,
-            limit: 100,
-            status: "ACTIVE",
-            sortBy: "createdAt",
-            sortOrder: "asc",
-          }),
-        ]);
-
-      setRoles(
-        roleResult.records.filter(
-          (role) => role.scopeType === "COMPANY" && role.status === "ACTIVE",
-        ),
-      );
-
-      setDepartments(departmentResult.departments);
-
-      setReportingManagers(
-        companyAccessResult.records.filter(
-          (access) => access._id !== companyAccess?._id,
-        ),
-      );
-    } catch (error: unknown) {
-      toast.error(
-        getErrorMessage(
-          error,
-          "Unable to load organisation assignment options.",
-        ),
-      );
-    } finally {
-      setIsLoadingOptions(false);
-    }
-  }, [canUpdateEmployee, company?._id, companyAccess?._id]);
+  /**
+   * ==========================================================
+   * INITIAL EFFECT
+   * ==========================================================
+   */
 
   useEffect(() => {
-    void loadEmploymentInformation();
-  }, [loadEmploymentInformation]);
+    void loadPageData();
+  }, [loadPageData]);
 
-  useEffect(() => {
-    void loadOrganisationOptions();
-  }, [loadOrganisationOptions]);
+  /**
+   * ==========================================================
+   * REPORTING MANAGERS
+   * ==========================================================
+   *
+   * TEAM selected
+   * → show managers from same team
+   *
+   * DEPARTMENT selected
+   * → show managers from same department
+   *
+   * Nothing selected
+   * → show company managers
+   *
+   * Current employee excluded.
+   * ==========================================================
+   */
 
-  useEffect(() => {
-    async function loadTeams() {
-      if (!canUpdateEmployee) {
-        setTeams([]);
-        return;
+  const availableReportingManagers = useMemo(() => {
+    return reportingManagers.filter((manager) => {
+      if (companyAccess?._id && manager._id === companyAccess._id) {
+        return false;
       }
-      if (!company?._id || !selectedDepartmentId) {
-        setTeams([]);
-        return;
+
+      const managerDepartmentId = getReferenceId(manager.departmentId);
+
+      const managerTeamId = getReferenceId(manager.teamId);
+
+      /**
+       * Team has highest priority.
+       */
+      if (selectedTeamId) {
+        return managerTeamId === selectedTeamId;
       }
 
-      try {
-        setIsLoadingTeams(true);
-
-        const result = await teamService.getTeams(company._id, {
-          page: 1,
-          limit: 100,
-          departmentId: selectedDepartmentId,
-          status: "ACTIVE",
-          sortBy: "name",
-          sortOrder: "asc",
-        });
-
-        setTeams(result.teams);
-      } catch (error: unknown) {
-        setTeams([]);
-
-        toast.error(
-          getErrorMessage(
-            error,
-            "Unable to load teams for the selected department.",
-          ),
-        );
-      } finally {
-        setIsLoadingTeams(false);
+      /**
+       * Otherwise same department.
+       */
+      if (selectedDepartmentId) {
+        return managerDepartmentId === selectedDepartmentId;
       }
-    }
 
-    void loadTeams();
-  }, [canUpdateEmployee, company?._id, selectedDepartmentId]);
+      return true;
+    });
+  }, [
+    reportingManagers,
+    companyAccess?._id,
+    selectedDepartmentId,
+    selectedTeamId,
+  ]);
+
+  /**
+   * ==========================================================
+   * SUBMIT
+   * ==========================================================
+   */
 
   const onSubmit: SubmitHandler<EmploymentFormValues> = async (values) => {
     if (!canUpdateEmployee) {
       toast.error("You do not have permission to update employee information.");
+
       return;
     }
+
     if (!company?._id) {
       toast.error("Active company context is unavailable.");
+
       return;
     }
 
     if (!companyAccess?._id) {
       toast.error("Company access information is unavailable.");
+
       return;
     }
+
+    /**
+     * --------------------------------------------------------
+     * VALIDATE ROLE
+     * --------------------------------------------------------
+     */
+
+    const role = roles.find((currentRole) => currentRole._id === values.roleId);
+
+    if (!role) {
+      toast.error("Please select a valid role.");
+
+      return;
+    }
+
+    /**
+     * --------------------------------------------------------
+     * DEPARTMENT REQUIRED
+     * --------------------------------------------------------
+     */
+
+    if (
+      (role.scopeType === "DEPARTMENT" || role.scopeType === "TEAM") &&
+      !values.departmentId
+    ) {
+      toast.error("Department is required for this role.");
+
+      return;
+    }
+
+    /**
+     * --------------------------------------------------------
+     * TEAM REQUIRED
+     * --------------------------------------------------------
+     */
+
+    if (role.scopeType === "TEAM" && !values.teamId) {
+      toast.error("Team is required for a team-scoped role.");
+
+      return;
+    }
+
+    /**
+     * --------------------------------------------------------
+     * ENSURE TEAM BELONGS TO DEPARTMENT
+     * --------------------------------------------------------
+     */
+
+    if (values.teamId && values.departmentId) {
+      const validTeam = teams.some((team) => team._id === values.teamId);
+
+      if (!validTeam) {
+        toast.error(
+          "The selected team does not belong to the selected department.",
+        );
+
+        return;
+      }
+    }
+
+    /**
+     * --------------------------------------------------------
+     * PAYLOAD
+     * --------------------------------------------------------
+     */
 
     const payload: UpdateCompanyAccessPayload = {
       employeeCode: values.employeeCode.trim() || null,
@@ -462,6 +805,12 @@ export function EditEmploymentForm({ employeeId }: EditEmploymentFormProps) {
     }
   };
 
+  /**
+   * ==========================================================
+   * ACCESS DENIED
+   * ==========================================================
+   */
+
   if (!canUpdateEmployee) {
     return (
       <div className="rounded-2xl border border-red-200 bg-red-50 px-6 py-14 text-center">
@@ -481,9 +830,21 @@ export function EditEmploymentForm({ employeeId }: EditEmploymentFormProps) {
     );
   }
 
+  /**
+   * ==========================================================
+   * LOADING
+   * ==========================================================
+   */
+
   if (isLoading) {
     return <EmploymentFormSkeleton />;
   }
+
+  /**
+   * ==========================================================
+   * ERROR
+   * ==========================================================
+   */
 
   if (loadError || !employee || !companyAccess) {
     return (
@@ -507,7 +868,7 @@ export function EditEmploymentForm({ employeeId }: EditEmploymentFormProps) {
 
           <button
             type="button"
-            onClick={() => void loadEmploymentInformation()}
+            onClick={() => void loadPageData()}
             className="mt-5 inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-red-600 px-4 text-sm font-semibold text-white transition hover:bg-red-700"
           >
             <RefreshCcw className="h-4 w-4" />
@@ -518,12 +879,28 @@ export function EditEmploymentForm({ employeeId }: EditEmploymentFormProps) {
     );
   }
 
+  /**
+   * ==========================================================
+   * DISPLAY NAME
+   * ==========================================================
+   */
+
   const employeeUser = getEmployeeUser(employee);
 
   const employeeName = employeeUser?.displayName || "Employee";
 
+  /**
+   * ==========================================================
+   * UI
+   * ==========================================================
+   */
+
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-6" noValidate>
+      {/* ======================================================
+          HEADER
+      ====================================================== */}
+
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div className="flex items-start gap-3">
           <Link
@@ -539,7 +916,8 @@ export function EditEmploymentForm({ employeeId }: EditEmploymentFormProps) {
             </h1>
 
             <p className="mt-1 text-sm text-slate-500">
-              Update company access, assignment and work-location information.
+              Update company access, organisation assignment and work-location
+              information.
             </p>
           </div>
         </div>
@@ -555,6 +933,10 @@ export function EditEmploymentForm({ employeeId }: EditEmploymentFormProps) {
         </div>
       </div>
 
+      {/* ======================================================
+          EMPLOYMENT ASSIGNMENT
+      ====================================================== */}
+
       <Section
         icon={BriefcaseBusiness}
         title="Employment assignment"
@@ -564,11 +946,12 @@ export function EditEmploymentForm({ employeeId }: EditEmploymentFormProps) {
           <input
             type="text"
             disabled={isSubmitting}
-            placeholder="DES-EMP-001"
+            placeholder="APEX-HR-001"
             className={inputClassName}
             {...register("employeeCode", {
               maxLength: {
                 value: 50,
+
                 message: "Employee code cannot exceed 50 characters.",
               },
             })}
@@ -579,12 +962,14 @@ export function EditEmploymentForm({ employeeId }: EditEmploymentFormProps) {
           <input
             type="text"
             disabled={isSubmitting}
-            placeholder="Senior Software Developer"
+            placeholder="HR Manager"
             className={inputClassName}
             {...register("designation", {
               required: "Designation is required.",
+
               maxLength: {
                 value: 100,
+
                 message: "Designation cannot exceed 100 characters.",
               },
             })}
@@ -614,12 +999,34 @@ export function EditEmploymentForm({ employeeId }: EditEmploymentFormProps) {
         </Field>
       </Section>
 
+      {/* ======================================================
+          ORGANISATION ASSIGNMENT
+      ====================================================== */}
+
       <Section
         icon={Building2}
         title="Organisation assignment"
         description="Assign the employee's role, department, team and reporting manager."
       >
-        <Field label="Role" error={errors.roleId?.message}>
+        {/* ROLE */}
+
+        <Field
+          label="Role *"
+          error={errors.roleId?.message}
+          hint={
+            selectedRole
+              ? `Scope: ${
+                  selectedRole.scopeType === "COMPANY"
+                    ? "Company"
+                    : selectedRole.scopeType === "DEPARTMENT"
+                      ? "Department"
+                      : selectedRole.scopeType === "TEAM"
+                        ? "Team"
+                        : selectedRole.scopeType
+                }`
+              : undefined
+          }
+        >
           <select
             disabled={isSubmitting || isLoadingOptions}
             className={selectClassName}
@@ -645,13 +1052,51 @@ export function EditEmploymentForm({ employeeId }: EditEmploymentFormProps) {
           )}
         </Field>
 
-        <Field label="Department">
+        {/* DEPARTMENT */}
+
+        <Field
+          label={
+            selectedRoleScope === "DEPARTMENT" || selectedRoleScope === "TEAM"
+              ? "Department *"
+              : "Department"
+          }
+          hint={
+            selectedRoleScope === "DEPARTMENT"
+              ? "This role operates within the selected department."
+              : selectedRoleScope === "TEAM"
+                ? "Department is required before selecting the team."
+                : undefined
+          }
+        >
           <select
             disabled={isSubmitting || isLoadingOptions}
             className={selectClassName}
             {...register("departmentId", {
-              onChange: () => {
-                setValue("teamId", "");
+              onChange: async (event) => {
+                const departmentId = event.target.value;
+
+                /**
+                 * User manually changed
+                 * department.
+                 *
+                 * Previous team and manager
+                 * may now be invalid.
+                 */
+                setValue("teamId", "", {
+                  shouldDirty: true,
+                });
+
+                setValue("reportingManagerId", "", {
+                  shouldDirty: true,
+                });
+
+                if (!departmentId) {
+                  setTeams([]);
+
+                  return;
+                }
+
+                await loadTeamsForDepartment(departmentId);
               },
             })}
           >
@@ -667,16 +1112,34 @@ export function EditEmploymentForm({ employeeId }: EditEmploymentFormProps) {
           </select>
         </Field>
 
+        {/* TEAM */}
+
         <Field
-          label="Team"
+          label={selectedRoleScope === "TEAM" ? "Team *" : "Team"}
           hint={
-            !selectedDepartmentId ? "Select a department first." : undefined
+            !selectedDepartmentId
+              ? "Select a department first."
+              : selectedRoleScope === "TEAM"
+                ? "This role operates within the selected team."
+                : undefined
           }
         >
           <select
             disabled={isSubmitting || !selectedDepartmentId || isLoadingTeams}
             className={selectClassName}
-            {...register("teamId")}
+            {...register("teamId", {
+              onChange: () => {
+                /**
+                 * User manually changed team.
+                 *
+                 * Previous reporting manager
+                 * may belong to another team.
+                 */
+                setValue("reportingManagerId", "", {
+                  shouldDirty: true,
+                });
+              },
+            })}
           >
             <option value="">
               {!selectedDepartmentId
@@ -700,7 +1163,18 @@ export function EditEmploymentForm({ employeeId }: EditEmploymentFormProps) {
           )}
         </Field>
 
-        <Field label="Reporting Manager">
+        {/* REPORTING MANAGER */}
+
+        <Field
+          label="Reporting manager"
+          hint={
+            selectedTeamId
+              ? "Showing employees assigned to the selected team."
+              : selectedDepartmentId
+                ? "Showing employees assigned to the selected department."
+                : "Select a department or team to narrow the manager list."
+          }
+        >
           <select
             disabled={isSubmitting || isLoadingOptions}
             className={selectClassName}
@@ -708,7 +1182,7 @@ export function EditEmploymentForm({ employeeId }: EditEmploymentFormProps) {
           >
             <option value="">No reporting manager</option>
 
-            {reportingManagers.map((manager) => {
+            {availableReportingManagers.map((manager) => {
               const managerUser =
                 typeof manager.userId === "object" && manager.userId !== null
                   ? manager.userId
@@ -730,8 +1204,18 @@ export function EditEmploymentForm({ employeeId }: EditEmploymentFormProps) {
               );
             })}
           </select>
+
+          {!isLoadingOptions && availableReportingManagers.length === 0 && (
+            <p className="mt-1.5 text-xs text-slate-500">
+              No suitable reporting managers are currently available.
+            </p>
+          )}
         </Field>
       </Section>
+
+      {/* ======================================================
+          EMPLOYMENT DATES
+      ====================================================== */}
 
       <Section
         icon={CalendarDays}
@@ -770,6 +1254,10 @@ export function EditEmploymentForm({ employeeId }: EditEmploymentFormProps) {
           />
         </Field>
       </Section>
+
+      {/* ======================================================
+          WORK LOCATION
+      ====================================================== */}
 
       <Section
         icon={MapPin}
@@ -811,12 +1299,17 @@ export function EditEmploymentForm({ employeeId }: EditEmploymentFormProps) {
             {...register("workLocationName", {
               maxLength: {
                 value: 150,
+
                 message: "Work location name cannot exceed 150 characters.",
               },
             })}
           />
         </Field>
       </Section>
+
+      {/* ======================================================
+          ACCESS SETTINGS
+      ====================================================== */}
 
       <Section
         icon={ShieldCheck}
@@ -838,8 +1331,8 @@ export function EditEmploymentForm({ employeeId }: EditEmploymentFormProps) {
               </span>
 
               <span className="mt-1 block text-xs leading-5 text-slate-500">
-                Set this as the employee's primary company assignment. Existing
-                primary assignments may be cleared automatically.
+                Set this as the employee&apos;s primary company assignment.
+                Existing primary assignments may be cleared automatically.
               </span>
             </span>
           </label>
@@ -854,6 +1347,7 @@ export function EditEmploymentForm({ employeeId }: EditEmploymentFormProps) {
               {...register("notes", {
                 maxLength: {
                   value: 1000,
+
                   message: "Notes cannot exceed 1,000 characters.",
                 },
               })}
@@ -861,6 +1355,10 @@ export function EditEmploymentForm({ employeeId }: EditEmploymentFormProps) {
           </Field>
         </div>
       </Section>
+
+      {/* ======================================================
+          FOOTER
+      ====================================================== */}
 
       <div className="sticky bottom-0 z-20 rounded-2xl border border-slate-200 bg-white/95 p-4 shadow-lg backdrop-blur sm:flex sm:items-center sm:justify-between">
         <div className="mb-3 sm:mb-0">
@@ -885,7 +1383,7 @@ export function EditEmploymentForm({ employeeId }: EditEmploymentFormProps) {
 
           <button
             type="submit"
-            disabled={isSubmitting}
+            disabled={isSubmitting || isLoadingOptions || isLoadingTeams}
             className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
           >
             {isSubmitting ? (
@@ -905,6 +1403,12 @@ export function EditEmploymentForm({ employeeId }: EditEmploymentFormProps) {
     </form>
   );
 }
+
+/**
+ * ============================================================
+ * FIELD
+ * ============================================================
+ */
 
 interface FieldProps {
   label: string;
@@ -928,6 +1432,12 @@ function Field({ label, error, hint, children }: FieldProps) {
     </div>
   );
 }
+
+/**
+ * ============================================================
+ * SECTION
+ * ============================================================
+ */
 
 interface SectionProps {
   icon: React.ElementType;
@@ -959,6 +1469,12 @@ function Section({ icon: Icon, title, description, children }: SectionProps) {
     </section>
   );
 }
+
+/**
+ * ============================================================
+ * SKELETON
+ * ============================================================
+ */
 
 function EmploymentFormSkeleton() {
   return (

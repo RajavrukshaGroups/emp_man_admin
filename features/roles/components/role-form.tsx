@@ -55,6 +55,9 @@ export function RoleForm({ companyId, role }: RoleFormProps) {
     code: role?.code ?? "",
     description: role?.description ?? "",
 
+    scopeType:
+      role?.scopeType === "GLOBAL" ? "COMPANY" : (role?.scopeType ?? "COMPANY"),
+
     permissionIds:
       role?.permissionIds.map((permission) =>
         typeof permission === "string" ? permission : permission._id,
@@ -111,11 +114,20 @@ export function RoleForm({ companyId, role }: RoleFormProps) {
       setIsSubmitting(true);
 
       if (role) {
+        /**
+         * Scope and permissions are deliberately NOT
+         * changed from the normal edit-role form.
+         *
+         * Permissions have their own dedicated page.
+         * Scope is immutable after role creation.
+         */
         await roleService.updateRole(companyId, role._id, {
           name: values.name.trim(),
+
           code: values.code.trim().toUpperCase(),
+
           description: values.description?.trim() || undefined,
-          permissionIds: values.permissionIds,
+
           status: values.status,
         });
 
@@ -123,9 +135,15 @@ export function RoleForm({ companyId, role }: RoleFormProps) {
       } else {
         await roleService.createRole(companyId, {
           name: values.name.trim(),
+
           code: values.code.trim().toUpperCase(),
+
           description: values.description?.trim() || undefined,
+
+          scopeType: values.scopeType,
+
           permissionIds: values.permissionIds,
+
           status: values.status,
         });
 
@@ -135,7 +153,7 @@ export function RoleForm({ companyId, role }: RoleFormProps) {
       router.push("/roles");
       router.refresh();
     } catch (error: unknown) {
-      console.error("Failed to create role:", error);
+      console.error("Failed to save role:", error);
 
       toast.error(getErrorMessage(error));
     } finally {
@@ -182,7 +200,7 @@ export function RoleForm({ companyId, role }: RoleFormProps) {
 
           <button
             type="submit"
-            disabled={isSubmitting || isPermissionsLoading}
+            disabled={isSubmitting || (!isEditMode && isPermissionsLoading)}
             className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-slate-950 px-4 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {isSubmitting ? (
@@ -317,15 +335,38 @@ export function RoleForm({ companyId, role }: RoleFormProps) {
               className="text-sm font-medium text-slate-700"
             >
               Scope
+              <span className="ml-1 text-red-600">*</span>
             </label>
 
-            <input
+            <select
               id="role-scope"
-              type="text"
-              value="Company"
-              disabled
-              className="h-10 w-full cursor-not-allowed rounded-lg border border-slate-200 bg-slate-100 px-3 text-sm text-slate-500"
-            />
+              disabled={isSubmitting || isEditMode}
+              {...register("scopeType")}
+              className={[
+                "h-10 w-full rounded-lg border px-3 text-sm outline-none transition",
+                "focus:border-slate-500 focus:ring-2 focus:ring-slate-200",
+                isEditMode
+                  ? "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-500"
+                  : "border-slate-300 bg-white text-slate-950",
+                errors.scopeType ? "border-red-500" : "",
+              ].join(" ")}
+            >
+              <option value="COMPANY">Company</option>
+
+              <option value="DEPARTMENT">Department</option>
+
+              <option value="TEAM">Team</option>
+            </select>
+
+            {errors.scopeType ? (
+              <p className="text-sm text-red-600">{errors.scopeType.message}</p>
+            ) : (
+              <p className="text-xs text-slate-500">
+                {isEditMode
+                  ? "Role scope cannot be changed after creation."
+                  : "Choose how broadly this role can operate within the company."}
+              </p>
+            )}
           </div>
 
           <div className="space-y-2 md:col-span-2">
@@ -366,41 +407,43 @@ export function RoleForm({ companyId, role }: RoleFormProps) {
         </div>
       </section>
 
-      <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-        <Controller
-          name="permissionIds"
-          control={control}
-          render={({ field, fieldState }) => (
-            <div className="space-y-3">
-              <RolePermissionSelector
-                permissions={permissions}
-                value={field.value}
-                onChange={field.onChange}
-                isLoading={isPermissionsLoading}
-                error={permissionsError}
-                disabled={isSubmitting}
-              />
-
-              {fieldState.error ? (
-                <p className="text-sm text-red-600">
-                  {fieldState.error.message}
-                </p>
-              ) : null}
-
-              {permissionsError ? (
-                <button
-                  type="button"
-                  onClick={() => void refetchPermissions()}
+      {!isEditMode && (
+        <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <Controller
+            name="permissionIds"
+            control={control}
+            render={({ field, fieldState }) => (
+              <div className="space-y-3">
+                <RolePermissionSelector
+                  permissions={permissions}
+                  value={field.value}
+                  onChange={field.onChange}
+                  isLoading={isPermissionsLoading}
+                  error={permissionsError}
                   disabled={isSubmitting}
-                  className="inline-flex h-9 items-center justify-center rounded-lg border border-slate-300 bg-white px-3 text-sm font-medium text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  Retry loading permissions
-                </button>
-              ) : null}
-            </div>
-          )}
-        />
-      </section>
+                />
+
+                {fieldState.error ? (
+                  <p className="text-sm text-red-600">
+                    {fieldState.error.message}
+                  </p>
+                ) : null}
+
+                {permissionsError ? (
+                  <button
+                    type="button"
+                    onClick={() => void refetchPermissions()}
+                    disabled={isSubmitting}
+                    className="inline-flex h-9 items-center justify-center rounded-lg border border-slate-300 bg-white px-3 text-sm font-medium text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    Retry loading permissions
+                  </button>
+                ) : null}
+              </div>
+            )}
+          />
+        </section>
+      )}
 
       <div className="flex flex-col-reverse gap-3 border-t border-slate-200 pt-6 sm:flex-row sm:items-center sm:justify-between">
         <p className="text-xs text-slate-500">
@@ -419,7 +462,7 @@ export function RoleForm({ companyId, role }: RoleFormProps) {
 
           <button
             type="submit"
-            disabled={isSubmitting || isPermissionsLoading}
+            disabled={isSubmitting || (!isEditMode && isPermissionsLoading)}
             className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-slate-950 px-5 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {isSubmitting ? (

@@ -12,27 +12,71 @@ import {
   ShieldCheck,
   UserRound,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { toast } from "sonner";
 
+import { departmentService } from "@/features/departments/services/department.service";
+import { teamService } from "@/features/teams/services/team.service";
+import { employeeService } from "@/features/employees/services/employee.service";
+
+import type { Department } from "@/features/departments/types/department.types";
+import type { Team } from "@/features/teams/types/team.types";
+import type {
+  Employee,
+  EmployeeCompanyAccessReference,
+  EmployeeUserReference,
+} from "@/features/employees/types/employee.types";
+
 import { companyAccessService } from "@/features/company-access/services/company-access.service";
 import type { CompanyAccess } from "@/features/company-access/types/company-access.types";
+
 import {
   createCompanyAccessSchema,
   type CreateCompanyAccessFormInput,
   type CreateCompanyAccessFormValues,
 } from "@/features/company-access/validations/create-company-access.schema";
+
 import { roleService } from "@/features/roles/services/role.service";
 import type { Role } from "@/features/roles/types/role.types";
+
 import type { User } from "@/features/users/types/user.types";
+
 import { useAuthStore } from "@/store/auth.store";
 
-interface CompanyAccessStepProps {
-  user: User;
-  onBack: () => void;
-  onSuccess: (companyAccess: CompanyAccess) => void;
+/**
+ * ============================================================
+ * HELPERS
+ * ============================================================
+ */
+
+function isPopulatedEmployeeUser(
+  value: Employee["userId"],
+): value is EmployeeUserReference {
+  return typeof value === "object" && value !== null && "_id" in value;
+}
+
+function isPopulatedCompanyAccess(
+  value: Employee["companyAccessId"],
+): value is EmployeeCompanyAccessReference {
+  return typeof value === "object" && value !== null && "_id" in value;
+}
+
+function getReferenceId(
+  value:
+    | string
+    | {
+        _id: string;
+      }
+    | null
+    | undefined,
+) {
+  if (!value) {
+    return "";
+  }
+
+  return typeof value === "string" ? value : value._id;
 }
 
 function getErrorMessage(error: unknown, fallbackMessage: string) {
@@ -51,6 +95,24 @@ function getErrorMessage(error: unknown, fallbackMessage: string) {
   return fallbackMessage;
 }
 
+/**
+ * ============================================================
+ * TYPES
+ * ============================================================
+ */
+
+interface CompanyAccessStepProps {
+  user: User;
+  onBack: () => void;
+  onSuccess: (companyAccess: CompanyAccess) => void;
+}
+
+/**
+ * ============================================================
+ * STYLES
+ * ============================================================
+ */
+
 const inputClassName =
   "h-11 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 disabled:cursor-not-allowed disabled:bg-slate-50";
 
@@ -61,6 +123,12 @@ const labelClassName = "mb-2 block text-sm font-semibold text-slate-700";
 
 const errorClassName = "mt-1.5 text-xs font-medium text-red-600";
 
+/**
+ * ============================================================
+ * COMPONENT
+ * ============================================================
+ */
+
 export function CompanyAccessStep({
   user,
   onBack,
@@ -68,12 +136,39 @@ export function CompanyAccessStep({
 }: CompanyAccessStepProps) {
   const company = useAuthStore((state) => state.company);
 
+  /**
+   * ==========================================================
+   * MASTER DATA
+   * ==========================================================
+   */
+
   const [roles, setRoles] = useState<Role[]>([]);
+  const [departments, setDepartments] = useState<Department[]>([]);
+  const [teams, setTeams] = useState<Team[]>([]);
+  const [employees, setEmployees] = useState<Employee[]>([]);
+
+  /**
+   * ==========================================================
+   * LOADING STATES
+   * ==========================================================
+   */
+
   const [isLoadingRoles, setIsLoadingRoles] = useState(true);
+  const [isLoadingDepartments, setIsLoadingDepartments] = useState(true);
+  const [isLoadingTeams, setIsLoadingTeams] = useState(false);
+  const [isLoadingEmployees, setIsLoadingEmployees] = useState(false);
+
+  /**
+   * ==========================================================
+   * FORM
+   * ==========================================================
+   */
 
   const {
     register,
     handleSubmit,
+    watch,
+    setValue,
     formState: { errors, isSubmitting },
   } = useForm<
     CreateCompanyAccessFormInput,
@@ -107,6 +202,27 @@ export function CompanyAccessStep({
     mode: "onBlur",
   });
 
+  /**
+   * ==========================================================
+   * WATCHED VALUES
+   * ==========================================================
+   */
+
+  const selectedRoleId = watch("roleId");
+  const selectedDepartmentId = watch("departmentId");
+  const selectedTeamId = watch("teamId");
+
+  const selectedRole =
+    roles.find((role) => role._id === selectedRoleId) ?? null;
+
+  const selectedRoleScope = selectedRole?.scopeType ?? null;
+
+  /**
+   * ==========================================================
+   * LOAD ROLES
+   * ==========================================================
+   */
+
   useEffect(() => {
     async function loadRoles() {
       if (!company?._id) {
@@ -125,11 +241,11 @@ export function CompanyAccessStep({
           sortOrder: "asc",
         });
 
-        const companyRoles = data.records.filter(
-          (role) => role.scopeType === "COMPANY" && role.status === "ACTIVE",
+        const activeRoles = data.records.filter(
+          (role) => role.status === "ACTIVE",
         );
 
-        setRoles(companyRoles);
+        setRoles(activeRoles);
       } catch (error: unknown) {
         toast.error(getErrorMessage(error, "Unable to load company roles."));
       } finally {
@@ -140,9 +256,224 @@ export function CompanyAccessStep({
     void loadRoles();
   }, [company?._id]);
 
+  /**
+   * ==========================================================
+   * LOAD DEPARTMENTS
+   * ==========================================================
+   */
+
+  useEffect(() => {
+    async function loadDepartments() {
+      if (!company?._id) {
+        setIsLoadingDepartments(false);
+        return;
+      }
+
+      try {
+        setIsLoadingDepartments(true);
+
+        const data = await departmentService.getDepartments(company._id, {
+          page: 1,
+          limit: 100,
+          status: "ACTIVE",
+          sortBy: "name",
+          sortOrder: "asc",
+        });
+
+        setDepartments(data.departments);
+      } catch (error: unknown) {
+        toast.error(getErrorMessage(error, "Unable to load departments."));
+
+        setDepartments([]);
+      } finally {
+        setIsLoadingDepartments(false);
+      }
+    }
+
+    void loadDepartments();
+  }, [company?._id]);
+
+  /**
+   * ==========================================================
+   * LOAD TEAMS BY DEPARTMENT
+   * ==========================================================
+   */
+
+  useEffect(() => {
+    async function loadTeams() {
+      if (!company?._id || !selectedDepartmentId) {
+        setTeams([]);
+
+        setValue("teamId", "", {
+          shouldValidate: false,
+        });
+
+        setValue("reportingManagerId", "", {
+          shouldValidate: false,
+        });
+
+        return;
+      }
+
+      try {
+        setIsLoadingTeams(true);
+
+        const data = await teamService.getTeams(company._id, {
+          page: 1,
+          limit: 100,
+          departmentId: selectedDepartmentId,
+          status: "ACTIVE",
+          sortBy: "name",
+          sortOrder: "asc",
+        });
+
+        setTeams(data.teams);
+
+        /**
+         * Reset dependent selections
+         * whenever department changes.
+         */
+        setValue("teamId", "", {
+          shouldValidate: false,
+        });
+
+        setValue("reportingManagerId", "", {
+          shouldValidate: false,
+        });
+      } catch (error: unknown) {
+        toast.error(getErrorMessage(error, "Unable to load teams."));
+
+        setTeams([]);
+      } finally {
+        setIsLoadingTeams(false);
+      }
+    }
+
+    void loadTeams();
+  }, [company?._id, selectedDepartmentId, setValue]);
+
+  /**
+   * ==========================================================
+   * LOAD EXISTING EMPLOYEES
+   *
+   * Used for reporting manager selection.
+   * ==========================================================
+   */
+
+  useEffect(() => {
+    async function loadEmployees() {
+      if (!company?._id) {
+        return;
+      }
+
+      try {
+        setIsLoadingEmployees(true);
+
+        const result = await employeeService.getEmployees(company._id, {
+          page: 1,
+          limit: 100,
+          status: "ACTIVE",
+          sortBy: "createdAt",
+          sortOrder: "asc",
+        });
+
+        setEmployees(result.records);
+      } catch (error: unknown) {
+        toast.error(
+          getErrorMessage(error, "Unable to load reporting managers."),
+        );
+
+        setEmployees([]);
+      } finally {
+        setIsLoadingEmployees(false);
+      }
+    }
+
+    void loadEmployees();
+  }, [company?._id]);
+
+  /**
+   * ==========================================================
+   * AVAILABLE REPORTING MANAGERS
+   * ==========================================================
+   *
+   * Team selected:
+   * → same-team employees
+   *
+   * Department selected:
+   * → same-department employees
+   *
+   * Neither selected:
+   * → all company employees returned by backend
+   * ==========================================================
+   */
+
+  const availableReportingManagers = useMemo(() => {
+    return employees.filter((employee) => {
+      const access = isPopulatedCompanyAccess(employee.companyAccessId)
+        ? employee.companyAccessId
+        : null;
+
+      if (!access) {
+        return false;
+      }
+
+      if (selectedTeamId) {
+        return getReferenceId(access.teamId) === selectedTeamId;
+      }
+
+      if (selectedDepartmentId) {
+        return getReferenceId(access.departmentId) === selectedDepartmentId;
+      }
+
+      return true;
+    });
+  }, [employees, selectedDepartmentId, selectedTeamId]);
+
+  /**
+   * ==========================================================
+   * SUBMIT
+   * ==========================================================
+   */
+
   async function onSubmit(values: CreateCompanyAccessFormValues) {
     if (!company?._id) {
       toast.error("Active company context is unavailable.");
+
+      return;
+    }
+
+    /**
+     * Validate selected role.
+     */
+    const role = roles.find((currentRole) => currentRole._id === values.roleId);
+
+    if (!role) {
+      toast.error("Please select a valid role.");
+
+      return;
+    }
+
+    /**
+     * Department scope requires
+     * department assignment.
+     */
+    if (
+      ["DEPARTMENT", "TEAM"].includes(role.scopeType) &&
+      !values.departmentId
+    ) {
+      toast.error("Department is required for this role.");
+
+      return;
+    }
+
+    /**
+     * Team scope requires
+     * team assignment.
+     */
+    if (role.scopeType === "TEAM" && !values.teamId) {
+      toast.error("Team is required for a team-scoped role.");
+
       return;
     }
 
@@ -154,18 +485,23 @@ export function CompanyAccessStep({
           roleId: values.roleId,
 
           employeeCode: values.employeeCode,
+
           designation: values.designation,
 
           employmentType: values.employmentType,
 
-          departmentId: values.departmentId,
-          teamId: values.teamId,
-          reportingManagerId: values.reportingManagerId,
+          departmentId: values.departmentId || undefined,
+
+          teamId: values.teamId || undefined,
+
+          reportingManagerId: values.reportingManagerId || undefined,
 
           joiningDate: values.joiningDate,
+
           probationEndDate: values.probationEndDate,
 
           workLocationType: values.workLocationType,
+
           workLocationName: values.workLocationName,
 
           isPrimaryCompany: values.isPrimaryCompany,
@@ -182,6 +518,12 @@ export function CompanyAccessStep({
       toast.error(getErrorMessage(error, "Unable to assign company access."));
     }
   }
+
+  /**
+   * ==========================================================
+   * NO COMPANY
+   * ==========================================================
+   */
 
   if (!company?._id) {
     return (
@@ -201,8 +543,18 @@ export function CompanyAccessStep({
     );
   }
 
+  /**
+   * ==========================================================
+   * UI
+   * ==========================================================
+   */
+
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-6" noValidate>
+      {/* ======================================================
+          HEADER
+      ====================================================== */}
+
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div className="flex min-w-0 items-start gap-3">
           <button
@@ -221,7 +573,8 @@ export function CompanyAccessStep({
             </h2>
 
             <p className="mt-1 text-sm leading-6 text-slate-500">
-              Assign employment, role and work-location information.
+              Assign employment, organization, role and work-location
+              information.
             </p>
           </div>
         </div>
@@ -240,6 +593,10 @@ export function CompanyAccessStep({
           </p>
         </div>
       </div>
+
+      {/* ======================================================
+          COMPANY + ROLE
+      ====================================================== */}
 
       <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
         <div className="border-b border-slate-100 px-5 py-4 sm:px-6">
@@ -302,6 +659,19 @@ export function CompanyAccessStep({
               <p className={errorClassName}>{errors.roleId.message}</p>
             )}
 
+            {selectedRole && (
+              <p className="mt-1.5 text-xs text-blue-600">
+                Scope:{" "}
+                {selectedRole.scopeType === "COMPANY"
+                  ? "Company"
+                  : selectedRole.scopeType === "DEPARTMENT"
+                    ? "Department"
+                    : selectedRole.scopeType === "TEAM"
+                      ? "Team"
+                      : selectedRole.scopeType}
+              </p>
+            )}
+
             {!isLoadingRoles && roles.length === 0 && (
               <p className="mt-1.5 text-xs font-medium text-amber-600">
                 No active company roles are available.
@@ -310,6 +680,10 @@ export function CompanyAccessStep({
           </div>
         </div>
       </div>
+
+      {/* ======================================================
+          EMPLOYMENT INFORMATION
+      ====================================================== */}
 
       <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
         <div className="border-b border-slate-100 px-5 py-4 sm:px-6">
@@ -395,6 +769,168 @@ export function CompanyAccessStep({
         </div>
       </div>
 
+      {/* ======================================================
+          ORGANIZATION ASSIGNMENT
+      ====================================================== */}
+
+      <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
+        <div className="border-b border-slate-100 px-5 py-4 sm:px-6">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600">
+              <Building2 className="h-5 w-5" />
+            </div>
+
+            <div>
+              <h3 className="text-base font-semibold text-slate-950">
+                Organization assignment
+              </h3>
+
+              <p className="mt-0.5 text-sm text-slate-500">
+                Assign the employee to a department, team and reporting manager.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 gap-5 p-5 sm:grid-cols-2 sm:p-6 xl:grid-cols-3">
+          {/* Department */}
+
+          <div>
+            <label htmlFor="departmentId" className={labelClassName}>
+              Department
+              {selectedRoleScope !== "COMPANY" && (
+                <span className="text-red-500"> *</span>
+              )}
+            </label>
+
+            <select
+              id="departmentId"
+              disabled={isSubmitting || isLoadingDepartments}
+              className={selectClassName}
+              {...register("departmentId")}
+            >
+              <option value="">
+                {isLoadingDepartments
+                  ? "Loading departments..."
+                  : "Select department"}
+              </option>
+
+              {departments.map((department) => (
+                <option key={department._id} value={department._id}>
+                  {department.name} ({department.code})
+                </option>
+              ))}
+            </select>
+
+            {errors.departmentId && (
+              <p className={errorClassName}>{errors.departmentId.message}</p>
+            )}
+
+            {selectedRoleScope === "DEPARTMENT" && (
+              <p className="mt-1.5 text-xs text-blue-600">
+                This role operates within the selected department.
+              </p>
+            )}
+          </div>
+
+          {/* Team */}
+
+          <div>
+            <label htmlFor="teamId" className={labelClassName}>
+              Team
+              {selectedRoleScope === "TEAM" && (
+                <span className="text-red-500"> *</span>
+              )}
+            </label>
+
+            <select
+              id="teamId"
+              disabled={isSubmitting || !selectedDepartmentId || isLoadingTeams}
+              className={selectClassName}
+              {...register("teamId")}
+            >
+              <option value="">
+                {!selectedDepartmentId
+                  ? "Select department first"
+                  : isLoadingTeams
+                    ? "Loading teams..."
+                    : "Select team"}
+              </option>
+
+              {teams.map((team) => (
+                <option key={team._id} value={team._id}>
+                  {team.name} ({team.code})
+                </option>
+              ))}
+            </select>
+
+            {errors.teamId && (
+              <p className={errorClassName}>{errors.teamId.message}</p>
+            )}
+
+            {selectedRoleScope === "TEAM" && (
+              <p className="mt-1.5 text-xs text-violet-600">
+                This role operates within the selected team.
+              </p>
+            )}
+          </div>
+
+          {/* Reporting Manager */}
+
+          <div>
+            <label htmlFor="reportingManagerId" className={labelClassName}>
+              Reporting manager
+            </label>
+
+            <select
+              id="reportingManagerId"
+              disabled={isSubmitting || isLoadingEmployees}
+              className={selectClassName}
+              {...register("reportingManagerId")}
+            >
+              <option value="">
+                {isLoadingEmployees
+                  ? "Loading employees..."
+                  : "No reporting manager"}
+              </option>
+
+              {availableReportingManagers.map((employee) => {
+                const employeeUser = isPopulatedEmployeeUser(employee.userId)
+                  ? employee.userId
+                  : null;
+
+                const access = isPopulatedCompanyAccess(
+                  employee.companyAccessId,
+                )
+                  ? employee.companyAccessId
+                  : null;
+
+                if (!access) {
+                  return null;
+                }
+
+                return (
+                  <option key={access._id} value={access._id}>
+                    {employeeUser?.displayName ?? "Unnamed employee"}
+                    {access.designation ? ` - ${access.designation}` : ""}
+                  </option>
+                );
+              })}
+            </select>
+
+            {errors.reportingManagerId && (
+              <p className={errorClassName}>
+                {errors.reportingManagerId.message}
+              </p>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* ======================================================
+          EMPLOYMENT DATES
+      ====================================================== */}
+
       <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
         <div className="border-b border-slate-100 px-5 py-4 sm:px-6">
           <div className="flex items-center gap-3">
@@ -454,6 +990,10 @@ export function CompanyAccessStep({
           </div>
         </div>
       </div>
+
+      {/* ======================================================
+          WORK LOCATION
+      ====================================================== */}
 
       <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
         <div className="border-b border-slate-100 px-5 py-4 sm:px-6">
@@ -522,6 +1062,10 @@ export function CompanyAccessStep({
           </div>
         </div>
       </div>
+
+      {/* ======================================================
+          ACCESS SETTINGS
+      ====================================================== */}
 
       <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
         <div className="border-b border-slate-100 px-5 py-4 sm:px-6">
@@ -606,16 +1150,9 @@ export function CompanyAccessStep({
         </div>
       </div>
 
-      <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
-        <p className="text-sm font-semibold text-amber-900">
-          Department assignment is temporarily optional
-        </p>
-
-        <p className="mt-1 text-xs leading-5 text-amber-700">
-          Department, team and reporting manager fields will be added after
-          their frontend service modules are connected.
-        </p>
-      </div>
+      {/* ======================================================
+          FOOTER
+      ====================================================== */}
 
       <div className="sticky bottom-0 z-20 rounded-2xl border border-slate-200 bg-white/95 p-4 shadow-lg backdrop-blur sm:flex sm:items-center sm:justify-between">
         <p className="mb-3 text-xs leading-5 text-slate-500 sm:mb-0 sm:max-w-lg">

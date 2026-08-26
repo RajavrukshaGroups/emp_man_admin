@@ -42,6 +42,11 @@ export default function RolesPage() {
   const canDelete = permissions.includes("role.delete");
 
   const handleStatusChange = async (role: Role) => {
+    if (!role.isEditable || role.isSystemRole) {
+      toast.error("This system role's status cannot be changed.");
+      return;
+    }
+
     if (!company?._id) {
       toast.error("No active company found.");
       return;
@@ -72,6 +77,11 @@ export default function RolesPage() {
 
   const handleDeleteRole = async () => {
     if (!company?._id || !selectedRole) {
+      return;
+    }
+
+    if (selectedRole.isSystemRole) {
+      toast.error("System roles cannot be deleted.");
       return;
     }
 

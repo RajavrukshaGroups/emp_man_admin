@@ -79,6 +79,23 @@ export const roleService = {
         return response.data.data;
     },
 
+    async updateRolePermissions(
+        companyId: string,
+        roleId: string,
+        permissionIds: string[],
+    ): Promise<Role> {
+        const response = await apiClient.patch<
+            ApiResponse<Role>
+        >(
+            `/companies/${companyId}/roles/${roleId}/permissions`,
+            {
+                permissionIds,
+            },
+        );
+
+        return response.data.data;
+    },
+
     async updateRoleStatus(
         companyId: string,
         roleId: string,
