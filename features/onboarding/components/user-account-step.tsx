@@ -61,7 +61,8 @@ const errorClassName = "mt-1.5 text-xs font-medium text-red-600";
 export function UserAccountStep({ onSuccess }: UserAccountStepProps) {
   const permissions = useAuthStore((state) => state.permissions);
 
-  const canCreate = permissions.includes("admin.create");
+  // const canCreate = permissions.includes("admin.create");
+  const canCreate = permissions.includes("employee.create");
 
   const [showPassword, setShowPassword] = useState(false);
 
@@ -103,7 +104,7 @@ export function UserAccountStep({ onSuccess }: UserAccountStepProps) {
 
   async function onSubmit(values: CreateUserFormValues) {
     if (!canCreate) {
-      toast.error("You do not have permission to create users.");
+      toast.error("You do not have permission to onboard employees.");
       return;
     }
 
@@ -130,7 +131,9 @@ export function UserAccountStep({ onSuccess }: UserAccountStepProps) {
 
       onSuccess(createdUser);
     } catch (error: unknown) {
-      toast.error(getErrorMessage(error, "Unable to create the user."));
+      toast.error(
+        getErrorMessage(error, "Unable to create the employee login account."),
+      );
     }
   }
 
@@ -146,15 +149,22 @@ export function UserAccountStep({ onSuccess }: UserAccountStepProps) {
         </h1>
 
         <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-slate-600">
-          You do not have permission to create user accounts.
+          You do not have permission to onboard employees.
         </p>
 
-        <Link
+        {/* <Link
           href="/users"
           className="mt-5 inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-slate-900 px-4 text-sm font-semibold text-white transition hover:bg-slate-800"
         >
           <ArrowLeft className="h-4 w-4" />
           Back to users
+        </Link> */}
+        <Link
+          href="/onboarding"
+          className="mt-5 inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-slate-900 px-4 text-sm font-semibold text-white transition hover:bg-slate-800"
+        >
+          <ArrowLeft className="h-4 w-4" />
+          Back to onboarding
         </Link>
       </div>
     );
@@ -577,8 +587,14 @@ export function UserAccountStep({ onSuccess }: UserAccountStepProps) {
         </p>
 
         <div className="flex flex-col-reverse gap-3 sm:flex-row">
-          <Link
+          {/* <Link
             href="/users"
+            className="inline-flex h-11 w-full items-center justify-center rounded-xl border border-slate-200 bg-white px-5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 sm:w-auto"
+          >
+            Cancel onboarding
+          </Link> */}
+          <Link
+            href="/onboarding"
             className="inline-flex h-11 w-full items-center justify-center rounded-xl border border-slate-200 bg-white px-5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 sm:w-auto"
           >
             Cancel onboarding
