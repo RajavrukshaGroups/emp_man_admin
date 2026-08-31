@@ -184,23 +184,19 @@ export const taskService = {
     },
 
     /**
-     * ==========================================================
      * UPDATE TASK METADATA
      *
-     * PATCH /companies/:companyId/tasks/:taskId
+     * Editable while ASSIGNED:
+     * - client
+     * - work category
+     * - title
+     * - description
+     * - quantity
+     * - priority
+     * - due date
      *
- * Used for:
- * - client
- * - work category
- * - quantity
- * - title
- * - description
- * - priority
- * - due date
- *
- * NOT workflow status.
- * NOT reassignment.
- *      * ==========================================================
+     * Once work has started, backend restricts
+     * structural field changes.
      */
     async updateTask(
         companyId: string,

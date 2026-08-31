@@ -12,6 +12,7 @@ import {
   Clock3,
   Loader2,
   Play,
+  Pencil,
   RefreshCcw,
   Repeat2,
   RotateCcw,
@@ -427,6 +428,7 @@ export default function TaskDetailsPage() {
   const company = useAuthStore((state) => state.company);
   const companyAccess = useAuthStore((state) => state.companyAccess);
   const permissions = useAuthStore((state) => state.permissions);
+  const role = useAuthStore((state) => state.role);
 
   const taskId = params.taskId;
 
@@ -495,6 +497,9 @@ export default function TaskDetailsPage() {
    */
 
   const canUpdate = permissions.includes("task.update");
+
+  const canEditTicket =
+    permissions.includes("task.update") && role?.code !== "EMPLOYEE";
 
   const canSubmit = permissions.includes("task.submit");
 
@@ -1061,7 +1066,7 @@ export default function TaskDetailsPage() {
           </p>
         </div>
 
-        <button
+        {/* <button
           type="button"
           onClick={() => void loadTask()}
           disabled={isActionLoading}
@@ -1069,7 +1074,29 @@ export default function TaskDetailsPage() {
         >
           <RefreshCcw className="h-4 w-4" />
           Refresh
-        </button>
+        </button> */}
+        <div className="flex shrink-0 items-center gap-2">
+          {canEditTicket &&
+            ["ASSIGNED", "IN_PROGRESS", "REOPENED"].includes(task.status) && (
+              <Link
+                href={`/tasks/${task._id}/edit`}
+                className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 text-sm font-semibold text-amber-700 transition hover:bg-amber-100"
+              >
+                <Pencil className="h-4 w-4" />
+                Edit ticket
+              </Link>
+            )}
+
+          <button
+            type="button"
+            onClick={() => void loadTask()}
+            disabled={isActionLoading}
+            className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-60"
+          >
+            <RefreshCcw className="h-4 w-4" />
+            Refresh
+          </button>
+        </div>
       </div>
 
       {/* ======================================================

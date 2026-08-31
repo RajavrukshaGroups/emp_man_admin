@@ -10,6 +10,7 @@ import {
   ChevronRight,
   ClipboardList,
   Eye,
+  Pencil,
   Plus,
   RefreshCcw,
   Search,
@@ -224,6 +225,8 @@ export default function TasksPage() {
 
   const canCreateTask =
     permissions.includes("task.create") && permissions.includes("task.assign");
+  const canEditTask =
+    permissions.includes("task.update") && role?.code !== "EMPLOYEE";
 
   const [result, setResult] = useState<TaskListResult>({
     records: [],
@@ -632,6 +635,18 @@ export default function TasksPage() {
                           </span>
                         </TableCell>
 
+                        {/* <TableCell align="right">
+                          <div className="flex justify-end gap-2">
+                            <Link
+                              href={`/tasks/${task._id}`}
+                              title="Open ticket"
+                              className="inline-flex h-9 items-center justify-center gap-2 rounded-lg border border-slate-200 px-3 text-xs font-semibold text-slate-600 transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-600"
+                            >
+                              <Eye className="h-4 w-4" />
+                              Open
+                            </Link>
+                          </div>
+                        </TableCell> */}
                         <TableCell align="right">
                           <div className="flex justify-end gap-2">
                             <Link
@@ -642,6 +657,20 @@ export default function TasksPage() {
                               <Eye className="h-4 w-4" />
                               Open
                             </Link>
+
+                            {canEditTask &&
+                              ["ASSIGNED", "IN_PROGRESS", "REOPENED"].includes(
+                                task.status,
+                              ) && (
+                                <Link
+                                  href={`/tasks/${task._id}/edit`}
+                                  title="Edit ticket"
+                                  className="inline-flex h-9 items-center justify-center gap-2 rounded-lg border border-slate-200 px-3 text-xs font-semibold text-slate-600 transition hover:border-amber-200 hover:bg-amber-50 hover:text-amber-700"
+                                >
+                                  <Pencil className="h-4 w-4" />
+                                  Edit
+                                </Link>
+                              )}
                           </div>
                         </TableCell>
                       </tr>
