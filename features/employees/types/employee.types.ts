@@ -196,6 +196,18 @@ export interface EmployeeCompanyAccessReference {
     workLocationType?: string;
     workLocationName?: string;
 
+    attendanceMode?: "OFFICE" | "FIELD" | "HYBRID" | "REMOTE";
+
+    shiftId?:
+    | EmployeeShiftReference
+    | string
+    | null;
+
+    attendanceLocationId?:
+    | EmployeeAttendanceLocationReference
+    | string
+    | null;
+
     status?: string;
 }
 
@@ -262,4 +274,24 @@ export interface EmployeeListParams {
     employmentType?: string;
     sortBy?: "createdAt" | "updatedAt" | "status";
     sortOrder?: "asc" | "desc";
+}
+
+export interface EmployeeShiftReference {
+    _id: string;
+    name: string;
+    code: string;
+    startTime?: string;
+    endTime?: string;
+    status?: string;
+}
+
+export interface EmployeeAttendanceLocationReference {
+    _id: string;
+    name: string;
+    code: string;
+    locationType: string;
+    latitude: number;
+    longitude: number;
+    geofenceRadiusMeters: number;
+    status: string;
 }

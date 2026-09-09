@@ -1,4 +1,5 @@
 import {
+    CalendarCheck,
     LayoutDashboard,
     Network,
     ShieldCheck,
@@ -9,9 +10,8 @@ import {
     ClipboardCheck,
     ListTodo,
     Tags,
-    Building2
+    Building2,
 } from "lucide-react";
-
 export interface DashboardNavigationItem {
     title: string;
     href: string;
@@ -49,6 +49,12 @@ export const dashboardNavigation: DashboardNavigationItem[] = [
         href: "/tasks",
         icon: ListTodo,
         permission: "task.read",
+    },
+    {
+        title: "Attendance",
+        href: "/attendance",
+        icon: CalendarCheck,
+        permission: "attendance.read",
     },
     {
         title: "Work Categories",

@@ -30,12 +30,14 @@ import { employeeService } from "@/features/employees/services/employee.service"
 import type {
   Employee,
   EmployeeAddress,
+  EmployeeAttendanceLocationReference,
   EmployeeAuditUser,
   EmployeeCompanyAccessReference,
   EmployeeCompanyReference,
   EmployeeDepartmentReference,
   EmployeeReportingManagerReference,
   EmployeeRoleReference,
+  EmployeeShiftReference,
   EmployeeTeamReference,
   EmployeeUserReference,
 } from "@/features/employees/types/employee.types";
@@ -208,6 +210,18 @@ function getRole(value: EmployeeCompanyAccessReference["roleId"]) {
   return isObjectReference<EmployeeRoleReference>(value) ? value : null;
 }
 
+function getShift(value: EmployeeCompanyAccessReference["shiftId"]) {
+  return isObjectReference<EmployeeShiftReference>(value) ? value : null;
+}
+
+function getAttendanceLocation(
+  value: EmployeeCompanyAccessReference["attendanceLocationId"],
+) {
+  return isObjectReference<EmployeeAttendanceLocationReference>(value)
+    ? value
+    : null;
+}
+
 function getReportingManager(
   value: EmployeeCompanyAccessReference["reportingManagerId"],
 ) {
@@ -335,6 +349,13 @@ export function EmployeeDetailsView({ employeeId }: EmployeeDetailsViewProps) {
   const department = getDepartment(companyAccess?.departmentId);
   const team = getTeam(companyAccess?.teamId);
   const role = getRole(companyAccess?.roleId);
+
+  const shift = getShift(companyAccess?.shiftId);
+
+  const attendanceLocation = getAttendanceLocation(
+    companyAccess?.attendanceLocationId,
+  );
+
   const reportingManager = getReportingManager(
     companyAccess?.reportingManagerId,
   );
@@ -484,53 +505,69 @@ export function EmployeeDetailsView({ employeeId }: EmployeeDetailsViewProps) {
               label="Employee code"
               value={companyAccess?.employeeCode}
             />
-
             <DetailItem
               label="Designation"
               value={companyAccess?.designation}
             />
-
             <DetailItem label="Department" value={department?.name} />
-
             <DetailItem label="Team" value={team?.name} />
-
             <DetailItem label="Role" value={role?.name} />
-
             <DetailItem
               label="Employment type"
               value={formatEnumValue(companyAccess?.employmentType)}
             />
-
             <DetailItem
               label="Reporting manager"
               value={getReportingManagerName(reportingManager)}
             />
-
             <DetailItem
               label="Joining date"
               value={formatDate(companyAccess?.joiningDate)}
             />
-
             <DetailItem
               label="Probation end date"
               value={formatDate(companyAccess?.probationEndDate)}
             />
-
             <DetailItem
               label="Last working date"
               value={formatDate(companyAccess?.lastWorkingDate)}
             />
-
             <DetailItem
               label="Work location type"
               value={formatEnumValue(companyAccess?.workLocationType)}
             />
-
             <DetailItem
               label="Work location"
               value={companyAccess?.workLocationName}
             />
-
+            <DetailItem
+              label="Attendance mode"
+              value={formatEnumValue(companyAccess?.attendanceMode)}
+            />
+            <DetailItem
+              label="Assigned shift"
+              value={
+                shift
+                  ? `${shift.name}${
+                      shift.startTime && shift.endTime
+                        ? ` — ${shift.startTime} to ${shift.endTime}`
+                        : ""
+                    }`
+                  : companyAccess?.shiftId
+                    ? "Assigned"
+                    : "No shift assigned"
+              }
+            />
+            <DetailItem
+              label="Attendance location"
+              value={
+                attendanceLocation
+                  ? `${attendanceLocation.name} — ${attendanceLocation.geofenceRadiusMeters}m`
+                  : companyAccess?.attendanceLocationId
+                    ? "Assigned"
+                    : "No attendance location assigned"
+              }
+            />
             <DetailItem
               label="Company access status"
               value={formatEnumValue(companyAccess?.status)}

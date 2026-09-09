@@ -12,11 +12,18 @@ export type AccessType =
   | "COMPANY"
   | "GLOBAL";
 
+export type AttendanceMode =
+  | "OFFICE"
+  | "FIELD"
+  | "HYBRID"
+  | "REMOTE";
+
 export type RoleScope =
   | "GLOBAL"
   | "COMPANY"
   | "DEPARTMENT"
   | "TEAM";
+
 export interface Permission {
   _id: string;
   name: string;
@@ -79,6 +86,7 @@ export interface CompanyAccess {
   employmentType?: string;
 
   departmentId?: string | null;
+
   teamId?: string | null;
 
   reportingManagerId?: string | null;
@@ -86,7 +94,12 @@ export interface CompanyAccess {
   joiningDate?: string | null;
 
   workLocationType?: string;
+
   workLocationName?: string;
+
+  attendanceMode?: AttendanceMode;
+
+  shiftId?: string | null;
 
   isPrimaryCompany?: boolean;
 

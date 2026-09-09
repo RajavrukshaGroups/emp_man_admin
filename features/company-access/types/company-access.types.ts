@@ -22,6 +22,12 @@ export type WorkLocationType =
     | "HYBRID"
     | "CLIENT_LOCATION";
 
+export type AttendanceMode =
+    | "OFFICE"
+    | "FIELD"
+    | "HYBRID"
+    | "REMOTE";
+
 export interface CompanyAccessRole {
     _id: string;
     name: string;
@@ -64,6 +70,15 @@ export interface CompanyAccess {
     workLocationType: WorkLocationType;
     workLocationName: string;
 
+    attendanceMode: AttendanceMode;
+
+    shiftId?: string | null;
+
+    attendanceLocationId?:
+    | CompanyAccessAttendanceLocation
+    | string
+    | null;
+
     isPrimaryCompany: boolean;
     status: CompanyAccessStatus;
     notes: string;
@@ -99,8 +114,11 @@ export interface CreateCompanyAccessPayload {
     workLocationType: WorkLocationType;
     workLocationName?: string;
 
-    isPrimaryCompany: boolean;
+    attendanceMode?: AttendanceMode;
+    shiftId?: string | null;
+    attendanceLocationId?: string | null;
 
+    isPrimaryCompany: boolean;
     status: CompanyAccessStatus;
 
     notes?: string;
@@ -123,6 +141,10 @@ export interface UpdateCompanyAccessPayload {
 
     workLocationType?: WorkLocationType;
     workLocationName?: string;
+
+    attendanceMode?: AttendanceMode;
+    shiftId?: string | null;
+    attendanceLocationId?: string | null;
 
     isPrimaryCompany?: boolean;
 
@@ -152,6 +174,8 @@ export interface CompanyAccessListParams {
     departmentId?: string | null;
     teamId?: string | null;
     reportingManagerId?: string;
+
+    attendanceLocationId?: string;
 
     employmentType?: EmploymentType;
     workLocationType?: WorkLocationType;
@@ -210,5 +234,18 @@ export interface ReportingManagerAccess {
 
     departmentId?: CompanyAccessDepartment | string | null;
     teamId?: CompanyAccessTeam | string | null;
+}
+
+export interface CompanyAccessAttendanceLocation {
+    _id: string;
+    name: string;
+    code: string;
+    locationType: string;
+    latitude?: number;
+    longitude?: number;
+    geofenceRadiusMeters?: number;
+    allowCheckIn?: boolean;
+    allowCheckOut?: boolean;
+    status?: string;
 }
 

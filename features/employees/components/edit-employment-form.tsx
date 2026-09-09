@@ -21,6 +21,7 @@ import { toast } from "sonner";
 import { companyAccessService } from "@/features/company-access/services/company-access.service";
 
 import type {
+  AttendanceMode,
   CompanyAccess,
   EmploymentType,
   UpdateCompanyAccessPayload,
@@ -46,6 +47,14 @@ import type { Department } from "@/features/departments/types/department.types";
 import { teamService } from "@/features/teams/services/team.service";
 
 import type { Team } from "@/features/teams/types/team.types";
+
+import { attendanceShiftService } from "@/features/attendance/services/attendance-shift.service";
+
+import type { AttendanceShift } from "@/features/attendance/types/attendance-shift.types";
+
+import { attendanceLocationService } from "@/features/attendance/services/attendance-location.service";
+
+import type { AttendanceLocation } from "@/features/attendance/types/attendance-location.types";
 
 import { useAuthStore } from "@/store/auth.store";
 
@@ -75,6 +84,10 @@ interface EmploymentFormValues {
 
   workLocationType: WorkLocationType;
   workLocationName: string;
+
+  attendanceMode: AttendanceMode;
+  shiftId: string;
+  attendanceLocationId: string;
 
   isPrimaryCompany: boolean;
 
@@ -221,6 +234,12 @@ export function EditEmploymentForm({ employeeId }: EditEmploymentFormProps) {
     [],
   );
 
+  const [shifts, setShifts] = useState<AttendanceShift[]>([]);
+
+  const [attendanceLocations, setAttendanceLocations] = useState<
+    AttendanceLocation[]
+  >([]);
+
   /**
    * ==========================================================
    * LOADING / ERROR
@@ -266,8 +285,11 @@ export function EditEmploymentForm({ employeeId }: EditEmploymentFormProps) {
       workLocationType: "HEAD_OFFICE",
       workLocationName: "",
 
-      isPrimaryCompany: false,
+      attendanceMode: "OFFICE",
+      shiftId: "",
+      attendanceLocationId: "",
 
+      isPrimaryCompany: false,
       notes: "",
     },
 
@@ -430,41 +452,58 @@ export function EditEmploymentForm({ employeeId }: EditEmploymentFormProps) {
        * ----------------------------------------------------
        */
 
-      const [roleResult, departmentResult, companyAccessResult] =
-        await Promise.all([
-          roleService.getRoles(company._id, {
-            page: 1,
-            limit: 100,
+      const [
+        roleResult,
+        departmentResult,
+        companyAccessResult,
+        shiftResult,
+        attendanceLocationResult,
+      ] = await Promise.all([
+        roleService.getRoles(company._id, {
+          page: 1,
+          limit: 100,
 
-            status: "ACTIVE",
+          status: "ACTIVE",
 
-            sortBy: "name",
+          sortBy: "name",
 
-            sortOrder: "asc",
-          }),
+          sortOrder: "asc",
+        }),
 
-          departmentService.getDepartments(company._id, {
-            page: 1,
-            limit: 100,
+        departmentService.getDepartments(company._id, {
+          page: 1,
+          limit: 100,
 
-            status: "ACTIVE",
+          status: "ACTIVE",
 
-            sortBy: "name",
+          sortBy: "name",
 
-            sortOrder: "asc",
-          }),
+          sortOrder: "asc",
+        }),
 
-          companyAccessService.getCompanyAccessList(company._id, {
-            page: 1,
-            limit: 100,
+        companyAccessService.getCompanyAccessList(company._id, {
+          page: 1,
+          limit: 100,
 
-            status: "ACTIVE",
+          status: "ACTIVE",
 
-            sortBy: "createdAt",
+          sortBy: "createdAt",
 
-            sortOrder: "asc",
-          }),
-        ]);
+          sortOrder: "asc",
+        }),
+
+        attendanceShiftService.list(company._id, {
+          page: 1,
+          limit: 100,
+          status: "ACTIVE",
+        }),
+
+        attendanceLocationService.list(company._id, {
+          page: 1,
+          limit: 100,
+          status: "ACTIVE",
+        }),
+      ]);
 
       /**
        * ----------------------------------------------------
@@ -482,6 +521,11 @@ export function EditEmploymentForm({ employeeId }: EditEmploymentFormProps) {
         accessData.reportingManagerId,
       );
 
+      const savedShiftId = getReferenceId(accessData.shiftId);
+
+      const savedAttendanceLocationId = getReferenceId(
+        accessData.attendanceLocationId,
+      );
       /**
        * ----------------------------------------------------
        * 5. LOAD SAVED DEPARTMENT TEAMS
@@ -546,6 +590,10 @@ export function EditEmploymentForm({ employeeId }: EditEmploymentFormProps) {
         ),
       );
 
+      setShifts(shiftResult.items);
+
+      setAttendanceLocations(attendanceLocationResult.items);
+
       /**
        * ----------------------------------------------------
        * 7. RESET FORM AFTER OPTIONS EXIST
@@ -575,6 +623,12 @@ export function EditEmploymentForm({ employeeId }: EditEmploymentFormProps) {
 
         workLocationName: accessData.workLocationName ?? "",
 
+        attendanceMode: accessData.attendanceMode ?? "OFFICE",
+
+        shiftId: savedShiftId,
+
+        attendanceLocationId: savedAttendanceLocationId,
+
         isPrimaryCompany: accessData.isPrimaryCompany ?? false,
 
         notes: accessData.notes ?? "",
@@ -597,7 +651,11 @@ export function EditEmploymentForm({ employeeId }: EditEmploymentFormProps) {
 
       setReportingManagers([]);
 
+      setAttendanceLocations([]);
+
       setLoadError(message);
+
+      setShifts([]);
 
       toast.error(message);
     } finally {
@@ -781,8 +839,13 @@ export function EditEmploymentForm({ employeeId }: EditEmploymentFormProps) {
 
       workLocationName: values.workLocationName.trim(),
 
-      isPrimaryCompany: values.isPrimaryCompany,
+      attendanceMode: values.attendanceMode,
 
+      shiftId: values.shiftId || null,
+
+      attendanceLocationId: values.attendanceLocationId || null,
+
+      isPrimaryCompany: values.isPrimaryCompany,
       notes: values.notes.trim(),
     };
 
@@ -1304,6 +1367,90 @@ export function EditEmploymentForm({ employeeId }: EditEmploymentFormProps) {
               },
             })}
           />
+        </Field>
+
+        <div className="sm:col-span-2 xl:col-span-3 mt-1 border-t border-slate-200 pt-5">
+          <h3 className="text-sm font-semibold text-slate-950">
+            Attendance configuration
+          </h3>
+
+          <p className="mt-1 text-xs text-slate-500">
+            Configure how this employee&apos;s attendance is validated.
+          </p>
+        </div>
+
+        <Field
+          label="Attendance mode"
+          error={errors.attendanceMode?.message}
+          hint="Controls how location verification applies to this employee's attendance."
+        >
+          <select
+            disabled={isSubmitting}
+            className={selectClassName}
+            {...register("attendanceMode", {
+              required: "Attendance mode is required.",
+            })}
+          >
+            <option value="OFFICE">Office</option>
+
+            <option value="FIELD">Field</option>
+
+            <option value="HYBRID">Hybrid</option>
+
+            <option value="REMOTE">Remote</option>
+          </select>
+        </Field>
+
+        <Field
+          label="Assigned shift"
+          error={errors.shiftId?.message}
+          hint="The attendance system will use this shift to determine working hours, grace periods and attendance thresholds."
+        >
+          <select
+            disabled={isSubmitting || isLoadingOptions}
+            className={selectClassName}
+            {...register("shiftId")}
+          >
+            <option value="">No shift assigned</option>
+
+            {shifts.map((shift) => (
+              <option key={shift._id} value={shift._id}>
+                {shift.name} — {shift.startTime} to {shift.endTime}
+              </option>
+            ))}
+          </select>
+
+          {!isLoadingOptions && shifts.length === 0 && (
+            <p className="mt-1.5 text-xs font-medium text-amber-600">
+              No active attendance shifts are available.
+            </p>
+          )}
+        </Field>
+
+        <Field
+          label="Attendance location"
+          error={errors.attendanceLocationId?.message}
+          hint="The employee's GPS will be validated against this location during attendance actions."
+        >
+          <select
+            disabled={isSubmitting || isLoadingOptions}
+            className={selectClassName}
+            {...register("attendanceLocationId")}
+          >
+            <option value="">No attendance location assigned</option>
+
+            {attendanceLocations.map((location) => (
+              <option key={location._id} value={location._id}>
+                {location.name} — {location.geofenceRadiusMeters}m
+              </option>
+            ))}
+          </select>
+
+          {!isLoadingOptions && attendanceLocations.length === 0 ? (
+            <p className="mt-1.5 text-xs font-medium text-amber-600">
+              No active attendance locations are available.
+            </p>
+          ) : null}
         </Field>
       </Section>
 
