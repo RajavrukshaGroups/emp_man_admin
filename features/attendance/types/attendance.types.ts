@@ -11,12 +11,11 @@ export type AttendanceMode =
 export type AttendanceStatus =
     | "PENDING"
     | "PRESENT"
-    | "ABSENT"
     | "HALF_DAY"
-    | "WEEK_OFF"
+    | "ABSENT"
+    | "ON_LEAVE"
     | "HOLIDAY"
-    | "LEAVE"
-    | "NOT_CALCULATED";
+    | "WEEKLY_OFF";
 
 export type WorkSessionStatus =
     | "OPEN"
@@ -37,9 +36,6 @@ export type BreakType =
 // ATTENDANCE LOCATION
 // ============================================================
 
-/**
- * Populated attendance location returned by backend.
- */
 export interface AttendanceLocationReference {
     _id: string;
 
@@ -55,21 +51,14 @@ export interface AttendanceLocationReference {
 
     geofenceRadiusMeters: number;
 
+    allowCheckIn?: boolean;
+
+    allowCheckOut?: boolean;
+
     status: string;
 }
 
 
-/**
- * GPS data sent FROM frontend TO backend.
- *
- * Do NOT send:
- * - withinGeofence
- * - distanceFromLocationMeters
- * - ipAddress
- * - userAgent
- *
- * Backend calculates/adds those values.
- */
 export interface AttendanceLocationInput {
     latitude: number;
 
@@ -85,10 +74,6 @@ export interface AttendanceLocationInput {
 }
 
 
-/**
- * Location evidence returned by backend
- * after validating GPS/geofence.
- */
 export interface LocationEvidence {
     latitude: number;
 
@@ -168,7 +153,7 @@ export interface AttendanceBreak {
 
 
 // ============================================================
-// SHIFT SNAPSHOT
+// SHIFT
 // ============================================================
 
 export interface ShiftSnapshot {
@@ -198,6 +183,25 @@ export interface ShiftSnapshot {
 }
 
 
+/**
+ * Populated Shift document.
+ *
+ * Important:
+ * companyAccessId.shiftId = employee's CURRENT assigned shift.
+ * AttendanceRecord.shiftId / shiftSnapshot = shift used for that
+ * historical attendance record.
+ */
+export interface AttendanceShiftReference extends ShiftSnapshot {
+    _id: string;
+
+    status?: string;
+
+    workingHours?: number;
+
+    id?: string;
+}
+
+
 // ============================================================
 // ATTENDANCE ANOMALY
 // ============================================================
@@ -224,6 +228,155 @@ export interface AttendanceAnomaly {
     description: string;
 
     detectedAt: string;
+
+    resolvedAt?: string | null;
+
+    resolvedBy?: string | null;
+
+    resolutionNote?: string;
+}
+
+
+// ============================================================
+// ATTENDANCE ADJUSTMENT
+// ============================================================
+
+export interface AttendanceAdjustment {
+    _id: string;
+
+    type: string;
+
+    minutes: number;
+
+    reason: string;
+
+    approvedBy?: string | null;
+
+    approvedAt?: string | null;
+
+    createdAt?: string;
+
+    updatedAt?: string;
+}
+
+
+// ============================================================
+// MANAGEMENT POPULATED REFERENCES
+// ============================================================
+
+export interface AttendanceRoleReference {
+    _id: string;
+
+    code: string;
+
+    name: string;
+
+    scopeType:
+    | "GLOBAL"
+    | "COMPANY"
+    | "DEPARTMENT"
+    | "TEAM";
+
+    status: string;
+}
+
+
+export interface AttendanceDepartmentReference {
+    _id: string;
+
+    name: string;
+
+    code: string;
+
+    status: string;
+}
+
+
+export interface AttendanceTeamReference {
+    _id: string;
+
+    name: string;
+
+    code: string;
+
+    status: string;
+}
+
+
+export interface AttendanceEmployeeUserReference {
+    _id: string;
+
+    firstName: string;
+
+    middleName?: string;
+
+    lastName: string;
+
+    displayName?: string;
+
+    email?: string;
+
+    mobile?: string;
+
+    profilePhoto?: string;
+
+    status?: string;
+}
+
+
+export interface AttendanceEmployeeReference {
+    _id: string;
+
+    companyAccessId?: string;
+
+    userId: AttendanceEmployeeUserReference;
+
+    status?: string;
+}
+
+
+export interface AttendanceCompanyAccessReference {
+    _id: string;
+
+    userId?: string;
+
+    roleId?: AttendanceRoleReference | string | null;
+
+    employeeCode?: string;
+
+    designation?: string;
+
+    employmentType?: string;
+
+    departmentId?:
+    | AttendanceDepartmentReference
+    | string
+    | null;
+
+    teamId?:
+    | AttendanceTeamReference
+    | string
+    | null;
+
+    reportingManagerId?: string | null;
+
+    workLocationType?: string;
+
+    workLocationName?: string;
+
+    status?: string;
+
+    attendanceLocationId?:
+    | AttendanceLocationReference
+    | string
+    | null;
+
+    attendanceMode?: AttendanceMode;
+
+    shiftId?:
+    | AttendanceShiftReference
+    | string
+    | null;
 }
 
 
@@ -234,10 +387,39 @@ export interface AttendanceAnomaly {
 export interface AttendanceRecord {
     _id: string;
 
+    companyId?: string;
+
+    /**
+     * Populated for management attendance APIs.
+     */
+    companyAccessId?:
+    | AttendanceCompanyAccessReference
+    | string
+    | null;
+
+    /**
+     * Populated for management attendance APIs.
+     */
+    employeeId?:
+    | AttendanceEmployeeReference
+    | string
+    | null;
+
     attendanceDate: string;
 
     attendanceMode: AttendanceMode;
 
+    /**
+     * Historical shift document attached to this attendance.
+     */
+    shiftId?:
+    | AttendanceShiftReference
+    | string
+    | null;
+
+    /**
+     * Historical snapshot captured when attendance was created.
+     */
     shiftSnapshot?: ShiftSnapshot;
 
     workSessions: WorkSession[];
@@ -264,11 +446,21 @@ export interface AttendanceRecord {
 
     calculationStatus: string;
 
+    calculatedAt?: string | null;
+
     payrollStatus: string;
+
+    payrollPeriod?: string | null;
 
     notes?: string;
 
     anomalies?: AttendanceAnomaly[];
+
+    adjustments?: AttendanceAdjustment[];
+
+    createdAt?: string;
+
+    updatedAt?: string;
 }
 
 
@@ -322,10 +514,6 @@ export interface EndBreakPayload {
 // ACTIVE FIELD VISIT
 // ============================================================
 
-/**
- * /me/today currently returns selected information
- * about an active field visit.
- */
 export interface ActiveFieldVisit {
     _id: string;
 
@@ -374,4 +562,181 @@ export interface MyTodayAttendanceResponse {
     attendance: AttendanceRecord | null;
 
     state: AttendanceTodayState;
+}
+
+
+// ============================================================
+// PAGINATION
+// ============================================================
+
+export interface AttendanceHistoryPagination {
+    page: number;
+
+    limit: number;
+
+    total: number;
+
+    totalPages: number;
+
+    hasNextPage: boolean;
+
+    hasPreviousPage: boolean;
+}
+
+
+// ============================================================
+// MY ATTENDANCE HISTORY
+// ============================================================
+
+export interface MyAttendanceHistoryQuery {
+    page?: number;
+
+    limit?: number;
+
+    fromDate?: string;
+
+    toDate?: string;
+
+    attendanceStatus?: AttendanceStatus;
+}
+
+
+export interface MyAttendanceHistoryResponse {
+    items: AttendanceRecord[];
+
+    pagination: AttendanceHistoryPagination;
+}
+
+
+// ============================================================
+// MANAGEMENT ATTENDANCE LIST
+// ============================================================
+
+/**
+ * Query parameters already verified against the management
+ * attendance API.
+ *
+ * We can extend this later with department/team/companyAccess
+ * filters only after confirming the backend supports them.
+ */
+export interface AttendanceManagementQuery {
+    page?: number;
+
+    limit?: number;
+
+    date?: string;
+
+    fromDate?: string;
+
+    toDate?: string;
+
+    attendanceStatus?: AttendanceStatus;
+
+    isLate?: boolean;
+}
+
+
+export interface AttendanceManagementResponse {
+    items: AttendanceRecord[];
+
+    pagination: AttendanceHistoryPagination;
+}
+
+
+// ============================================================
+// DAILY ATTENDANCE SUMMARY
+// ============================================================
+
+export type DailyAttendanceStatus =
+    | "NOT_CHECKED_IN"
+    | "PENDING"
+    | "PRESENT"
+    | "HALF_DAY"
+    | "ABSENT"
+    | "ON_LEAVE"
+    | "HOLIDAY"
+    | "WEEKLY_OFF";
+
+
+export interface DailyAttendanceSummaryQuery {
+    page?: number;
+
+    limit?: number;
+
+    date: string;
+
+    departmentId?: string;
+
+    teamId?: string;
+
+    shiftId?: string;
+
+    attendanceStatus?: DailyAttendanceStatus;
+
+    search?: string;
+}
+
+
+export interface DailyAttendanceSummaryRow {
+    companyAccessId: string;
+
+    employeeId: string;
+
+    employeeCode: string;
+
+    employeeName: string;
+
+    designation: string;
+
+    departmentId:
+    | AttendanceDepartmentReference
+    | null;
+
+    teamId:
+    | AttendanceTeamReference
+    | null;
+
+    shiftId:
+    | AttendanceShiftReference
+    | null;
+
+    attendanceMode: AttendanceMode;
+
+    attendanceLocationId:
+    | AttendanceLocationReference
+    | null;
+
+    attendanceDate: string;
+
+    attendanceId: string | null;
+
+    attendanceStatus: DailyAttendanceStatus;
+
+    attendance: AttendanceRecord | null;
+}
+
+
+export interface DailyAttendanceSummaryCounts {
+    totalEmployees: number;
+
+    notCheckedIn: number;
+
+    pending: number;
+
+    present: number;
+
+    halfDay: number;
+
+    absent: number;
+}
+
+
+export interface DailyAttendanceSummaryResponse {
+    date: string;
+
+    items: DailyAttendanceSummaryRow[];
+
+    summary: DailyAttendanceSummaryCounts;
+
+    pagination: AttendanceHistoryPagination;
 }

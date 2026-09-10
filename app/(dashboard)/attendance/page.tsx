@@ -1,7 +1,14 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { CalendarCheck, Clock3, MapPin, Moon, Sun } from "lucide-react";
+import {
+  CalendarCheck,
+  Clock3,
+  FileClock,
+  MapPin,
+  Moon,
+  Sun,
+} from "lucide-react";
 import { toast } from "sonner";
 
 import { AttendanceActionCard } from "@/features/attendance/components/attendance-action-card";
@@ -99,22 +106,46 @@ export default function AttendancePage() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center gap-3">
-        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
-          <CalendarCheck className="h-5 w-5" />
+      {/* Header */}
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-center gap-3">
+          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
+            <CalendarCheck className="h-5 w-5" />
+          </div>
+
+          <div className="min-w-0">
+            <h1 className="text-2xl font-bold tracking-tight text-slate-950 sm:text-3xl">
+              Attendance
+            </h1>
+
+            <p className="mt-1 text-sm text-slate-500">
+              {isCompanyAttendanceManager
+                ? "Monitor and manage company attendance."
+                : "Check in, manage breaks and review your attendance."}
+            </p>
+          </div>
         </div>
 
-        <div className="min-w-0">
-          <h1 className="text-2xl font-bold tracking-tight text-slate-950 sm:text-3xl">
-            Attendance
-          </h1>
+        {/* Employee / Team Lead attendance actions */}
+        {!isCompanyAttendanceManager && (
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <Link
+              href="/attendance/history"
+              className="inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-50"
+            >
+              <Clock3 className="h-4 w-4" />
+              View History
+            </Link>
 
-          <p className="mt-1 text-sm text-slate-500">
-            {isCompanyAttendanceManager
-              ? "Monitor and manage company attendance."
-              : "Check in, manage breaks and review your attendance."}
-          </p>
-        </div>
+            <Link
+              href="/attendance/regularizations"
+              className="inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-50"
+            >
+              <FileClock className="h-4 w-4" />
+              Regularizations
+            </Link>
+          </div>
+        )}
       </div>
 
       {/* Company Administrator / company scoped role */}
@@ -238,13 +269,23 @@ function CompanyAttendancePlaceholder() {
           </p>
         </div>
 
-        <Link
-          href="/attendance/locations"
-          className="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-50"
-        >
-          <MapPin className="h-4 w-4" />
-          Manage Attendance Locations
-        </Link>
+        <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap sm:justify-end">
+          <Link
+            href="/attendance/regularizations"
+            className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-50 sm:w-auto"
+          >
+            <FileClock className="h-4 w-4" />
+            Regularizations
+          </Link>
+
+          <Link
+            href="/attendance/locations"
+            className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-50 sm:w-auto"
+          >
+            <MapPin className="h-4 w-4" />
+            Manage Attendance Locations
+          </Link>
+        </div>
       </div>
 
       {/* Attendance Summary */}
