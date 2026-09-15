@@ -1,10 +1,9 @@
 "use client";
-
+import { useRouter } from "next/navigation";
 import {
   CalendarDays,
   ChevronLeft,
   ChevronRight,
-  Clock3,
   RefreshCw,
   Timer,
   UserCheck,
@@ -164,6 +163,13 @@ function getStatusClass(status: DailyAttendanceStatus) {
 export default function AttendanceEmployeesPage() {
   const company = useAuthStore((state) => state.company);
 
+  const permissions = useAuthStore((state) => state.permissions);
+
+  const router = useRouter();
+
+  const canReadAttendanceSummary =
+    permissions?.includes("attendance.summary_read") ?? false;
+
   const companyId = company?._id ?? "";
 
   const [selectedDate, setSelectedDate] = useState(getToday);
@@ -178,13 +184,16 @@ export default function AttendanceEmployeesPage() {
 
   const [error, setError] = useState("");
 
+  const [statusFilter, setStatusFilter] = useState<
+    "ALL" | DailyAttendanceStatus
+  >("ALL");
   // ============================================================
   // LOAD
   // ============================================================
 
   const loadAttendance = useCallback(
     async (showRefresh = false) => {
-      if (!companyId) {
+      if (!companyId || !canReadAttendanceSummary) {
         setLoading(false);
         return;
       }
@@ -202,6 +211,11 @@ export default function AttendanceEmployeesPage() {
           date: selectedDate,
           page,
           limit: PAGE_LIMIT,
+          ...(statusFilter !== "ALL"
+            ? {
+                attendanceStatus: statusFilter,
+              }
+            : {}),
         });
 
         setData(response);
@@ -214,13 +228,18 @@ export default function AttendanceEmployeesPage() {
         setRefreshing(false);
       }
     },
-    [companyId, selectedDate, page],
+    [companyId, selectedDate, page, statusFilter, canReadAttendanceSummary],
   );
 
   useEffect(() => {
     void loadAttendance();
   }, [loadAttendance]);
 
+  useEffect(() => {
+    if (!canReadAttendanceSummary) {
+      router.replace("/attendance");
+    }
+  }, [canReadAttendanceSummary, router]);
   // ============================================================
   // DATE ACTIONS
   // ============================================================
@@ -269,6 +288,10 @@ export default function AttendanceEmployeesPage() {
     return summary.pending + summary.present + summary.halfDay;
   }, [summary]);
 
+  if (!canReadAttendanceSummary) {
+    return null;
+  }
+
   // ============================================================
   // RENDER
   // ============================================================
@@ -308,7 +331,7 @@ export default function AttendanceEmployeesPage() {
         </button>
       </div>
 
-      {/* DATE SELECTOR */}
+      {/* DATE SELECTOR + STATUS FILTER */}
 
       <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -350,6 +373,60 @@ export default function AttendanceEmployeesPage() {
             />
           </div>
         </div>
+
+        <div className="mt-4 border-t border-slate-100 pt-4">
+          <div className="flex flex-wrap gap-2">
+            {[
+              {
+                label: "All",
+                value: "ALL",
+              },
+              {
+                label: "Not Checked In",
+                value: "NOT_CHECKED_IN",
+              },
+              {
+                label: "Checked In",
+                value: "PENDING",
+              },
+              {
+                label: "Present",
+                value: "PRESENT",
+              },
+              {
+                label: "Half Day",
+                value: "HALF_DAY",
+              },
+              {
+                label: "Absent",
+                value: "ABSENT",
+              },
+            ].map((option) => {
+              const active = statusFilter === option.value;
+
+              return (
+                <button
+                  key={option.value}
+                  type="button"
+                  onClick={() => {
+                    setPage(1);
+
+                    setStatusFilter(
+                      option.value as "ALL" | DailyAttendanceStatus,
+                    );
+                  }}
+                  className={`rounded-lg border px-3 py-2 text-sm font-medium transition ${
+                    active
+                      ? "border-slate-900 bg-slate-900 text-white"
+                      : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+                  }`}
+                >
+                  {option.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
       </div>
 
       {/* SUMMARY */}
@@ -373,16 +450,22 @@ export default function AttendanceEmployeesPage() {
           icon={UserMinus}
         />
 
-        <SummaryCard
+        {/* <SummaryCard
           title="Pending"
           value={summary?.pending ?? 0}
           icon={Clock3}
-        />
+        /> */}
 
         <SummaryCard
           title="Present"
           value={summary?.present ?? 0}
           icon={UserCheck}
+        />
+
+        <SummaryCard
+          title="Absent"
+          value={summary?.absent ?? 0}
+          icon={UserMinus}
         />
 
         <SummaryCard

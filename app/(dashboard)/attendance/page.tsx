@@ -8,6 +8,7 @@ import {
   MapPin,
   Moon,
   Sun,
+  Users,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -24,6 +25,11 @@ export default function AttendancePage() {
   const company = useAuthStore((state) => state.company);
 
   const role = useAuthStore((state) => state.role);
+
+  const permissions = useAuthStore((state) => state.permissions);
+
+  const canReadAttendanceSummary =
+    permissions?.includes("attendance.summary_read") ?? false;
 
   const companyAccess = useAuthStore((state) => state.companyAccess);
 
@@ -106,7 +112,6 @@ export default function AttendancePage() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      {/* Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-3">
           <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
@@ -128,10 +133,20 @@ export default function AttendancePage() {
 
         {/* Employee / Team Lead attendance actions */}
         {!isCompanyAttendanceManager && (
-          <div className="flex flex-col gap-2 sm:flex-row">
+          <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap sm:justify-end">
+            {canReadAttendanceSummary && (
+              <Link
+                href="/attendance/employees"
+                className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-50 sm:w-auto"
+              >
+                <Users className="h-4 w-4" />
+                Team Attendance
+              </Link>
+            )}
+
             <Link
               href="/attendance/history"
-              className="inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-50"
+              className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-50 sm:w-auto"
             >
               <Clock3 className="h-4 w-4" />
               View History
@@ -139,7 +154,7 @@ export default function AttendancePage() {
 
             <Link
               href="/attendance/regularizations"
-              className="inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-50"
+              className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-50 sm:w-auto"
             >
               <FileClock className="h-4 w-4" />
               Regularizations
@@ -150,7 +165,9 @@ export default function AttendancePage() {
 
       {/* Company Administrator / company scoped role */}
       {isCompanyAttendanceManager ? (
-        <CompanyAttendancePlaceholder />
+        <CompanyAttendancePlaceholder
+          canReadAttendanceSummary={canReadAttendanceSummary}
+        />
       ) : isLoading ? (
         <AttendanceLoadingState />
       ) : today ? (
@@ -253,7 +270,11 @@ function AssignedShiftCard({ shift, attendanceMode }: AssignedShiftCardProps) {
   );
 }
 
-function CompanyAttendancePlaceholder() {
+function CompanyAttendancePlaceholder({
+  canReadAttendanceSummary,
+}: {
+  canReadAttendanceSummary: boolean;
+}) {
   return (
     <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
       {/* Header + Attendance Location Action */}
@@ -270,6 +291,15 @@ function CompanyAttendancePlaceholder() {
         </div>
 
         <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap sm:justify-end">
+          {canReadAttendanceSummary && (
+            <Link
+              href="/attendance/employees"
+              className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-50 sm:w-auto"
+            >
+              <Users className="h-4 w-4" />
+              Employee Attendance
+            </Link>
+          )}
           <Link
             href="/attendance/regularizations"
             className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-50 sm:w-auto"
