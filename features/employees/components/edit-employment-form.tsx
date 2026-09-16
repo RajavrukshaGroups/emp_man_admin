@@ -21,6 +21,7 @@ import { toast } from "sonner";
 import { companyAccessService } from "@/features/company-access/services/company-access.service";
 
 import type {
+  AttendanceLocationPolicyType,
   AttendanceMode,
   CompanyAccess,
   EmploymentType,
@@ -89,8 +90,10 @@ interface EmploymentFormValues {
   shiftId: string;
   attendanceLocationId: string;
 
-  isPrimaryCompany: boolean;
+  attendanceCheckInPolicy: AttendanceLocationPolicyType;
+  attendanceCheckOutPolicy: AttendanceLocationPolicyType;
 
+  isPrimaryCompany: boolean;
   notes: string;
 }
 
@@ -288,6 +291,9 @@ export function EditEmploymentForm({ employeeId }: EditEmploymentFormProps) {
       attendanceMode: "OFFICE",
       shiftId: "",
       attendanceLocationId: "",
+
+      attendanceCheckInPolicy: "GEOFENCE_REQUIRED",
+      attendanceCheckOutPolicy: "GEOFENCE_REQUIRED",
 
       isPrimaryCompany: false,
       notes: "",
@@ -629,8 +635,13 @@ export function EditEmploymentForm({ employeeId }: EditEmploymentFormProps) {
 
         attendanceLocationId: savedAttendanceLocationId,
 
-        isPrimaryCompany: accessData.isPrimaryCompany ?? false,
+        attendanceCheckInPolicy:
+          accessData.attendanceLocationPolicy?.checkIn ?? "GEOFENCE_REQUIRED",
 
+        attendanceCheckOutPolicy:
+          accessData.attendanceLocationPolicy?.checkOut ?? "GEOFENCE_REQUIRED",
+
+        isPrimaryCompany: accessData.isPrimaryCompany ?? false,
         notes: accessData.notes ?? "",
       });
     } catch (error: unknown) {
@@ -844,6 +855,11 @@ export function EditEmploymentForm({ employeeId }: EditEmploymentFormProps) {
       shiftId: values.shiftId || null,
 
       attendanceLocationId: values.attendanceLocationId || null,
+
+      attendanceLocationPolicy: {
+        checkIn: values.attendanceCheckInPolicy,
+        checkOut: values.attendanceCheckOutPolicy,
+      },
 
       isPrimaryCompany: values.isPrimaryCompany,
       notes: values.notes.trim(),
@@ -1430,7 +1446,7 @@ export function EditEmploymentForm({ employeeId }: EditEmploymentFormProps) {
         <Field
           label="Attendance location"
           error={errors.attendanceLocationId?.message}
-          hint="The employee's GPS will be validated against this location during attendance actions."
+          hint="Assigned location used when geofence validation is required. Location rules below control check-in and check-out behaviour."
         >
           <select
             disabled={isSubmitting || isLoadingOptions}
@@ -1451,6 +1467,57 @@ export function EditEmploymentForm({ employeeId }: EditEmploymentFormProps) {
               No active attendance locations are available.
             </p>
           ) : null}
+        </Field>
+
+        <div className="sm:col-span-2 xl:col-span-3 mt-1 border-t border-slate-200 pt-5">
+          <h3 className="text-sm font-semibold text-slate-950">
+            Attendance location rules
+          </h3>
+
+          <p className="mt-1 text-xs text-slate-500">
+            Configure whether GPS and geofence validation are required
+            separately for check-in and check-out.
+          </p>
+        </div>
+
+        <Field
+          label="Check-in rule"
+          error={errors.attendanceCheckInPolicy?.message}
+          hint="Controls the location verification required when this employee checks in."
+        >
+          <select
+            disabled={isSubmitting}
+            className={selectClassName}
+            {...register("attendanceCheckInPolicy", {
+              required: "Check-in attendance rule is required.",
+            })}
+          >
+            <option value="GEOFENCE_REQUIRED">Geofence required</option>
+
+            <option value="LOCATION_ONLY">Record location only</option>
+
+            <option value="NOT_REQUIRED">Location not required</option>
+          </select>
+        </Field>
+
+        <Field
+          label="Check-out rule"
+          error={errors.attendanceCheckOutPolicy?.message}
+          hint="Controls the location verification required when this employee checks out."
+        >
+          <select
+            disabled={isSubmitting}
+            className={selectClassName}
+            {...register("attendanceCheckOutPolicy", {
+              required: "Check-out attendance rule is required.",
+            })}
+          >
+            <option value="GEOFENCE_REQUIRED">Geofence required</option>
+
+            <option value="LOCATION_ONLY">Record location only</option>
+
+            <option value="NOT_REQUIRED">Location not required</option>
+          </select>
         </Field>
       </Section>
 

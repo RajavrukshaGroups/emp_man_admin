@@ -569,6 +569,18 @@ export function EmployeeDetailsView({ employeeId }: EmployeeDetailsViewProps) {
               }
             />
             <DetailItem
+              label="Check-in location rule"
+              value={formatEnumValue(
+                companyAccess?.attendanceLocationPolicy?.checkIn,
+              )}
+            />
+            <DetailItem
+              label="Check-out location rule"
+              value={formatEnumValue(
+                companyAccess?.attendanceLocationPolicy?.checkOut,
+              )}
+            />
+            <DetailItem
               label="Company access status"
               value={formatEnumValue(companyAccess?.status)}
             />

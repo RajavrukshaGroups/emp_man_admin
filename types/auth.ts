@@ -18,6 +18,16 @@ export type AttendanceMode =
   | "HYBRID"
   | "REMOTE";
 
+export type AttendanceLocationPolicyType =
+  | "GEOFENCE_REQUIRED"
+  | "LOCATION_ONLY"
+  | "NOT_REQUIRED";
+
+export interface AttendanceLocationPolicy {
+  checkIn: AttendanceLocationPolicyType;
+  checkOut: AttendanceLocationPolicyType;
+}
+
 export type RoleScope =
   | "GLOBAL"
   | "COMPANY"
@@ -80,26 +90,38 @@ export interface CompanyAccess {
   _id: string;
 
   employeeCode?: string | null;
-
   designation?: string;
-
   employmentType?: string;
 
   departmentId?: string | null;
-
   teamId?: string | null;
-
   reportingManagerId?: string | null;
 
   joiningDate?: string | null;
 
   workLocationType?: string;
-
   workLocationName?: string;
 
   attendanceMode?: AttendanceMode;
 
   shiftId?: string | null;
+
+  attendanceLocationId?: string | null;
+
+  attendanceLocation?: {
+    _id: string;
+    name: string;
+    code: string;
+    locationType?: string;
+    latitude?: number;
+    longitude?: number;
+    geofenceRadiusMeters?: number;
+    allowCheckIn?: boolean;
+    allowCheckOut?: boolean;
+    status?: string;
+  } | null;
+
+  attendanceLocationPolicy?: AttendanceLocationPolicy;
 
   isPrimaryCompany?: boolean;
 

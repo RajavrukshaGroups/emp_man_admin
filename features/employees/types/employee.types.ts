@@ -36,6 +36,16 @@ export type EmployeeStatus =
     | "INACTIVE"
     | "ARCHIVED";
 
+export type EmployeeAttendanceLocationPolicyType =
+    | "GEOFENCE_REQUIRED"
+    | "LOCATION_ONLY"
+    | "NOT_REQUIRED";
+
+export interface EmployeeAttendanceLocationPolicy {
+    checkIn: EmployeeAttendanceLocationPolicyType;
+    checkOut: EmployeeAttendanceLocationPolicyType;
+}
+
 export interface EmployeeAddress {
     addressLine1?: string;
     addressLine2?: string;
@@ -207,6 +217,8 @@ export interface EmployeeCompanyAccessReference {
     | EmployeeAttendanceLocationReference
     | string
     | null;
+
+    attendanceLocationPolicy?: EmployeeAttendanceLocationPolicy;
 
     status?: string;
 }

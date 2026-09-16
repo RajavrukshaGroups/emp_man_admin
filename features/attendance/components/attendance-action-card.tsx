@@ -4,6 +4,7 @@ import { useState } from "react";
 import {
   CalendarClock,
   Coffee,
+  Crosshair,
   Loader2,
   LogIn,
   LogOut,
@@ -20,6 +21,8 @@ import { useAuthStore } from "@/store/auth.store";
 import { attendanceService } from "../services/attendance.service";
 
 import type { MyTodayAttendanceResponse } from "../types/attendance.types";
+
+import { AttendanceLocationPreviewMap } from "./attendance-location-preview-map-loader";
 
 interface AttendanceActionCardProps {
   today: MyTodayAttendanceResponse;
@@ -52,6 +55,19 @@ export function AttendanceActionCard({
   onAttendanceChanged,
 }: AttendanceActionCardProps) {
   const company = useAuthStore((state) => state.company);
+  const companyAccess = useAuthStore((state) => state.companyAccess);
+
+  const assignedAttendanceLocation = companyAccess?.attendanceLocation ?? null;
+
+  const checkInPolicy =
+    companyAccess?.attendanceLocationPolicy?.checkIn ?? "GEOFENCE_REQUIRED";
+
+  const checkOutPolicy =
+    companyAccess?.attendanceLocationPolicy?.checkOut ?? "GEOFENCE_REQUIRED";
+
+  const checkInRequiresLocation = checkInPolicy !== "NOT_REQUIRED";
+
+  const checkOutRequiresLocation = checkOutPolicy !== "NOT_REQUIRED";
 
   const {
     location,
@@ -87,35 +103,46 @@ export function AttendanceActionCard({
     onAttendanceChanged?.(updated);
   };
 
+  const handleRefreshLocation = async () => {
+    try {
+      await getCurrentLocation();
+
+      toast.success("Current location detected.");
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Unable to detect your current location.",
+      );
+    }
+  };
+
   const handleCheckIn = async () => {
     if (!company?._id) {
       toast.error("Company information is unavailable.");
-
       return;
     }
 
     try {
       setIsSubmitting(true);
 
-      /**
-       * Always capture a fresh GPS position
-       * immediately before check-in.
-       */
-      const gps = await getCurrentLocation();
+      if (checkInRequiresLocation) {
+        const gps = await getCurrentLocation();
 
-      await attendanceService.checkIn(company._id, {
-        location: {
-          latitude: gps.latitude,
-
-          longitude: gps.longitude,
-
-          accuracy: gps.accuracy,
-
-          capturedAt: gps.capturedAt,
-        },
-
-        notes: "",
-      });
+        await attendanceService.checkIn(company._id, {
+          location: {
+            latitude: gps.latitude,
+            longitude: gps.longitude,
+            accuracy: gps.accuracy,
+            capturedAt: gps.capturedAt,
+          },
+          notes: "",
+        });
+      } else {
+        await attendanceService.checkIn(company._id, {
+          notes: "",
+        });
+      }
 
       toast.success("Checked in successfully.");
 
@@ -179,32 +206,30 @@ export function AttendanceActionCard({
 
   const handleCheckOut = async () => {
     if (!company?._id) {
+      toast.error("Company information is unavailable.");
       return;
     }
 
     try {
       setIsSubmitting(true);
 
-      /**
-       * Checkout also needs fresh location
-       * evidence because the backend may
-       * enforce geofence rules.
-       */
-      const gps = await getCurrentLocation();
+      if (checkOutRequiresLocation) {
+        const gps = await getCurrentLocation();
 
-      await attendanceService.checkOut(company._id, {
-        location: {
-          latitude: gps.latitude,
-
-          longitude: gps.longitude,
-
-          accuracy: gps.accuracy,
-
-          capturedAt: gps.capturedAt,
-        },
-
-        notes: "",
-      });
+        await attendanceService.checkOut(company._id, {
+          location: {
+            latitude: gps.latitude,
+            longitude: gps.longitude,
+            accuracy: gps.accuracy,
+            capturedAt: gps.capturedAt,
+          },
+          notes: "",
+        });
+      } else {
+        await attendanceService.checkOut(company._id, {
+          notes: "",
+        });
+      }
 
       toast.success("Checked out successfully.");
 
@@ -222,6 +247,41 @@ export function AttendanceActionCard({
   };
 
   const actionLoading = isSubmitting || isLocating;
+
+  const activeLocationPolicy = state.canCheckIn
+    ? checkInPolicy
+    : state.canCheckOut
+      ? checkOutPolicy
+      : null;
+
+  const activeActionRequiresLocation =
+    activeLocationPolicy !== null && activeLocationPolicy !== "NOT_REQUIRED";
+
+  const assignedLatitude = assignedAttendanceLocation?.latitude;
+
+  const assignedLongitude = assignedAttendanceLocation?.longitude;
+
+  const assignedRadius = assignedAttendanceLocation?.geofenceRadiusMeters;
+
+  const hasAssignedAttendanceLocation =
+    typeof assignedLatitude === "number" &&
+    typeof assignedLongitude === "number";
+
+  const distanceFromAttendanceLocation =
+    location && hasAssignedAttendanceLocation
+      ? calculateDistanceMeters(
+          location.latitude,
+          location.longitude,
+          assignedLatitude,
+          assignedLongitude,
+        )
+      : null;
+
+  const isWithinGeofence =
+    distanceFromAttendanceLocation !== null &&
+    typeof assignedRadius === "number"
+      ? distanceFromAttendanceLocation <= assignedRadius
+      : null;
 
   return (
     <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
@@ -261,6 +321,26 @@ export function AttendanceActionCard({
 
           {/* Actions */}
           <div className="mt-6 flex flex-col justify-center gap-3 sm:flex-row sm:flex-wrap">
+            {activeActionRequiresLocation ? (
+              <button
+                type="button"
+                onClick={handleRefreshLocation}
+                disabled={actionLoading}
+                className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl border border-white/20 px-6 py-3 text-sm font-semibold text-white transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
+              >
+                {isLocating ? (
+                  <Loader2 className="h-5 w-5 animate-spin" />
+                ) : (
+                  <Crosshair className="h-5 w-5" />
+                )}
+
+                {isLocating
+                  ? "Detecting location..."
+                  : location
+                    ? "Refresh Location"
+                    : "Detect Location"}
+              </button>
+            ) : null}
             {state.canCheckIn ? (
               <button
                 type="button"
@@ -336,14 +416,19 @@ export function AttendanceActionCard({
             ) : null}
           </div>
 
-          {/* GPS state */}
+          {/* Location verification state */}
           {(state.canCheckIn || state.canCheckOut) && (
             <div className="mt-5">
-              {locationError ? (
+              {!activeActionRequiresLocation ? (
+                <div className="flex items-center justify-center gap-2 text-xs text-slate-300">
+                  <MapPin className="h-4 w-4" />
+                  Location verification is not required for this attendance
+                  action.
+                </div>
+              ) : locationError ? (
                 <div className="mx-auto max-w-lg rounded-xl bg-red-500/10 px-4 py-3 text-left text-xs leading-5 text-red-200">
                   <div className="flex items-start gap-2">
                     <MapPin className="mt-0.5 h-4 w-4 shrink-0" />
-
                     <span>{locationError}</span>
                   </div>
                 </div>
@@ -353,25 +438,119 @@ export function AttendanceActionCard({
                   Location acquired
                   {" · "}±{Math.round(location.accuracy)}m
                 </div>
+              ) : activeLocationPolicy === "GEOFENCE_REQUIRED" ? (
+                <div className="flex items-center justify-center gap-2 text-xs text-slate-300">
+                  <MapPin className="h-4 w-4" />
+                  Your location will be verified against the assigned attendance
+                  geofence.
+                </div>
               ) : (
                 <div className="flex items-center justify-center gap-2 text-xs text-slate-300">
                   <MapPin className="h-4 w-4" />
-                  Location will be verified before this attendance action.
+                  Your current location will be recorded. No geofence
+                  restriction applies.
                 </div>
               )}
             </div>
           )}
+
+          {/* Location map preview */}
+          {activeActionRequiresLocation && location ? (
+            <div className="mx-auto mt-5 max-w-2xl text-left">
+              <AttendanceLocationPreviewMap
+                currentLocation={{
+                  latitude: location.latitude,
+                  longitude: location.longitude,
+                }}
+                attendanceLocation={
+                  hasAssignedAttendanceLocation
+                    ? assignedAttendanceLocation
+                    : null
+                }
+                showGeofence={activeLocationPolicy === "GEOFENCE_REQUIRED"}
+                height="280px"
+              />
+
+              <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                <div className="rounded-xl bg-white/10 px-4 py-3">
+                  <p className="text-xs text-slate-400">GPS accuracy</p>
+
+                  <p className="mt-1 text-sm font-semibold text-white">
+                    ±{Math.round(location.accuracy)}m
+                  </p>
+                </div>
+
+                {activeLocationPolicy === "GEOFENCE_REQUIRED" &&
+                hasAssignedAttendanceLocation ? (
+                  <>
+                    <div className="rounded-xl bg-white/10 px-4 py-3">
+                      <p className="text-xs text-slate-400">
+                        Attendance location
+                      </p>
+
+                      <p className="mt-1 text-sm font-semibold text-white">
+                        {assignedAttendanceLocation?.name ??
+                          "Assigned location"}
+                      </p>
+                    </div>
+
+                    <div className="rounded-xl bg-white/10 px-4 py-3">
+                      <p className="text-xs text-slate-400">Distance</p>
+
+                      <p className="mt-1 text-sm font-semibold text-white">
+                        {distanceFromAttendanceLocation !== null
+                          ? `${distanceFromAttendanceLocation}m`
+                          : "—"}
+                      </p>
+                    </div>
+
+                    <div className="rounded-xl bg-white/10 px-4 py-3">
+                      <p className="text-xs text-slate-400">Allowed radius</p>
+
+                      <p className="mt-1 text-sm font-semibold text-white">
+                        {typeof assignedRadius === "number"
+                          ? `${assignedRadius}m`
+                          : "—"}
+                      </p>
+                    </div>
+                  </>
+                ) : null}
+              </div>
+
+              {activeLocationPolicy === "GEOFENCE_REQUIRED" &&
+              isWithinGeofence !== null ? (
+                <div
+                  className={`mt-3 rounded-xl px-4 py-3 text-center text-sm font-semibold ${
+                    isWithinGeofence
+                      ? "bg-emerald-500/15 text-emerald-300"
+                      : "bg-red-500/15 text-red-300"
+                  }`}
+                >
+                  {isWithinGeofence
+                    ? "You are within the permitted attendance area."
+                    : "You appear to be outside the permitted attendance area."}
+                </div>
+              ) : null}
+
+              {activeLocationPolicy === "LOCATION_ONLY" ? (
+                <div className="mt-3 rounded-xl bg-blue-500/10 px-4 py-3 text-center text-sm text-blue-200">
+                  Your current location will be recorded. No geofence
+                  restriction applies.
+                </div>
+              ) : null}
+            </div>
+          ) : null}
         </div>
 
         {/* Summary */}
         <div className="mt-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
           <SummaryItem
-            label="Check in"
+            label="First check in"
             value={formatTime(attendance?.firstCheckInAt)}
           />
 
           <SummaryItem
-            label="Check out"
+            label="Last check out"
             value={formatTime(attendance?.lastCheckOutAt)}
           />
 
@@ -410,4 +589,29 @@ function SummaryItem({ label, value }: SummaryItemProps) {
       </p>
     </div>
   );
+}
+
+function calculateDistanceMeters(
+  latitude1: number,
+  longitude1: number,
+  latitude2: number,
+  longitude2: number,
+): number {
+  const earthRadiusMeters = 6371000;
+
+  const toRadians = (degrees: number) => (degrees * Math.PI) / 180;
+
+  const latitudeDifference = toRadians(latitude2 - latitude1);
+
+  const longitudeDifference = toRadians(longitude2 - longitude1);
+
+  const a =
+    Math.sin(latitudeDifference / 2) ** 2 +
+    Math.cos(toRadians(latitude1)) *
+      Math.cos(toRadians(latitude2)) *
+      Math.sin(longitudeDifference / 2) ** 2;
+
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+  return Math.round(earthRadiusMeters * c);
 }

@@ -511,19 +511,303 @@ export interface EndBreakPayload {
 
 
 // ============================================================
-// ACTIVE FIELD VISIT
+// FIELD VISITS
 // ============================================================
 
-export interface ActiveFieldVisit {
+export type FieldVisitType =
+    | "CLIENT_VISIT"
+    | "PROJECT_SITE"
+    | "SALES_VISIT"
+    | "VENDOR_VISIT"
+    | "DELIVERY"
+    | "COLLECTION"
+    | "OFFICIAL_ERRAND"
+    | "OTHER";
+
+export type FieldVisitStatus =
+    | "IN_PROGRESS"
+    | "COMPLETED"
+    | "CANCELLED";
+
+export interface FieldVisitLocationInput {
+    latitude: number;
+    longitude: number;
+    accuracy?: number | null;
+    capturedAt?: string;
+    attendanceLocationId?: string | null;
+    addressText?: string;
+}
+
+export interface FieldVisitLocationEvidence {
+    latitude: number;
+
+    longitude: number;
+
+    accuracy?: number | null;
+
+    capturedAt: string;
+
+    attendanceLocationId?:
+    | AttendanceLocationReference
+    | string
+    | null;
+
+    distanceFromLocationMeters?: number | null;
+
+    withinGeofence?: boolean | null;
+
+    addressText?: string;
+
+    ipAddress?: string;
+
+    userAgent?: string;
+}
+
+export interface FieldVisitClient {
+    _id: string;
+    name: string;
+    code?: string;
+    clientType?: string;
+    engagementType?: string;
+    status?: string;
+}
+
+export interface FieldVisitEmployee {
     _id: string;
 
-    visitType?: string;
+    companyAccessId?: string;
+
+    userId?:
+    | AttendanceEmployeeUserReference
+    | string
+    | null;
+
+    status?: string;
+}
+
+export interface FieldVisitCompanyAccess {
+    _id: string;
+
+    userId?: string;
+
+    employeeCode?: string;
+
+    designation?: string;
+
+    employmentType?: string;
+
+    roleId?:
+    | AttendanceRoleReference
+    | string
+    | null;
+
+    departmentId?:
+    | AttendanceDepartmentReference
+    | string
+    | null;
+
+    teamId?:
+    | AttendanceTeamReference
+    | string
+    | null;
+
+    reportingManagerId?: string | null;
+
+    workLocationType?: string;
+
+    workLocationName?: string;
+
+    attendanceMode?: AttendanceMode;
+
+    shiftId?:
+    | AttendanceShiftReference
+    | string
+    | null;
+
+    status?: string;
+}
+
+export interface FieldVisitAttendanceReference {
+    _id: string;
+
+    attendanceDate: string;
+
+    attendanceMode: AttendanceMode;
+
+    firstCheckInAt?: string | null;
+
+    lastCheckOutAt?: string | null;
+
+    totalWorkedMinutes?: number;
+
+    totalBreakMinutes?: number;
+
+    attendanceStatus?: AttendanceStatus;
+
+    calculationStatus?: string;
+
+    payrollStatus?: string;
+}
+
+export interface FieldVisitCancelledByReference {
+    _id: string;
+
+    firstName?: string;
+
+    middleName?: string;
+
+    lastName?: string;
+
+    displayName?: string;
+
+    email?: string;
+
+    status?: string;
+}
+
+export interface FieldVisit {
+    _id: string;
+
+    companyId: string;
+
+    companyAccessId:
+    | string
+    | FieldVisitCompanyAccess;
+
+    employeeId:
+    | string
+    | FieldVisitEmployee;
+
+    attendanceId?:
+    | FieldVisitAttendanceReference
+    | string
+    | null;
+
+    attendanceDate: string;
+
+    visitType: FieldVisitType;
+
+    clientId?:
+    | string
+    | FieldVisitClient
+    | null;
+
+    siteName: string;
+
+    purpose: string;
+
+    startedAt: string;
+
+    startLocation: FieldVisitLocationEvidence;
+
+    endedAt?: string | null;
+
+    endLocation?: FieldVisitLocationEvidence | null;
+
+    durationMinutes: number;
+
+    outcome: string;
+
+    notes: string;
+
+    status: FieldVisitStatus;
+
+    cancelledBy?:
+    | FieldVisitCancelledByReference
+    | string
+    | null;
+
+    cancelledAt?: string | null;
+
+    cancellationReason?: string;
+
+    createdAt?: string;
+
+    updatedAt?: string;
+}
+
+// ============================================================
+// FIELD VISIT PAYLOADS
+// ============================================================
+
+export interface StartFieldVisitPayload {
+    visitType?: FieldVisitType;
+
+    clientId?: string | null;
 
     siteName?: string;
 
-    purpose?: string;
+    purpose: string;
 
-    startedAt?: string;
+    location: FieldVisitLocationInput;
+
+    notes?: string;
+}
+
+export interface EndFieldVisitPayload {
+    location: FieldVisitLocationInput;
+
+    outcome?: string;
+
+    notes?: string;
+}
+
+export interface CancelFieldVisitPayload {
+    reason: string;
+}
+
+// ============================================================
+// FIELD VISIT QUERIES
+// ============================================================
+
+export interface MyFieldVisitHistoryQuery {
+    page?: number;
+
+    limit?: number;
+
+    clientId?: string;
+
+    visitType?: FieldVisitType;
+
+    status?: FieldVisitStatus;
+
+    date?: string;
+
+    fromDate?: string;
+
+    toDate?: string;
+}
+
+export interface FieldVisitManagementQuery
+    extends MyFieldVisitHistoryQuery {
+    employeeId?: string;
+
+    companyAccessId?: string;
+
+    departmentId?: string;
+
+    teamId?: string;
+
+    attendanceId?: string;
+}
+
+// ============================================================
+// FIELD VISIT RESPONSES
+// ============================================================
+
+export interface FieldVisitPagination {
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+    hasNextPage: boolean;
+    hasPreviousPage: boolean;
+}
+
+export interface FieldVisitHistoryResponse {
+    items: FieldVisit[];
+
+    pagination: FieldVisitPagination;
 }
 
 
@@ -548,7 +832,7 @@ export interface AttendanceTodayState {
 
     canCheckOut: boolean;
 
-    activeFieldVisit: ActiveFieldVisit | null;
+    activeFieldVisit: FieldVisit | null;
 }
 
 

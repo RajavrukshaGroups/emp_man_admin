@@ -28,6 +28,16 @@ export type AttendanceMode =
     | "HYBRID"
     | "REMOTE";
 
+export type AttendanceLocationPolicyType =
+    | "GEOFENCE_REQUIRED"
+    | "LOCATION_ONLY"
+    | "NOT_REQUIRED";
+
+export interface AttendanceLocationPolicy {
+    checkIn: AttendanceLocationPolicyType;
+    checkOut: AttendanceLocationPolicyType;
+}
+
 export interface CompanyAccessRole {
     _id: string;
     name: string;
@@ -79,6 +89,8 @@ export interface CompanyAccess {
     | string
     | null;
 
+    attendanceLocationPolicy: AttendanceLocationPolicy;
+
     isPrimaryCompany: boolean;
     status: CompanyAccessStatus;
     notes: string;
@@ -118,6 +130,8 @@ export interface CreateCompanyAccessPayload {
     shiftId?: string | null;
     attendanceLocationId?: string | null;
 
+    attendanceLocationPolicy?: Partial<AttendanceLocationPolicy>;
+
     isPrimaryCompany: boolean;
     status: CompanyAccessStatus;
 
@@ -145,6 +159,8 @@ export interface UpdateCompanyAccessPayload {
     attendanceMode?: AttendanceMode;
     shiftId?: string | null;
     attendanceLocationId?: string | null;
+
+    attendanceLocationPolicy?: Partial<AttendanceLocationPolicy>;
 
     isPrimaryCompany?: boolean;
 

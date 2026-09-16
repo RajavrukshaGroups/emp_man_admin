@@ -7,12 +7,14 @@ import {
   FileClock,
   MapPin,
   Moon,
+  Navigation,
   Sun,
   Users,
 } from "lucide-react";
 import { toast } from "sonner";
 
 import { AttendanceActionCard } from "@/features/attendance/components/attendance-action-card";
+import { FieldVisitSection } from "@/features/attendance/components/field-visits/field-visit-section";
 import { attendanceService } from "@/features/attendance/services/attendance.service";
 import type { MyTodayAttendanceResponse } from "@/features/attendance/types/attendance.types";
 import { attendanceShiftService } from "@/features/attendance/services/attendance-shift.service";
@@ -31,6 +33,11 @@ export default function AttendancePage() {
   const canReadAttendanceSummary =
     permissions?.includes("attendance.summary_read") ?? false;
 
+  const canReadFieldVisits =
+    permissions?.includes("attendance.field_visit_read") ?? false;
+
+  const canManageFieldVisits = canReadFieldVisits && canReadAttendanceSummary;
+
   const companyAccess = useAuthStore((state) => state.companyAccess);
 
   const assignedShiftId = companyAccess?.shiftId ?? null;
@@ -45,6 +52,23 @@ export default function AttendancePage() {
 
   const isCompanyAttendanceManager =
     role?.scopeType === "COMPANY" || role?.scopeType === "GLOBAL";
+
+  const refreshTodayAttendance = async () => {
+    if (!company?._id || isCompanyAttendanceManager) {
+      return;
+    }
+
+    try {
+      const attendanceResult = await attendanceService.getMyToday(company._id);
+
+      setToday(attendanceResult);
+    } catch (error) {
+      toast.error(
+        getApiErrorMessage(error, "Unable to refresh today's attendance."),
+      );
+    }
+  };
+
   useEffect(() => {
     async function loadAttendance() {
       if (!company?._id) {
@@ -144,6 +168,26 @@ export default function AttendancePage() {
               </Link>
             )}
 
+            {canManageFieldVisits && (
+              <Link
+                href="/attendance/field-visits/manage"
+                className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-50 sm:w-auto"
+              >
+                <Navigation className="h-4 w-4" />
+                Manage Field Visits
+              </Link>
+            )}
+
+            {canReadFieldVisits && !canManageFieldVisits && (
+              <Link
+                href="/attendance/field-visits"
+                className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-50 sm:w-auto"
+              >
+                <Navigation className="h-4 w-4" />
+                My Field Visits
+              </Link>
+            )}
+
             <Link
               href="/attendance/history"
               className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-50 sm:w-auto"
@@ -167,6 +211,7 @@ export default function AttendancePage() {
       {isCompanyAttendanceManager ? (
         <CompanyAttendancePlaceholder
           canReadAttendanceSummary={canReadAttendanceSummary}
+          canManageFieldVisits={canManageFieldVisits}
         />
       ) : isLoading ? (
         <AttendanceLoadingState />
@@ -178,6 +223,11 @@ export default function AttendancePage() {
           />
 
           <AttendanceActionCard today={today} onAttendanceChanged={setToday} />
+
+          <FieldVisitSection
+            canStartFieldVisit={today.state.canStartFieldVisit}
+            onAttendanceChanged={refreshTodayAttendance}
+          />
         </>
       ) : (
         <AttendanceErrorState />
@@ -272,8 +322,10 @@ function AssignedShiftCard({ shift, attendanceMode }: AssignedShiftCardProps) {
 
 function CompanyAttendancePlaceholder({
   canReadAttendanceSummary,
+  canManageFieldVisits,
 }: {
   canReadAttendanceSummary: boolean;
+  canManageFieldVisits: boolean;
 }) {
   return (
     <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
@@ -298,6 +350,15 @@ function CompanyAttendancePlaceholder({
             >
               <Users className="h-4 w-4" />
               Employee Attendance
+            </Link>
+          )}
+          {canManageFieldVisits && (
+            <Link
+              href="/attendance/field-visits/manage"
+              className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-50 sm:w-auto"
+            >
+              <Navigation className="h-4 w-4" />
+              Manage Field Visits
             </Link>
           )}
           <Link
