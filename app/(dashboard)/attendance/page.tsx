@@ -19,6 +19,7 @@ import { attendanceService } from "@/features/attendance/services/attendance.ser
 import type { MyTodayAttendanceResponse } from "@/features/attendance/types/attendance.types";
 import { attendanceShiftService } from "@/features/attendance/services/attendance-shift.service";
 import type { AttendanceShift } from "@/features/attendance/types/attendance-shift.types";
+import { AttendanceCalendar } from "@/features/attendance/components/attendance-calendar/attendance-calendar";
 import { getApiErrorMessage } from "@/lib/axios";
 import { useAuthStore } from "@/store/auth.store";
 import Link from "next/link";
@@ -228,6 +229,8 @@ export default function AttendancePage() {
             canStartFieldVisit={today.state.canStartFieldVisit}
             onAttendanceChanged={refreshTodayAttendance}
           />
+
+          {company?._id ? <AttendanceCalendar companyId={company._id} /> : null}
         </>
       ) : (
         <AttendanceErrorState />
