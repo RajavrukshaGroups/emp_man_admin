@@ -63,6 +63,10 @@ type ActionMode = "RECOMMEND" | "APPROVE" | "REJECT" | "CANCEL" | null;
 export default function AttendanceRegularizationsPage() {
   const company = useAuthStore((state) => state.company);
 
+  const companyAccess = useAuthStore((state) => state.companyAccess);
+
+  const currentCompanyAccessId = companyAccess?._id ?? "";
+
   const permissions = useAuthStore((state) => state.permissions);
 
   const [data, setData] = useState<AttendanceRegularizationListResponse | null>(
@@ -254,7 +258,9 @@ export default function AttendanceRegularizationsPage() {
         toast.success("Regularization request cancelled successfully.");
       }
 
-      closeAction();
+      setActionMode(null);
+      setSelectedRegularization(null);
+      setActionText("");
 
       await loadRegularizations();
     } catch (error) {
@@ -305,7 +311,8 @@ export default function AttendanceRegularizationsPage() {
               Refresh
             </button>
 
-            {canRequest && !isManagementView && (
+            {/* {canRequest && !isManagementView && ( */}
+            {canRequest && (
               <Link
                 href="/attendance/regularizations/new"
                 className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-slate-950 px-4 text-sm font-semibold text-white transition hover:bg-slate-800"
@@ -359,26 +366,35 @@ export default function AttendanceRegularizationsPage() {
         {isLoading ? (
           <RegularizationLoadingState />
         ) : items.length === 0 ? (
-          <EmptyRegularizationState
-            canCreate={canRequest && !isManagementView}
-          />
+          <EmptyRegularizationState canCreate={canRequest} />
         ) : (
           <>
             <div className="space-y-4">
-              {items.map((item) => (
-                <RegularizationCard
-                  key={item._id}
-                  item={item}
-                  isManagementView={isManagementView}
-                  canRecommend={canRecommend}
-                  canApprove={canApprove}
-                  canCancel={canRequest && !isManagementView}
-                  onRecommend={() => openAction("RECOMMEND", item)}
-                  onApprove={() => openAction("APPROVE", item)}
-                  onReject={() => openAction("REJECT", item)}
-                  onCancel={() => openAction("CANCEL", item)}
-                />
-              ))}
+              {items.map((item) => {
+                const itemCompanyAccessId =
+                  typeof item.companyAccessId === "string"
+                    ? item.companyAccessId
+                    : item.companyAccessId._id;
+
+                const isOwnRequest =
+                  Boolean(currentCompanyAccessId) &&
+                  itemCompanyAccessId === currentCompanyAccessId;
+
+                return (
+                  <RegularizationCard
+                    key={item._id}
+                    item={item}
+                    isManagementView={isManagementView}
+                    canRecommend={canRecommend && !isOwnRequest}
+                    canApprove={canApprove && !isOwnRequest}
+                    canCancel={canRequest && isOwnRequest}
+                    onRecommend={() => openAction("RECOMMEND", item)}
+                    onApprove={() => openAction("APPROVE", item)}
+                    onReject={() => openAction("REJECT", item)}
+                    onCancel={() => openAction("CANCEL", item)}
+                  />
+                );
+              })}
             </div>
 
             <Pagination

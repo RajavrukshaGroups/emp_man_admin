@@ -442,6 +442,21 @@ export interface AttendanceRecord {
 
     isEarlyCheckout: boolean;
 
+    /**
+     * Schedule compensation evidence.
+     *
+     * These fields do NOT change attendanceStatus or totalWorkedMinutes.
+     * They only indicate whether late arrival / early checkout was
+     * compensated through qualifying work outside scheduled shift hours.
+     */
+    isLateCompensated: boolean;
+
+    lateCompensatedMinutes: number;
+
+    isEarlyCheckoutCompensated: boolean;
+
+    earlyCheckoutCompensatedMinutes: number;
+
     attendanceStatus: AttendanceStatus;
 
     calculationStatus: string;

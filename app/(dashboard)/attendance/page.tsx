@@ -5,7 +5,6 @@ import {
   CalendarCheck,
   Clock3,
   FileClock,
-  MapPin,
   Moon,
   Navigation,
   Sun,
@@ -27,7 +26,7 @@ import Link from "next/link";
 export default function AttendancePage() {
   const company = useAuthStore((state) => state.company);
 
-  const role = useAuthStore((state) => state.role);
+  // const role = useAuthStore((state) => state.role);
 
   const permissions = useAuthStore((state) => state.permissions);
 
@@ -51,11 +50,16 @@ export default function AttendancePage() {
 
   const [isLoading, setIsLoading] = useState(true);
 
-  const isCompanyAttendanceManager =
-    role?.scopeType === "COMPANY" || role?.scopeType === "GLOBAL";
+  // const isCompanyAttendanceManager =
+  //   role?.scopeType === "COMPANY" || role?.scopeType === "GLOBAL";
+
+  const canUseSelfAttendance =
+    Boolean(companyAccess?._id) && permissions.includes("attendance.check_in");
+
+  const canManageAttendance = permissions.includes("attendance.summary_read");
 
   const refreshTodayAttendance = async () => {
-    if (!company?._id || isCompanyAttendanceManager) {
+    if (!company?._id || !canUseSelfAttendance) {
       return;
     }
 
@@ -81,11 +85,10 @@ export default function AttendancePage() {
        * Company/global scoped users are attendance managers.
        * They do not use employee self-attendance here.
        */
-      if (isCompanyAttendanceManager) {
+      if (!canUseSelfAttendance) {
         setToday(null);
         setAssignedShift(null);
         setIsLoading(false);
-
         return;
       }
 
@@ -132,8 +135,7 @@ export default function AttendancePage() {
     }
 
     void loadAttendance();
-  }, [company?._id, assignedShiftId, isCompanyAttendanceManager]);
-
+  }, [company?._id, assignedShiftId, canUseSelfAttendance]);
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -149,15 +151,17 @@ export default function AttendancePage() {
             </h1>
 
             <p className="mt-1 text-sm text-slate-500">
-              {isCompanyAttendanceManager
-                ? "Monitor and manage company attendance."
-                : "Check in, manage breaks and review your attendance."}
+              {canUseSelfAttendance && canManageAttendance
+                ? "Manage company attendance and track your own attendance."
+                : canManageAttendance
+                  ? "Monitor and manage company attendance."
+                  : "Check in, manage breaks and review your attendance."}{" "}
             </p>
           </div>
         </div>
 
         {/* Employee / Team Lead attendance actions */}
-        {!isCompanyAttendanceManager && (
+        {canUseSelfAttendance && (
           <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap sm:justify-end">
             {canReadAttendanceSummary && (
               <Link
@@ -207,34 +211,35 @@ export default function AttendancePage() {
           </div>
         )}
       </div>
-
       {/* Company Administrator / company scoped role */}
-      {isCompanyAttendanceManager ? (
-        <CompanyAttendancePlaceholder
-          canReadAttendanceSummary={canReadAttendanceSummary}
-          canManageFieldVisits={canManageFieldVisits}
-        />
-      ) : isLoading ? (
-        <AttendanceLoadingState />
-      ) : today ? (
-        <>
-          <AssignedShiftCard
-            shift={assignedShift}
-            attendanceMode={companyAccess?.attendanceMode}
-          />
+      {/* Personal attendance */}
+      {canUseSelfAttendance &&
+        (isLoading ? (
+          <AttendanceLoadingState />
+        ) : today ? (
+          <>
+            <AssignedShiftCard
+              shift={assignedShift}
+              attendanceMode={companyAccess?.attendanceMode}
+            />
 
-          <AttendanceActionCard today={today} onAttendanceChanged={setToday} />
+            <AttendanceActionCard
+              today={today}
+              onAttendanceChanged={setToday}
+            />
 
-          <FieldVisitSection
-            canStartFieldVisit={today.state.canStartFieldVisit}
-            onAttendanceChanged={refreshTodayAttendance}
-          />
+            <FieldVisitSection
+              canStartFieldVisit={today.state.canStartFieldVisit}
+              onAttendanceChanged={refreshTodayAttendance}
+            />
 
-          {company?._id ? <AttendanceCalendar companyId={company._id} /> : null}
-        </>
-      ) : (
-        <AttendanceErrorState />
-      )}
+            {company?._id ? (
+              <AttendanceCalendar companyId={company._id} />
+            ) : null}
+          </>
+        ) : (
+          <AttendanceErrorState />
+        ))}
     </div>
   );
 }
@@ -319,100 +324,6 @@ function AssignedShiftCard({ shift, attendanceMode }: AssignedShiftCardProps) {
           value={formatWorkingDays(shift.workingDays)}
         />
       </div>
-    </section>
-  );
-}
-
-function CompanyAttendancePlaceholder({
-  canReadAttendanceSummary,
-  canManageFieldVisits,
-}: {
-  canReadAttendanceSummary: boolean;
-  canManageFieldVisits: boolean;
-}) {
-  return (
-    <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
-      {/* Header + Attendance Location Action */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-        <div className="min-w-0">
-          <h2 className="text-lg font-semibold text-slate-950">
-            Company attendance
-          </h2>
-
-          <p className="mt-1 max-w-2xl text-sm leading-6 text-slate-500">
-            Monitor employee attendance, regularization requests, field visits,
-            shifts, attendance locations and company attendance policies.
-          </p>
-        </div>
-
-        <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap sm:justify-end">
-          {canReadAttendanceSummary && (
-            <Link
-              href="/attendance/employees"
-              className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-50 sm:w-auto"
-            >
-              <Users className="h-4 w-4" />
-              Employee Attendance
-            </Link>
-          )}
-          {canManageFieldVisits && (
-            <Link
-              href="/attendance/field-visits/manage"
-              className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-50 sm:w-auto"
-            >
-              <Navigation className="h-4 w-4" />
-              Manage Field Visits
-            </Link>
-          )}
-          <Link
-            href="/attendance/regularizations"
-            className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-50 sm:w-auto"
-          >
-            <FileClock className="h-4 w-4" />
-            Regularizations
-          </Link>
-
-          <Link
-            href="/attendance/locations"
-            className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-50 sm:w-auto"
-          >
-            <MapPin className="h-4 w-4" />
-            Manage Attendance Locations
-          </Link>
-        </div>
-      </div>
-
-      {/* Attendance Summary */}
-      <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-          <p className="text-xs font-medium text-slate-500">Present today</p>
-
-          <p className="mt-2 text-2xl font-bold text-slate-950">--</p>
-        </div>
-
-        <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-          <p className="text-xs font-medium text-slate-500">Absent</p>
-
-          <p className="mt-2 text-2xl font-bold text-slate-950">--</p>
-        </div>
-
-        <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-          <p className="text-xs font-medium text-slate-500">Late</p>
-
-          <p className="mt-2 text-2xl font-bold text-slate-950">--</p>
-        </div>
-
-        <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-          <p className="text-xs font-medium text-slate-500">Pending requests</p>
-
-          <p className="mt-2 text-2xl font-bold text-slate-950">--</p>
-        </div>
-      </div>
-
-      <p className="mt-5 text-xs text-slate-400">
-        Company attendance dashboard data will be connected after the employee
-        attendance flow.
-      </p>
     </section>
   );
 }

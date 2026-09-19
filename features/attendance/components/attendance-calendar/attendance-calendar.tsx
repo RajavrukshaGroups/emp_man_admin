@@ -101,16 +101,6 @@ function formatStatus(status?: string) {
 
 function getStatusStyles(attendance: AttendanceRecord) {
   if (attendance.attendanceStatus === "PRESENT") {
-    if (attendance.isLate) {
-      return {
-        container:
-          "border-amber-200 bg-amber-50 text-amber-950 hover:border-amber-300",
-        badge: "bg-amber-100 text-amber-700",
-        dot: "bg-amber-500",
-        label: "Late",
-      };
-    }
-
     return {
       container:
         "border-emerald-200 bg-emerald-50 text-emerald-950 hover:border-emerald-300",
@@ -136,6 +126,35 @@ function getStatusStyles(attendance: AttendanceRecord) {
       badge: "bg-red-100 text-red-700",
       dot: "bg-red-500",
       label: "Absent",
+    };
+  }
+
+  if (attendance.attendanceStatus === "ON_LEAVE") {
+    return {
+      container: "border-sky-200 bg-sky-50 text-sky-950 hover:border-sky-300",
+      badge: "bg-sky-100 text-sky-700",
+      dot: "bg-sky-500",
+      label: "On Leave",
+    };
+  }
+
+  if (attendance.attendanceStatus === "HOLIDAY") {
+    return {
+      container:
+        "border-cyan-200 bg-cyan-50 text-cyan-950 hover:border-cyan-300",
+      badge: "bg-cyan-100 text-cyan-700",
+      dot: "bg-cyan-500",
+      label: "Holiday",
+    };
+  }
+
+  if (attendance.attendanceStatus === "WEEKLY_OFF") {
+    return {
+      container:
+        "border-slate-200 bg-slate-50 text-slate-900 hover:border-slate-300",
+      badge: "bg-slate-200 text-slate-700",
+      dot: "bg-slate-400",
+      label: "Weekly Off",
     };
   }
 
@@ -474,10 +493,29 @@ export function AttendanceCalendar({ companyId }: AttendanceCalendarProps) {
                         >
                           {styles.label}
                         </span>
+                        <div className="mt-2 space-y-1">
+                          <p className="truncate text-[10px] opacity-75 sm:text-[11px]">
+                            {formatTime(attendance.firstCheckInAt)}
+                          </p>
 
-                        <p className="mt-2 truncate text-[10px] opacity-75 sm:text-[11px]">
-                          {formatTime(attendance.firstCheckInAt)}
-                        </p>
+                          {attendance.isLate ? (
+                            <p className="truncate text-[9px] font-medium text-amber-700 sm:text-[10px]">
+                              Late {attendance.lateMinutes || 0}m
+                              {attendance.isLateCompensated
+                                ? " · Compensated"
+                                : ""}
+                            </p>
+                          ) : null}
+
+                          {attendance.isEarlyCheckout ? (
+                            <p className="truncate text-[9px] font-medium text-orange-700 sm:text-[10px]">
+                              Early {attendance.earlyCheckoutMinutes || 0}m
+                              {attendance.isEarlyCheckoutCompensated
+                                ? " · Compensated"
+                                : ""}
+                            </p>
+                          ) : null}
+                        </div>
                       </div>
                     </button>
                   );
@@ -490,8 +528,6 @@ export function AttendanceCalendar({ companyId }: AttendanceCalendarProps) {
             ================================================== */}
             <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-3 border-t border-slate-200 pt-4 text-xs text-slate-600 sm:gap-x-5">
               <LegendItem className="bg-emerald-500" label="Present" />
-
-              <LegendItem className="bg-amber-500" label="Late" />
 
               <LegendItem className="bg-violet-500" label="Half Day" />
 
@@ -528,7 +564,7 @@ export function AttendanceCalendar({ companyId }: AttendanceCalendarProps) {
             </button>
           </div>
 
-          <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-6">
+          <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-4">
             <CalendarValue
               label="Status"
               value={formatStatus(selectedAttendance.attendanceStatus)}
@@ -555,11 +591,42 @@ export function AttendanceCalendar({ companyId }: AttendanceCalendarProps) {
             />
 
             <CalendarValue
-              label="Late"
+              label="Late arrival"
               value={
                 selectedAttendance.isLate
                   ? `${selectedAttendance.lateMinutes || 0} min`
                   : "No"
+              }
+            />
+
+            <CalendarValue
+              label="Late compensation"
+              value={
+                selectedAttendance.isLate
+                  ? selectedAttendance.isLateCompensated
+                    ? `${selectedAttendance.lateCompensatedMinutes || 0} min compensated`
+                    : "Not compensated"
+                  : "Not applicable"
+              }
+            />
+
+            <CalendarValue
+              label="Early checkout"
+              value={
+                selectedAttendance.isEarlyCheckout
+                  ? `${selectedAttendance.earlyCheckoutMinutes || 0} min`
+                  : "No"
+              }
+            />
+
+            <CalendarValue
+              label="Early checkout compensation"
+              value={
+                selectedAttendance.isEarlyCheckout
+                  ? selectedAttendance.isEarlyCheckoutCompensated
+                    ? `${selectedAttendance.earlyCheckoutCompensatedMinutes || 0} min compensated`
+                    : "Not compensated"
+                  : "Not applicable"
               }
             />
           </div>
