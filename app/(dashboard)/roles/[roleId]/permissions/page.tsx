@@ -220,13 +220,13 @@ export default function RolePermissionsPage() {
     const groups = new Map<string, Permission[]>();
 
     for (const permission of filteredPermissions) {
-      const module = permission.module || "OTHER";
+      const permissionModule = permission.module || "OTHER";
 
-      const existing = groups.get(module) ?? [];
+      const existing = groups.get(permissionModule) ?? [];
 
       existing.push(permission);
 
-      groups.set(module, existing);
+      groups.set(permissionModule, existing);
     }
 
     return Array.from(groups.entries())

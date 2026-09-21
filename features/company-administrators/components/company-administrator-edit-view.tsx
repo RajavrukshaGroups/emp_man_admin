@@ -131,7 +131,7 @@ export function CompanyAdministratorEditView({
 
         <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-500">
           Update personal information, company access details and verification
-          settings for the company's primary administrator.
+          settings for the company&apos;s primary administrator.
         </p>
       </div>
 

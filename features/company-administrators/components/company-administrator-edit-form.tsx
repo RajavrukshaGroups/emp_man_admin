@@ -261,7 +261,7 @@ export function CompanyAdministratorEditForm({
           </p>
 
           <p className="mt-1 text-sm leading-6 text-blue-700">
-            Use the separate Reset Password option when the administrator's
+            Use the separate Reset Password option when the administrator&apos;s
             login password needs to be changed.
           </p>
         </div>
@@ -389,7 +389,8 @@ export function CompanyAdministratorEditForm({
                 <p className="font-semibold text-slate-800">Email verified</p>
 
                 <p className="mt-1 text-sm leading-6 text-slate-500">
-                  Mark the administrator's current email address as verified.
+                  Mark the administrator&apos;s current email address as
+                  verified.
                 </p>
               </div>
             </label>
@@ -408,7 +409,8 @@ export function CompanyAdministratorEditForm({
                 <p className="font-semibold text-slate-800">Mobile verified</p>
 
                 <p className="mt-1 text-sm leading-6 text-slate-500">
-                  Mark the administrator's current mobile number as verified.
+                  Mark the administrator&apos;s current mobile number as
+                  verified.
                 </p>
               </div>
             </label>

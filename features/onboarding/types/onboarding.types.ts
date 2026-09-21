@@ -2,11 +2,15 @@ import type { CompanyAccess } from "@/features/company-access/types/company-acce
 import type { Employee } from "@/features/employees/types/employee.types";
 import type { User } from "@/features/users/types/user.types";
 
+export type OnboardingStep =
+    | "USER_ACCOUNT"
+    | "COMPANY_ACCESS"
+    | "EMPLOYEE_PROFILE";
+
 export type OnboardingNextStep =
     | "COMPANY_ACCESS"
     | "EMPLOYEE_PROFILE"
     | "COMPLETED";
-
 export interface OnboardingUser extends User {
     onboardingStatus:
     | "USER_CREATED"
@@ -47,3 +51,4 @@ export interface OnboardingListParams {
     | "COMPANY_ACCESS_CREATED"
     | "COMPLETED";
 }
+

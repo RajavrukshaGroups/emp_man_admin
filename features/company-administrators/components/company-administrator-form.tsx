@@ -396,7 +396,7 @@ export function CompanyAdministratorForm({
                 <p className="font-semibold text-slate-800">Email verified</p>
 
                 <p className="mt-1 text-sm leading-6 text-slate-500">
-                  Mark the administrator's email address as verified
+                  Mark the administrator&apos;s email address as verified
                   immediately.
                 </p>
               </div>
@@ -415,7 +415,7 @@ export function CompanyAdministratorForm({
                 <p className="font-semibold text-slate-800">Mobile verified</p>
 
                 <p className="mt-1 text-sm leading-6 text-slate-500">
-                  Mark the administrator's mobile number as verified
+                  Mark the administrator&apos;s mobile number as verified
                   immediately.
                 </p>
               </div>

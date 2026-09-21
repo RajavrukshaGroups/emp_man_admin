@@ -400,7 +400,7 @@ export function ManageTeamLeads({ teamId }: ManageTeamLeadsProps) {
 
               <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-slate-500">
                 There are no active company-access records assigned to this
-                team's department.
+                team&apos;s department.
               </p>
             </div>
           ) : (

@@ -195,5 +195,7 @@ export interface CreateCompanyPayload {
     status?: CompanyStatus;
 }
 
-export interface UpdateCompanyPayload
-    extends Partial<CreateCompanyPayload> { }
+// export interface UpdateCompanyPayload
+//     extends Partial<CreateCompanyPayload> { }
+export type UpdateCompanyPayload =
+    Partial<CreateCompanyPayload>;
