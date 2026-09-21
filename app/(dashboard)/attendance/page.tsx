@@ -26,8 +26,7 @@ import Link from "next/link";
 export default function AttendancePage() {
   const company = useAuthStore((state) => state.company);
 
-  // const role = useAuthStore((state) => state.role);
-
+  const role = useAuthStore((state) => state.role);
   const permissions = useAuthStore((state) => state.permissions);
 
   const canReadAttendanceSummary =
@@ -44,6 +43,8 @@ export default function AttendancePage() {
 
   const [today, setToday] = useState<MyTodayAttendanceResponse | null>(null);
 
+  const [calendarRefreshKey, setCalendarRefreshKey] = useState(0);
+
   const [assignedShift, setAssignedShift] = useState<AttendanceShift | null>(
     null,
   );
@@ -53,8 +54,12 @@ export default function AttendancePage() {
   // const isCompanyAttendanceManager =
   //   role?.scopeType === "COMPANY" || role?.scopeType === "GLOBAL";
 
+  const isCompanyAdministrator = role?.code === "COMPANY_ADMIN";
+
   const canUseSelfAttendance =
-    Boolean(companyAccess?._id) && permissions.includes("attendance.check_in");
+    !isCompanyAdministrator &&
+    Boolean(companyAccess?._id) &&
+    permissions.includes("attendance.check_in");
 
   const canManageAttendance = permissions.includes("attendance.summary_read");
 
@@ -67,11 +72,19 @@ export default function AttendancePage() {
       const attendanceResult = await attendanceService.getMyToday(company._id);
 
       setToday(attendanceResult);
+      setCalendarRefreshKey((current) => current + 1);
     } catch (error) {
       toast.error(
         getApiErrorMessage(error, "Unable to refresh today's attendance."),
       );
     }
+  };
+
+  const handleAttendanceChanged = (
+    attendanceResult: MyTodayAttendanceResponse,
+  ) => {
+    setToday(attendanceResult);
+    setCalendarRefreshKey((current) => current + 1);
   };
 
   useEffect(() => {
@@ -82,8 +95,8 @@ export default function AttendancePage() {
       }
 
       /**
-       * Company/global scoped users are attendance managers.
-       * They do not use employee self-attendance here.
+       * Management-only company administrators do not load
+       * employee self-attendance.
        */
       if (!canUseSelfAttendance) {
         setToday(null);
@@ -151,17 +164,21 @@ export default function AttendancePage() {
             </h1>
 
             <p className="mt-1 text-sm text-slate-500">
-              {canUseSelfAttendance && canManageAttendance
-                ? "Manage company attendance and track your own attendance."
-                : canManageAttendance
-                  ? "Monitor and manage company attendance."
-                  : "Check in, manage breaks and review your attendance."}{" "}
+              {isCompanyAdministrator
+                ? "Monitor and manage company attendance."
+                : canUseSelfAttendance && canManageAttendance
+                  ? "Manage company attendance and track your own attendance."
+                  : canManageAttendance
+                    ? "Monitor and manage company attendance."
+                    : "Check in, manage breaks and review your attendance."}
             </p>
           </div>
         </div>
 
         {/* Employee / Team Lead attendance actions */}
-        {canUseSelfAttendance && (
+        {(isCompanyAdministrator ||
+          canUseSelfAttendance ||
+          canManageAttendance) && (
           <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap sm:justify-end">
             {canReadAttendanceSummary && (
               <Link
@@ -193,13 +210,15 @@ export default function AttendancePage() {
               </Link>
             )}
 
-            <Link
-              href="/attendance/history"
-              className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-50 sm:w-auto"
-            >
-              <Clock3 className="h-4 w-4" />
-              View History
-            </Link>
+            {canUseSelfAttendance && (
+              <Link
+                href="/attendance/history"
+                className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-50 sm:w-auto"
+              >
+                <Clock3 className="h-4 w-4" />
+                View History
+              </Link>
+            )}
 
             <Link
               href="/attendance/regularizations"
@@ -211,10 +230,20 @@ export default function AttendancePage() {
           </div>
         )}
       </div>
-      {/* Company Administrator / company scoped role */}
-      {/* Personal attendance */}
-      {canUseSelfAttendance &&
-        (isLoading ? (
+      {/* Company Administrator management-only view */}
+      {isCompanyAdministrator ? (
+        <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+          <h2 className="text-lg font-semibold text-slate-950">
+            Company attendance management
+          </h2>
+
+          <p className="mt-2 text-sm text-slate-500">
+            Use the management actions above to review employee attendance,
+            field visits and regularization requests.
+          </p>
+        </section>
+      ) : canUseSelfAttendance ? (
+        isLoading ? (
           <AttendanceLoadingState />
         ) : today ? (
           <>
@@ -225,7 +254,8 @@ export default function AttendancePage() {
 
             <AttendanceActionCard
               today={today}
-              onAttendanceChanged={setToday}
+              // onAttendanceChanged={setToday}
+              onAttendanceChanged={handleAttendanceChanged}
             />
 
             <FieldVisitSection
@@ -234,12 +264,17 @@ export default function AttendancePage() {
             />
 
             {company?._id ? (
-              <AttendanceCalendar companyId={company._id} />
+              // <AttendanceCalendar companyId={company._id} />
+              <AttendanceCalendar
+                companyId={company._id}
+                refreshKey={calendarRefreshKey}
+              />
             ) : null}
           </>
         ) : (
           <AttendanceErrorState />
-        ))}
+        )
+      ) : null}
     </div>
   );
 }

@@ -15,6 +15,7 @@ import type { AttendanceRecord } from "@/features/attendance/types/attendance.ty
 
 interface AttendanceCalendarProps {
   companyId: string;
+  refreshKey?: number;
 }
 
 const WEEK_DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -166,7 +167,10 @@ function getStatusStyles(attendance: AttendanceRecord) {
   };
 }
 
-export function AttendanceCalendar({ companyId }: AttendanceCalendarProps) {
+export function AttendanceCalendar({
+  companyId,
+  refreshKey = 0,
+}: AttendanceCalendarProps) {
   const [selectedMonth, setSelectedMonth] = useState(() => new Date());
 
   const [items, setItems] = useState<AttendanceRecord[]>([]);
@@ -210,8 +214,8 @@ export function AttendanceCalendar({ companyId }: AttendanceCalendarProps) {
 
   useEffect(() => {
     void loadAttendance();
-  }, [loadAttendance]);
-
+  }, [loadAttendance, refreshKey]);
+  
   const attendanceByDate = useMemo(() => {
     const map = new Map<string, AttendanceRecord>();
 
