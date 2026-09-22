@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { Clock3, Moon, Plus, RefreshCw, Search, Sun } from "lucide-react";
 import { toast } from "sonner";
 
@@ -25,11 +26,18 @@ const WEEKDAY_LABELS: Record<number, string> = {
 };
 
 export default function AttendanceShiftsPage() {
+  const router = useRouter();
   const company = useAuthStore((state) => state.company);
 
   const permissions = useAuthStore((state) => state.permissions);
 
   const canManageShifts = permissions.includes("attendance.shift_manage");
+
+  useEffect(() => {
+    if (!canManageShifts) {
+      router.replace("/attendance");
+    }
+  }, [canManageShifts, router]);
 
   const [data, setData] = useState<AttendanceShiftListResponse | null>(null);
 
@@ -46,7 +54,7 @@ export default function AttendanceShiftsPage() {
   );
 
   const loadShifts = useCallback(async () => {
-    if (!company?._id) {
+    if (!company?._id || !canManageShifts) {
       setIsLoading(false);
       return;
     }
@@ -71,7 +79,7 @@ export default function AttendanceShiftsPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [company?._id, search, status]);
+  }, [company?._id, search, status, canManageShifts]);
 
   useEffect(() => {
     void loadShifts();
@@ -87,6 +95,10 @@ export default function AttendanceShiftsPage() {
       data?.items.filter((shift) => shift.status === "INACTIVE").length ?? 0,
     [data],
   );
+
+  if (!canManageShifts) {
+    return null;
+  }
 
   return (
     <div className="space-y-6">

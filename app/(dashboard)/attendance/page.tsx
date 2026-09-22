@@ -3,8 +3,10 @@
 import { useEffect, useState } from "react";
 import {
   CalendarCheck,
+  CalendarClock,
   Clock3,
   FileClock,
+  MapPin,
   Moon,
   Navigation,
   Sun,
@@ -36,6 +38,12 @@ export default function AttendancePage() {
     permissions?.includes("attendance.field_visit_read") ?? false;
 
   const canManageFieldVisits = canReadFieldVisits && canReadAttendanceSummary;
+
+  const canManageLocations =
+    permissions?.includes("attendance.location_manage") ?? false;
+
+  const canManageShifts =
+    permissions?.includes("attendance.shift_manage") ?? false;
 
   const companyAccess = useAuthStore((state) => state.companyAccess);
 
@@ -187,6 +195,26 @@ export default function AttendancePage() {
               >
                 <Users className="h-4 w-4" />
                 Team Attendance
+              </Link>
+            )}
+
+            {canManageLocations && (
+              <Link
+                href="/attendance/locations"
+                className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-50 sm:w-auto"
+              >
+                <MapPin className="h-4 w-4" />
+                Manage Locations
+              </Link>
+            )}
+
+            {canManageShifts && (
+              <Link
+                href="/attendance/shifts"
+                className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-50 sm:w-auto"
+              >
+                <CalendarClock className="h-4 w-4" />
+                Manage Shifts
               </Link>
             )}
 

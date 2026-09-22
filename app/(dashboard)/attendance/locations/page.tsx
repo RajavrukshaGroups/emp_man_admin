@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { Building2, MapPin, Plus, RefreshCw, Search } from "lucide-react";
 import { toast } from "sonner";
 
@@ -14,11 +15,18 @@ import { getApiErrorMessage } from "@/lib/axios";
 import { useAuthStore } from "@/store/auth.store";
 
 export default function AttendanceLocationsPage() {
+  const router = useRouter();
   const company = useAuthStore((state) => state.company);
 
   const permissions = useAuthStore((state) => state.permissions);
 
   const canManageLocations = permissions.includes("attendance.location_manage");
+
+  useEffect(() => {
+    if (!canManageLocations) {
+      router.replace("/attendance");
+    }
+  }, [canManageLocations, router]);
 
   const [data, setData] = useState<AttendanceLocationListResponse | null>(null);
 
@@ -32,7 +40,7 @@ export default function AttendanceLocationsPage() {
     useState<AttendanceLocation | null>(null);
 
   const loadLocations = useCallback(async () => {
-    if (!company?._id) {
+    if (!company?._id || !canManageLocations) {
       setIsLoading(false);
       return;
     }
@@ -54,11 +62,15 @@ export default function AttendanceLocationsPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [company?._id, search]);
+  }, [company?._id, search, canManageLocations]);
 
   useEffect(() => {
     void loadLocations();
   }, [loadLocations]);
+
+  if (!canManageLocations) {
+    return null;
+  }
 
   return (
     <div className="space-y-6">
