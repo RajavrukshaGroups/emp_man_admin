@@ -1,5 +1,6 @@
 import {
     CalendarCheck,
+    CalendarDays,
     LayoutDashboard,
     Network,
     ShieldCheck,
@@ -55,6 +56,12 @@ export const dashboardNavigation: DashboardNavigationItem[] = [
         href: "/attendance",
         icon: CalendarCheck,
         permission: "attendance.read",
+    },
+    {
+        title: "Leave",
+        href: "/leave",
+        icon: CalendarDays,
+        permission: "leave.read",
     },
     {
         title: "Work Categories",
