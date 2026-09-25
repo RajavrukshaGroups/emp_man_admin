@@ -102,6 +102,19 @@ export default function ApplyLeavePage() {
     );
   }, [selectedLeaveBalance]);
 
+  const selectedPeriodKey = useMemo(() => {
+    if (!form.fromDate || !form.toDate) {
+      return null;
+    }
+
+    // V1 eligibility calculation handles one calendar month at a time.
+    if (form.fromDate.slice(0, 7) !== form.toDate.slice(0, 7)) {
+      return null;
+    }
+
+    return form.fromDate.slice(0, 7);
+  }, [form.fromDate, form.toDate]);
+
   const selectedCalendarDays = useMemo(() => {
     if (!form.fromDate || !form.toDate) {
       return 0;
@@ -125,6 +138,88 @@ export default function ApplyLeavePage() {
       1
     );
   }, [form.fromDate, form.toDate]);
+
+  const leaveEligibility = useMemo(() => {
+    return leaveTypes.map((leaveType) => {
+      const balance = leaveBalances.find(
+        (item) => getLeaveTypeIdFromBalance(item) === leaveType._id,
+      );
+
+      const usableDays = getUsableLeaveDaysForPeriod(
+        leaveType,
+        balance,
+        selectedPeriodKey,
+      );
+
+      return {
+        leaveType,
+        balance,
+        usableDays,
+      };
+    });
+  }, [leaveTypes, leaveBalances, selectedPeriodKey]);
+
+  const hasSelectedDates = Boolean(form.fromDate && form.toDate);
+
+  const hasUsablePaidLeave = useMemo(() => {
+    if (!hasSelectedDates || !selectedPeriodKey) {
+      return false;
+    }
+
+    return leaveEligibility.some(
+      ({ leaveType, usableDays }) =>
+        leaveType.paymentType === "PAID" && usableDays > 0,
+    );
+  }, [leaveEligibility, hasSelectedDates, selectedPeriodKey]);
+
+  const selectableLeaveTypes = useMemo(() => {
+    if (!hasSelectedDates || !selectedPeriodKey) {
+      return [];
+    }
+
+    return leaveTypes.filter((leaveType) => {
+      /*
+       * Paid leave is selectable only when it is actually usable
+       * for the selected period.
+       */
+      if (leaveType.paymentType === "PAID") {
+        const eligibility = leaveEligibility.find(
+          (item) => item.leaveType._id === leaveType._id,
+        );
+
+        return (eligibility?.usableDays ?? 0) > 0;
+      }
+
+      /*
+       * Unpaid leave becomes selectable only when there is
+       * no usable paid leave for the selected period.
+       */
+      return !hasUsablePaidLeave;
+    });
+  }, [
+    leaveTypes,
+    leaveEligibility,
+    hasSelectedDates,
+    selectedPeriodKey,
+    hasUsablePaidLeave,
+  ]);
+
+  useEffect(() => {
+    if (!form.leaveTypeId) {
+      return;
+    }
+
+    const isStillSelectable = selectableLeaveTypes.some(
+      (leaveType) => leaveType._id === form.leaveTypeId,
+    );
+
+    if (!isStillSelectable) {
+      setForm((current) => ({
+        ...current,
+        leaveTypeId: "",
+      }));
+    }
+  }, [selectableLeaveTypes, form.leaveTypeId]);
 
   const exceedsMaximumConsecutiveDays =
     selectedLeaveType?.maximumConsecutiveDays != null &&
@@ -359,120 +454,6 @@ export default function ApplyLeavePage() {
           </div>
 
           <div className="space-y-6 p-5 sm:p-6">
-            {/* Leave Type */}
-
-            <div>
-              <label className="mb-2 block text-sm font-semibold text-slate-700">
-                Leave type
-                <span className="ml-1 text-red-500">*</span>
-              </label>
-
-              <select
-                value={form.leaveTypeId}
-                onChange={(event) =>
-                  updateForm("leaveTypeId", event.target.value)
-                }
-                disabled={isLoadingTypes || isSubmitting}
-                className="h-11 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm text-slate-900 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 disabled:bg-slate-50"
-              >
-                <option value="">
-                  {isLoadingTypes
-                    ? "Loading leave types..."
-                    : "Select leave type"}
-                </option>
-
-                {leaveTypes.map((leaveType) => (
-                  <option key={leaveType._id} value={leaveType._id}>
-                    {leaveType.name} ({leaveType.code}) —{" "}
-                    {leaveType.paymentType === "PAID" ? "Paid" : "Unpaid"}{" "}
-                  </option>
-                ))}
-              </select>
-
-              {!isLoadingTypes && leaveTypes.length === 0 && (
-                <p className="mt-2 text-xs text-amber-600">
-                  No active leave types are currently available.
-                </p>
-              )}
-
-              {!isLoadingTypes && leaveTypes.length > 0 && (
-                <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-4">
-                  <p className="text-sm font-bold text-slate-900">
-                    Your leave availability
-                  </p>
-
-                  <p className="mt-1 text-xs leading-5 text-slate-500">
-                    Review your paid leave availability before selecting unpaid
-                    leave.
-                  </p>
-
-                  <div className="mt-3 space-y-2">
-                    {leaveTypes.map((leaveType) => {
-                      const balance = leaveBalances.find((item) => {
-                        const leaveTypeId =
-                          typeof item.leaveTypeId === "string"
-                            ? item.leaveTypeId
-                            : item.leaveTypeId?._id;
-
-                        return leaveTypeId === leaveType._id;
-                      });
-
-                      const available = balance
-                        ? Number(balance.allocatedDays ?? 0) +
-                          Number(balance.accruedDays ?? 0) +
-                          Number(balance.carriedForwardDays ?? 0) +
-                          Number(balance.adjustedDays ?? 0) -
-                          Number(balance.pendingDays ?? 0) -
-                          Number(balance.usedDays ?? 0) -
-                          Number(balance.lapsedDays ?? 0)
-                        : 0;
-
-                      return (
-                        <div
-                          key={leaveType._id}
-                          className="flex flex-col gap-1 rounded-lg bg-white px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between"
-                        >
-                          <div>
-                            <p className="text-sm font-semibold text-slate-800">
-                              {leaveType.name}
-                            </p>
-
-                            <p className="text-xs text-slate-500">
-                              {leaveType.paymentType === "PAID"
-                                ? "Paid leave"
-                                : "Unpaid leave"}
-                            </p>
-                          </div>
-
-                          <div className="text-left sm:text-right">
-                            {leaveType.requiresBalance ? (
-                              isLoadingBalances ? (
-                                <p className="text-xs text-slate-400">
-                                  Loading balance...
-                                </p>
-                              ) : balance ? (
-                                <p className="text-sm font-bold text-slate-900">
-                                  {formatDays(available)} available
-                                </p>
-                              ) : (
-                                <p className="text-xs font-semibold text-amber-700">
-                                  No balance available
-                                </p>
-                              )
-                            ) : (
-                              <p className="text-xs font-semibold text-amber-700">
-                                No balance required
-                              </p>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-            </div>
-
             {/* Dates */}
 
             <div className="grid gap-4 sm:grid-cols-2">
@@ -498,6 +479,179 @@ export default function ApplyLeavePage() {
                   className={inputClassName}
                 />
               </FormField>
+            </div>
+
+            {/* Leave Type */}
+
+            <div>
+              <label className="mb-2 block text-sm font-semibold text-slate-700">
+                Leave type
+                <span className="ml-1 text-red-500">*</span>
+              </label>
+
+              <select
+                value={form.leaveTypeId}
+                onChange={(event) =>
+                  updateForm("leaveTypeId", event.target.value)
+                }
+                disabled={isLoadingTypes || isSubmitting || !hasSelectedDates}
+                className="h-11 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm text-slate-900 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 disabled:bg-slate-50"
+              >
+                <option value="">
+                  {isLoadingTypes
+                    ? "Loading leave types..."
+                    : !hasSelectedDates
+                      ? "Select leave dates first"
+                      : "Select leave type"}
+                </option>
+
+                {selectableLeaveTypes.map((leaveType) => (
+                  <option key={leaveType._id} value={leaveType._id}>
+                    {leaveType.name} ({leaveType.code}) —{" "}
+                    {leaveType.paymentType === "PAID" ? "Paid" : "Unpaid"}{" "}
+                  </option>
+                ))}
+              </select>
+
+              {!isLoadingTypes && leaveTypes.length === 0 && (
+                <p className="mt-2 text-xs text-amber-600">
+                  No active leave types are currently available.
+                </p>
+              )}
+
+              {!isLoadingTypes && leaveTypes.length > 0 && (
+                <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-4">
+                  <p className="text-sm font-bold text-slate-900">
+                    Your leave availability
+                  </p>
+
+                  <p className="mt-1 text-xs leading-5 text-slate-500">
+                    Review your paid leave availability before selecting unpaid
+                    leave.
+                  </p>
+
+                  <div className="mt-3 space-y-2">
+                    {leaveEligibility.map(
+                      ({ leaveType, balance, usableDays }) => {
+                        const aggregateAvailable = balance
+                          ? Number(balance.allocatedDays ?? 0) +
+                            Number(balance.accruedDays ?? 0) +
+                            Number(balance.carriedForwardDays ?? 0) +
+                            Number(balance.adjustedDays ?? 0) -
+                            Number(balance.pendingDays ?? 0) -
+                            Number(balance.usedDays ?? 0) -
+                            Number(balance.lapsedDays ?? 0)
+                          : 0;
+
+                        const monthlyBalance =
+                          selectedPeriodKey &&
+                          leaveType.allocationMethod === "MONTHLY_ACCRUAL"
+                            ? balance?.monthlyBalances?.find(
+                                (item) => item.periodKey === selectedPeriodKey,
+                              )
+                            : undefined;
+
+                        const monthlyUsageReached =
+                          selectedPeriodKey != null &&
+                          leaveType.allocationMethod === "MONTHLY_ACCRUAL" &&
+                          leaveType.maximumMonthlyUsageDays != null &&
+                          Number(monthlyBalance?.usedDays ?? 0) +
+                            Number(monthlyBalance?.pendingDays ?? 0) >=
+                            Number(leaveType.maximumMonthlyUsageDays);
+
+                        return (
+                          <div
+                            key={leaveType._id}
+                            className="flex flex-col gap-1 rounded-lg bg-white px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between"
+                          >
+                            <div>
+                              <p className="text-sm font-semibold text-slate-800">
+                                {leaveType.name}
+                              </p>
+
+                              <p className="text-xs text-slate-500">
+                                {leaveType.paymentType === "PAID"
+                                  ? "Paid leave"
+                                  : "Unpaid leave"}
+                              </p>
+                            </div>
+
+                            <div className="text-left sm:text-right">
+                              {!form.fromDate || !form.toDate ? (
+                                leaveType.requiresBalance ? (
+                                  isLoadingBalances ? (
+                                    <p className="text-xs text-slate-400">
+                                      Loading balance...
+                                    </p>
+                                  ) : balance ? (
+                                    <>
+                                      <p className="text-sm font-bold text-slate-900">
+                                        {formatDays(aggregateAvailable)} total
+                                        balance
+                                      </p>
+
+                                      <p className="mt-0.5 text-xs text-slate-500">
+                                        Select dates to check availability
+                                      </p>
+                                    </>
+                                  ) : (
+                                    <p className="text-xs font-semibold text-amber-700">
+                                      No balance available
+                                    </p>
+                                  )
+                                ) : (
+                                  <p className="text-xs font-semibold text-amber-700">
+                                    No balance required
+                                  </p>
+                                )
+                              ) : leaveType.paymentType === "UNPAID" ? (
+                                <p className="text-xs font-semibold text-amber-700">
+                                  Unpaid leave
+                                </p>
+                              ) : !balance ? (
+                                <p className="text-xs font-semibold text-amber-700">
+                                  No balance available
+                                </p>
+                              ) : usableDays > 0 ? (
+                                <>
+                                  <p className="text-sm font-bold text-emerald-700">
+                                    {formatDays(usableDays)} usable
+                                  </p>
+
+                                  {aggregateAvailable !== usableDays && (
+                                    <p className="mt-0.5 text-xs text-slate-400">
+                                      {formatDays(aggregateAvailable)} total
+                                      balance
+                                    </p>
+                                  )}
+                                </>
+                              ) : (
+                                <>
+                                  <p className="text-sm font-bold text-amber-700">
+                                    Not available for selected dates
+                                  </p>
+
+                                  {monthlyUsageReached && (
+                                    <p className="mt-0.5 text-xs text-slate-500">
+                                      Monthly usage limit reached
+                                    </p>
+                                  )}
+                                  {aggregateAvailable > 0 && (
+                                    <p className="mt-0.5 text-xs text-slate-400">
+                                      {formatDays(aggregateAvailable)} remain in
+                                      your total balance
+                                    </p>
+                                  )}
+                                </>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      },
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
 
             {exceedsMaximumConsecutiveDays && selectedLeaveType && (
@@ -856,4 +1010,98 @@ function formatDays(value: number) {
   const normalized = Number(Number(value ?? 0).toFixed(2));
 
   return `${normalized} day${normalized === 1 ? "" : "s"}`;
+}
+
+function getLeaveTypeIdFromBalance(balance: LeaveBalance) {
+  return typeof balance.leaveTypeId === "string"
+    ? balance.leaveTypeId
+    : balance.leaveTypeId?._id;
+}
+
+function getUsableLeaveDaysForPeriod(
+  leaveType: LeaveType,
+  balance: LeaveBalance | undefined,
+  periodKey: string | null,
+) {
+  if (leaveType.paymentType !== "PAID") {
+    return 0;
+  }
+
+  if (!leaveType.requiresBalance) {
+    return Number.POSITIVE_INFINITY;
+  }
+
+  if (!balance) {
+    return 0;
+  }
+
+  const aggregateAvailable =
+    Number(balance.allocatedDays ?? 0) +
+    Number(balance.accruedDays ?? 0) +
+    Number(balance.carriedForwardDays ?? 0) +
+    Number(balance.adjustedDays ?? 0) -
+    Number(balance.pendingDays ?? 0) -
+    Number(balance.usedDays ?? 0) -
+    Number(balance.lapsedDays ?? 0);
+
+  if (aggregateAvailable <= 0) {
+    return 0;
+  }
+
+  /*
+   * Non-monthly leave types can use the aggregate balance.
+   */
+  if (leaveType.allocationMethod !== "MONTHLY_ACCRUAL") {
+    return aggregateAvailable;
+  }
+
+  /*
+   * Monthly eligibility depends on the selected month.
+   */
+  if (!periodKey) {
+    return 0;
+  }
+
+  const monthlyBalance = balance.monthlyBalances?.find(
+    (item) => item.periodKey === periodKey,
+  );
+
+  if (!monthlyBalance) {
+    return 0;
+  }
+
+  const monthlyAvailable =
+    Number(monthlyBalance.creditedDays ?? 0) +
+    Number(monthlyBalance.adjustedDays ?? 0) -
+    Number(monthlyBalance.pendingDays ?? 0) -
+    Number(monthlyBalance.usedDays ?? 0) -
+    Number(monthlyBalance.lapsedDays ?? 0);
+
+  if (monthlyAvailable <= 0) {
+    return 0;
+  }
+
+  /*
+   * A monthly usage cap is separate from balance.
+   *
+   * Pending requests are included because those days are already
+   * reserved and should not be offered again in the UI.
+   */
+  if (leaveType.maximumMonthlyUsageDays != null) {
+    const alreadyCommitted =
+      Number(monthlyBalance.usedDays ?? 0) +
+      Number(monthlyBalance.pendingDays ?? 0);
+
+    const remainingMonthlyUsage = Math.max(
+      0,
+      Number(leaveType.maximumMonthlyUsageDays) - alreadyCommitted,
+    );
+
+    return Math.max(
+      0,
+      Math.min(aggregateAvailable, monthlyAvailable, remainingMonthlyUsage),
+    );
+  }
+
+  return Math.max(0, Math.min(aggregateAvailable, monthlyAvailable));
 }

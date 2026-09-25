@@ -60,6 +60,7 @@ export default function LeaveRequestsPage() {
   const canReject = permissions.includes("leave.reject");
   const canCancel = permissions.includes("leave.cancel");
 
+  const isLeaveManager = canRecommend || canApprove || canReject;
   const [requests, setRequests] = useState<LeaveRequest[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -304,8 +305,7 @@ export default function LeaveRequestsPage() {
   if (!canRead) {
     return (
       <div className="space-y-6">
-        <PageHeader />
-
+        <PageHeader isLeaveManager={isLeaveManager} />
         <EmptyState
           title="Leave requests unavailable"
           description="You do not have permission to view leave requests."
@@ -321,8 +321,7 @@ export default function LeaveRequestsPage() {
          ===================================================== */}
 
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-        <PageHeader />
-
+        <PageHeader isLeaveManager={isLeaveManager} />
         <div className="flex gap-2">
           <button
             type="button"
@@ -799,7 +798,7 @@ function ActionModal({
    SMALL COMPONENTS
    ========================================================= */
 
-function PageHeader() {
+function PageHeader({ isLeaveManager }: { isLeaveManager: boolean }) {
   return (
     <div className="flex items-start gap-3">
       <Link
@@ -815,8 +814,9 @@ function PageHeader() {
         </h1>
 
         <p className="mt-1 text-sm text-slate-500">
-          Review and manage leave requests available within your authorized
-          scope.
+          {isLeaveManager
+            ? "Review and manage leave requests available within your authorized scope."
+            : "View and manage your leave requests."}
         </p>
       </div>
     </div>

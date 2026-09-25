@@ -14,8 +14,18 @@ import {
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
+import { employeeService } from "@/features/employees/services/employee.service";
+import type { Employee } from "@/features/employees/types/employee.types";
+
 import { leaveBalanceService } from "@/features/leave/services/leave-balance.service";
-import type { LeaveBalance } from "@/features/leave/types/leave.types";
+import { leavePolicyService } from "@/features/leave/services/leave-policy.service";
+import { leaveTypeService } from "@/features/leave/services/leave-type.service";
+
+import type {
+  LeaveBalance,
+  LeavePolicy,
+  LeaveType,
+} from "@/features/leave/types/leave.types";
 
 import { getApiErrorMessage } from "@/lib/axios";
 import { useAuthStore } from "@/store/auth.store";
@@ -42,6 +52,32 @@ export default function LeaveBalancesPage() {
   const [adjustmentReason, setAdjustmentReason] = useState("");
   const [adjustmentPeriodKey, setAdjustmentPeriodKey] = useState("");
   const [isAdjusting, setIsAdjusting] = useState(false);
+
+  /* =========================================================
+   INITIALIZE BALANCE
+   ========================================================= */
+
+  const [isInitializeOpen, setIsInitializeOpen] = useState(false);
+
+  const [employees, setEmployees] = useState<Employee[]>([]);
+  const [leaveTypes, setLeaveTypes] = useState<LeaveType[]>([]);
+  const [leavePolicies, setLeavePolicies] = useState<LeavePolicy[]>([]);
+
+  const [initializeEmployeeId, setInitializeEmployeeId] = useState("");
+  const [initializeLeaveTypeId, setInitializeLeaveTypeId] = useState("");
+  const [initializePolicyId, setInitializePolicyId] = useState("");
+
+  const [isLoadingInitializeData, setIsLoadingInitializeData] = useState(false);
+
+  const [isInitializing, setIsInitializing] = useState(false);
+
+  /* =========================================================
+   MONTHLY LEAVE CREDIT
+   ========================================================= */
+
+  const [creditBalance, setCreditBalance] = useState<LeaveBalance | null>(null);
+  const [creditPeriodKey, setCreditPeriodKey] = useState("");
+  const [isCrediting, setIsCrediting] = useState(false);
   /* =========================================================
      LOAD BALANCES
      ========================================================= */
@@ -73,6 +109,203 @@ export default function LeaveBalancesPage() {
       setIsLoading(false);
     }
   }, [company?._id, canRead]);
+
+  const loadInitializeData = useCallback(async () => {
+    if (!company?._id || !canManage) {
+      return;
+    }
+
+    try {
+      setIsLoadingInitializeData(true);
+
+      const [employeeResult, leaveTypeResult, policyResult] = await Promise.all(
+        [
+          employeeService.getEmployees(company._id, {
+            page: 1,
+            limit: 100,
+          }),
+
+          leaveTypeService.list(company._id, {
+            page: 1,
+            limit: 100,
+            status: "ACTIVE",
+            sortBy: "name",
+            sortOrder: "asc",
+          }),
+
+          leavePolicyService.list(company._id, {
+            page: 1,
+            limit: 100,
+            status: "ACTIVE",
+            isDefault: true,
+          }),
+        ],
+      );
+
+      setEmployees(employeeResult.records);
+
+      setLeaveTypes(
+        leaveTypeResult.items.filter(
+          (leaveType) =>
+            leaveType.requiresBalance &&
+            leaveType.allocationMethod !== "NO_BALANCE",
+        ),
+      );
+
+      setLeavePolicies(policyResult.items);
+
+      const defaultPolicy = policyResult.items.find(
+        (policy) => policy.isDefault,
+      );
+
+      setInitializePolicyId(defaultPolicy?._id ?? "");
+    } catch (error) {
+      toast.error(
+        getApiErrorMessage(
+          error,
+          "Unable to load leave balance initialization data.",
+        ),
+      );
+    } finally {
+      setIsLoadingInitializeData(false);
+    }
+  }, [company?._id, canManage]);
+
+  function openInitializeBalance() {
+    if (!canManage) {
+      toast.error("You do not have permission to initialize leave balances.");
+      return;
+    }
+
+    setInitializeEmployeeId("");
+    setInitializeLeaveTypeId("");
+    setInitializePolicyId("");
+    setIsInitializeOpen(true);
+
+    void loadInitializeData();
+  }
+
+  function closeInitializeBalance() {
+    if (isInitializing) {
+      return;
+    }
+
+    setIsInitializeOpen(false);
+    setInitializeEmployeeId("");
+    setInitializeLeaveTypeId("");
+    setInitializePolicyId("");
+  }
+
+  const selectedInitializePolicy = useMemo(
+    () =>
+      leavePolicies.find((policy) => policy._id === initializePolicyId) ?? null,
+    [leavePolicies, initializePolicyId],
+  );
+
+  const initializeLeaveYear = useMemo(() => {
+    if (!selectedInitializePolicy) {
+      return null;
+    }
+
+    return getLeaveYearForDate(
+      new Date(),
+      selectedInitializePolicy.leaveYearStartMonth ?? 1,
+      selectedInitializePolicy.leaveYearStartDay ?? 1,
+    );
+  }, [selectedInitializePolicy]);
+
+  const availableInitializeLeaveTypes = useMemo(() => {
+    if (!initializeEmployeeId || !initializeLeaveYear) {
+      return leaveTypes;
+    }
+
+    return leaveTypes.filter((leaveType) => {
+      const alreadyInitialized = balances.some((balance) => {
+        const balanceEmployeeId =
+          typeof balance.employeeId === "string"
+            ? balance.employeeId
+            : balance.employeeId?._id;
+
+        const balanceLeaveTypeId =
+          typeof balance.leaveTypeId === "string"
+            ? balance.leaveTypeId
+            : balance.leaveTypeId?._id;
+
+        return (
+          balanceEmployeeId === initializeEmployeeId &&
+          balanceLeaveTypeId === leaveType._id &&
+          balance.leaveYearStart.slice(0, 10) === initializeLeaveYear.start &&
+          balance.leaveYearEnd.slice(0, 10) === initializeLeaveYear.end
+        );
+      });
+
+      return !alreadyInitialized;
+    });
+  }, [leaveTypes, balances, initializeEmployeeId, initializeLeaveYear]);
+
+  async function handleInitializeBalance(
+    event: React.FormEvent<HTMLFormElement>,
+  ) {
+    event.preventDefault();
+
+    if (!company?._id) {
+      return;
+    }
+
+    if (!canManage) {
+      toast.error("You do not have permission to initialize leave balances.");
+      return;
+    }
+
+    if (!initializeEmployeeId) {
+      toast.error("Select an employee.");
+      return;
+    }
+
+    if (!initializeLeaveTypeId) {
+      toast.error("Select a leave type.");
+      return;
+    }
+
+    if (!initializePolicyId) {
+      toast.error("No active default leave policy is available.");
+      return;
+    }
+
+    if (!initializeLeaveYear) {
+      toast.error("Unable to determine the current leave year.");
+      return;
+    }
+
+    try {
+      setIsInitializing(true);
+
+      await leaveBalanceService.initialize(company._id, {
+        employeeId: initializeEmployeeId,
+        leaveTypeId: initializeLeaveTypeId,
+        leavePolicyId: initializePolicyId,
+        leaveYearStart: initializeLeaveYear.start,
+        leaveYearEnd: initializeLeaveYear.end,
+        leaveYearLabel: initializeLeaveYear.label,
+        carriedForwardDays: 0,
+      });
+
+      toast.success("Leave balance initialized successfully.");
+
+      setIsInitializeOpen(false);
+      setInitializeEmployeeId("");
+      setInitializeLeaveTypeId("");
+      setInitializePolicyId("");
+
+      await loadBalances();
+    } catch (error) {
+      toast.error(
+        getApiErrorMessage(error, "Unable to initialize leave balance."),
+      );
+    } finally {
+      setIsInitializing(false);
+    }
+  }
 
   useEffect(() => {
     void loadBalances();
@@ -134,6 +367,84 @@ export default function LeaveBalancesPage() {
     setAdjustmentDays("");
     setAdjustmentReason("");
     setAdjustmentPeriodKey("");
+  }
+
+  /* =========================================================
+   MONTHLY LEAVE CREDIT
+   ========================================================= */
+
+  function openMonthlyCredit(balance: LeaveBalance) {
+    if (!canManage) {
+      toast.error("You do not have permission to credit leave balances.");
+      return;
+    }
+
+    if (balance.allocationMethod !== "MONTHLY_ACCRUAL") {
+      toast.error(
+        "Monthly credit is only available for monthly-accrual leave.",
+      );
+      return;
+    }
+
+    const availablePeriods = getAvailableAccrualPeriods(balance);
+    const currentPeriodKey = getCurrentPeriodKey();
+
+    const defaultPeriod =
+      availablePeriods.find((period) => period.value === currentPeriodKey)
+        ?.value ??
+      availablePeriods[0]?.value ??
+      "";
+
+    setCreditBalance(balance);
+    setCreditPeriodKey(defaultPeriod);
+  }
+
+  function closeMonthlyCredit() {
+    if (isCrediting) {
+      return;
+    }
+
+    setCreditBalance(null);
+    setCreditPeriodKey("");
+  }
+
+  async function handleMonthlyCredit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    if (!company?._id || !creditBalance) {
+      return;
+    }
+
+    if (!canManage) {
+      toast.error("You do not have permission to credit leave balances.");
+      return;
+    }
+
+    if (!creditPeriodKey) {
+      toast.error("Select a month to credit.");
+      return;
+    }
+
+    try {
+      setIsCrediting(true);
+
+      await leaveBalanceService.accrue(company._id, creditBalance._id, {
+        periodDate: `${creditPeriodKey}-01`,
+      });
+
+      toast.success(
+        `Monthly leave credited for ${formatPeriodKey(creditPeriodKey)}.`,
+      );
+
+      setCreditBalance(null);
+      setCreditPeriodKey("");
+
+      await loadBalances();
+    } catch (error) {
+      toast.error(getApiErrorMessage(error, "Unable to credit monthly leave."));
+    } finally {
+      setIsCrediting(false);
+    }
   }
 
   /* =========================================================
@@ -223,16 +534,30 @@ export default function LeaveBalancesPage() {
     <div className="space-y-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <PageHeader />
+        <div className="flex flex-wrap items-center gap-2">
+          {canManage && (
+            <button
+              type="button"
+              onClick={openInitializeBalance}
+              className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-slate-950 px-4 text-sm font-semibold text-white transition hover:bg-slate-800"
+            >
+              <Plus className="h-4 w-4" />
+              Initialize Balance
+            </button>
+          )}
 
-        <button
-          type="button"
-          onClick={() => void loadBalances()}
-          disabled={isLoading}
-          className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-50"
-        >
-          <RefreshCw className={`h-4 w-4 ${isLoading ? "animate-spin" : ""}`} />
-          Refresh
-        </button>
+          <button
+            type="button"
+            onClick={() => void loadBalances()}
+            disabled={isLoading}
+            className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-50"
+          >
+            <RefreshCw
+              className={`h-4 w-4 ${isLoading ? "animate-spin" : ""}`}
+            />
+            Refresh
+          </button>
+        </div>
       </div>
 
       {/* =====================================================
@@ -290,10 +615,364 @@ export default function LeaveBalancesPage() {
                 balance={balance}
                 canManage={canManage}
                 onAdjust={() => openAdjustment(balance)}
+                onCreditMonthly={() => openMonthlyCredit(balance)}
               />
             ))}
           </div>
         </section>
+      )}
+
+      {/* =====================================================
+    INITIALIZE BALANCE MODAL
+   ===================================================== */}
+
+      {isInitializeOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-slate-950/50 p-3 sm:p-4">
+          <div className="flex max-h-[calc(100dvh-24px)] w-full max-w-lg flex-col overflow-hidden rounded-2xl bg-white shadow-xl sm:max-h-[calc(100dvh-32px)]">
+            {/* HEADER */}
+            <div className="flex shrink-0 items-start justify-between border-b border-slate-100 p-4 sm:p-5">
+              <div className="min-w-0 pr-3">
+                <h2 className="text-lg font-bold text-slate-950">
+                  Initialize Leave Balance
+                </h2>
+
+                <p className="mt-1 text-sm text-slate-500">
+                  Create a leave balance for an employee.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={closeInitializeBalance}
+                disabled={isInitializing}
+                className="shrink-0 rounded-lg p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 disabled:opacity-50"
+                aria-label="Close initialize balance modal"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <form
+              onSubmit={handleInitializeBalance}
+              className="flex min-h-0 flex-1 flex-col"
+            >
+              <div className="min-h-0 flex-1 overflow-y-auto">
+                <div className="space-y-5 p-4 sm:p-5">
+                  {isLoadingInitializeData ? (
+                    <div className="flex items-center justify-center gap-2 py-10 text-sm text-slate-500">
+                      <Loader2 className="h-5 w-5 animate-spin" />
+                      Loading employees and leave configuration...
+                    </div>
+                  ) : (
+                    <>
+                      {/* EMPLOYEE */}
+                      <div>
+                        <label className="mb-2 block text-sm font-semibold text-slate-700">
+                          Employee
+                        </label>
+
+                        <select
+                          value={initializeEmployeeId}
+                          onChange={(event) => {
+                            setInitializeEmployeeId(event.target.value);
+                            setInitializeLeaveTypeId("");
+                          }}
+                          disabled={isInitializing}
+                          className={inputClassName}
+                        >
+                          <option value="">Select employee</option>
+
+                          {employees.map((employee) => (
+                            <option key={employee._id} value={employee._id}>
+                              {getEmployeeOptionLabel(employee)}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      {/* LEAVE TYPE */}
+                      <div>
+                        <label className="mb-2 block text-sm font-semibold text-slate-700">
+                          Leave type
+                        </label>
+
+                        <select
+                          value={initializeLeaveTypeId}
+                          onChange={(event) =>
+                            setInitializeLeaveTypeId(event.target.value)
+                          }
+                          disabled={isInitializing}
+                          className={inputClassName}
+                        >
+                          <option value="">Select leave type</option>
+
+                          {availableInitializeLeaveTypes.map((leaveType) => (
+                            <option key={leaveType._id} value={leaveType._id}>
+                              {leaveType.name} ({leaveType.code})
+                            </option>
+                          ))}
+                        </select>
+                        {initializeEmployeeId &&
+                          availableInitializeLeaveTypes.length === 0 && (
+                            <p className="mt-2 text-sm text-amber-600">
+                              All applicable leave balances are already
+                              initialized for this employee for the current
+                              leave year.
+                            </p>
+                          )}
+                      </div>
+
+                      {/* POLICY */}
+                      <div>
+                        <label className="mb-2 block text-sm font-semibold text-slate-700">
+                          Leave policy
+                        </label>
+
+                        <select
+                          value={initializePolicyId}
+                          onChange={(event) =>
+                            setInitializePolicyId(event.target.value)
+                          }
+                          disabled={isInitializing}
+                          className={inputClassName}
+                        >
+                          <option value="">Select policy</option>
+
+                          {leavePolicies.map((policy) => (
+                            <option key={policy._id} value={policy._id}>
+                              {policy.name}
+                              {policy.isDefault ? " (Default)" : ""}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      {/* LEAVE YEAR */}
+                      {initializeLeaveYear && (
+                        <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                          <p className="text-xs font-medium text-slate-400">
+                            Leave year
+                          </p>
+
+                          <p className="mt-1 font-bold text-slate-950">
+                            {initializeLeaveYear.label}
+                          </p>
+
+                          <p className="mt-1 text-xs text-slate-500">
+                            {initializeLeaveYear.start} to{" "}
+                            {initializeLeaveYear.end}
+                          </p>
+                        </div>
+                      )}
+
+                      <div className="rounded-xl border border-blue-100 bg-blue-50 p-4 text-sm leading-6 text-blue-800">
+                        The initial balance will be calculated according to the
+                        selected leave type and company leave policy.
+                      </div>
+                    </>
+                  )}
+                </div>
+              </div>
+
+              {/* FOOTER */}
+              <div className="flex shrink-0 flex-col-reverse gap-2 border-t border-slate-100 bg-slate-50 p-4 sm:flex-row sm:justify-end sm:p-5">
+                <button
+                  type="button"
+                  onClick={closeInitializeBalance}
+                  disabled={isInitializing}
+                  className="h-10 rounded-xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 transition hover:bg-slate-100 disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+
+                <button
+                  type="submit"
+                  disabled={
+                    isInitializing ||
+                    isLoadingInitializeData ||
+                    !initializeEmployeeId ||
+                    !initializeLeaveTypeId ||
+                    !initializePolicyId ||
+                    !initializeLeaveYear
+                  }
+                  className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-slate-950 px-4 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {isInitializing && (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  )}
+                  Initialize Balance
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* =====================================================
+    MONTHLY LEAVE CREDIT MODAL
+   ===================================================== */}
+
+      {creditBalance && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-slate-950/50 p-3 sm:p-4">
+          <div className="flex max-h-[calc(100dvh-24px)] w-full max-w-lg flex-col overflow-hidden rounded-2xl bg-white shadow-xl sm:max-h-[calc(100dvh-32px)]">
+            {/* HEADER */}
+            <div className="flex shrink-0 items-start justify-between border-b border-slate-100 p-4 sm:p-5">
+              <div className="min-w-0 pr-3">
+                <h2 className="text-lg font-bold text-slate-950">
+                  Credit Monthly Leave
+                </h2>
+
+                <p className="mt-1 truncate text-sm text-slate-500">
+                  {getEmployeeName(creditBalance)} ·{" "}
+                  {getLeaveTypeName(creditBalance)}
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={closeMonthlyCredit}
+                disabled={isCrediting}
+                className="shrink-0 rounded-lg p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 disabled:opacity-50"
+                aria-label="Close monthly leave credit modal"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <form
+              onSubmit={handleMonthlyCredit}
+              className="flex min-h-0 flex-1 flex-col"
+            >
+              {/* BODY */}
+              <div className="min-h-0 flex-1 overflow-y-auto">
+                <div className="space-y-5 p-4 sm:p-5">
+                  {/* EMPLOYEE / LEAVE TYPE */}
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <div className="rounded-xl bg-slate-50 p-4">
+                      <p className="text-xs font-medium text-slate-400">
+                        Employee
+                      </p>
+
+                      <p className="mt-1 font-bold text-slate-950">
+                        {getEmployeeName(creditBalance)}
+                      </p>
+                    </div>
+
+                    <div className="rounded-xl bg-slate-50 p-4">
+                      <p className="text-xs font-medium text-slate-400">
+                        Leave type
+                      </p>
+
+                      <p className="mt-1 font-bold text-slate-950">
+                        {getLeaveTypeName(creditBalance)}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* MONTH */}
+                  <div>
+                    <label className="mb-2 block text-sm font-semibold text-slate-700">
+                      Credit month
+                    </label>
+
+                    <select
+                      value={creditPeriodKey}
+                      onChange={(event) =>
+                        setCreditPeriodKey(event.target.value)
+                      }
+                      disabled={isCrediting}
+                      className={inputClassName}
+                    >
+                      <option value="">Select month</option>
+
+                      {getAvailableAccrualPeriods(creditBalance).map(
+                        (period) => (
+                          <option key={period.value} value={period.value}>
+                            {period.label}
+                          </option>
+                        ),
+                      )}
+                    </select>
+
+                    <p className="mt-1.5 text-xs text-slate-500">
+                      Only months that have not already been credited are
+                      available.
+                    </p>
+                  </div>
+
+                  {/* MONTHLY ENTITLEMENT */}
+                  <div className="rounded-xl border border-blue-100 bg-blue-50 p-4">
+                    <p className="text-xs font-medium text-blue-600">
+                      Monthly entitlement
+                    </p>
+
+                    <p className="mt-1 text-xl font-bold text-blue-950">
+                      {formatDays(getMonthlyEntitlement(creditBalance))}
+                    </p>
+
+                    <p className="mt-1 text-xs leading-5 text-blue-700">
+                      This is configured in the Leave Type settings and will be
+                      credited automatically for the selected month.
+                    </p>
+                  </div>
+
+                  {/* LEAVE YEAR */}
+                  <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                    <p className="text-xs font-medium text-slate-400">
+                      Leave year
+                    </p>
+
+                    <p className="mt-1 font-bold text-slate-950">
+                      {creditBalance.leaveYearLabel}
+                    </p>
+
+                    <p className="mt-1 text-xs text-slate-500">
+                      {creditBalance.leaveYearStart.slice(0, 10)} to{" "}
+                      {creditBalance.leaveYearEnd.slice(0, 10)}
+                    </p>
+                  </div>
+
+                  {/* INFO */}
+                  <div className="rounded-xl border border-blue-100 bg-blue-50 p-4 text-sm leading-6 text-blue-800">
+                    This credits the configured monthly entitlement for the
+                    selected leave type. Use Adjust Balance only for manual HR
+                    corrections or exceptional changes.
+                  </div>
+
+                  {getAvailableAccrualPeriods(creditBalance).length === 0 && (
+                    <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+                      There are no uncredited months available for this leave
+                      balance.
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* FOOTER */}
+              <div className="flex shrink-0 flex-col-reverse gap-2 border-t border-slate-100 bg-slate-50 p-4 sm:flex-row sm:justify-end sm:p-5">
+                <button
+                  type="button"
+                  onClick={closeMonthlyCredit}
+                  disabled={isCrediting}
+                  className="h-10 rounded-xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 transition hover:bg-slate-100 disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+
+                <button
+                  type="submit"
+                  disabled={isCrediting || !creditPeriodKey}
+                  className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-slate-950 px-4 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {isCrediting && <Loader2 className="h-4 w-4 animate-spin" />}
+                  {isCrediting
+                    ? "Crediting..."
+                    : `Credit ${formatDays(getMonthlyEntitlement(creditBalance))}`}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
       )}
 
       {/* =====================================================
@@ -488,10 +1167,12 @@ function BalanceRow({
   balance,
   canManage,
   onAdjust,
+  onCreditMonthly,
 }: {
   balance: LeaveBalance;
   canManage: boolean;
   onAdjust: () => void;
+  onCreditMonthly: () => void;
 }) {
   const available = getAvailableDays(balance);
 
@@ -553,13 +1234,25 @@ function BalanceRow({
         )}
 
         {canManage && (
-          <button
-            type="button"
-            onClick={onAdjust}
-            className="h-10 shrink-0 rounded-xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
-          >
-            Adjust Balance
-          </button>
+          <div className="flex shrink-0 flex-wrap gap-2">
+            {balance.allocationMethod === "MONTHLY_ACCRUAL" && (
+              <button
+                type="button"
+                onClick={onCreditMonthly}
+                className="h-10 rounded-xl bg-slate-950 px-4 text-sm font-semibold text-white transition hover:bg-slate-800"
+              >
+                Credit Monthly Leave
+              </button>
+            )}
+
+            <button
+              type="button"
+              onClick={onAdjust}
+              className="h-10 rounded-xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+            >
+              Adjust Balance
+            </button>
+          </div>
         )}
       </div>
     </div>
@@ -801,6 +1494,16 @@ function getLeaveTypeName(balance: LeaveBalance) {
   return leaveType?.name ?? leaveType?.code ?? "Leave";
 }
 
+function getMonthlyEntitlement(balance: LeaveBalance) {
+  const leaveType = balance.leaveTypeId;
+
+  if (typeof leaveType === "string" || !leaveType) {
+    return 0;
+  }
+
+  return Number(leaveType.monthlyEntitlementDays ?? 0);
+}
+
 function formatDays(value: number) {
   const normalized = Number(value.toFixed(2));
 
@@ -865,6 +1568,64 @@ function getMonthlyAdjustmentPeriods(balance: LeaveBalance) {
   return periods;
 }
 
+function getAvailableAccrualPeriods(balance: LeaveBalance) {
+  if (balance.allocationMethod !== "MONTHLY_ACCRUAL") {
+    return [];
+  }
+
+  const start = new Date(balance.leaveYearStart);
+  const end = new Date(balance.leaveYearEnd);
+
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
+    return [];
+  }
+
+  const alreadyCreditedPeriods = new Set(
+    (balance.monthlyBalances ?? []).map((month) => month.periodKey),
+  );
+
+  const currentPeriodKey = getCurrentPeriodKey();
+
+  const periods: Array<{
+    value: string;
+    label: string;
+  }> = [];
+
+  const cursor = new Date(
+    Date.UTC(start.getUTCFullYear(), start.getUTCMonth(), 1),
+  );
+
+  const finalMonth = new Date(
+    Date.UTC(end.getUTCFullYear(), end.getUTCMonth(), 1),
+  );
+
+  while (cursor <= finalMonth) {
+    const year = cursor.getUTCFullYear();
+    const month = cursor.getUTCMonth();
+
+    const periodKey = `${year}-${String(month + 1).padStart(2, "0")}`;
+
+    // Do not allow future months.
+    if (
+      periodKey <= currentPeriodKey &&
+      !alreadyCreditedPeriods.has(periodKey)
+    ) {
+      periods.push({
+        value: periodKey,
+        label: cursor.toLocaleDateString("en-IN", {
+          month: "long",
+          year: "numeric",
+          timeZone: "UTC",
+        }),
+      });
+    }
+
+    cursor.setUTCMonth(cursor.getUTCMonth() + 1);
+  }
+
+  return periods;
+}
+
 function formatPeriodKey(periodKey: string) {
   const [year, month] = periodKey.split("-").map(Number);
 
@@ -877,6 +1638,68 @@ function formatPeriodKey(periodKey: string) {
     year: "numeric",
     timeZone: "UTC",
   });
+}
+
+function getLeaveYearForDate(date: Date, startMonth: number, startDay: number) {
+  const currentYear = date.getFullYear();
+
+  const currentDate = new Date(currentYear, date.getMonth(), date.getDate());
+
+  const startThisYear = new Date(currentYear, startMonth - 1, startDay);
+
+  const startYear =
+    currentDate >= startThisYear ? currentYear : currentYear - 1;
+
+  const leaveYearStart = new Date(startYear, startMonth - 1, startDay);
+
+  const leaveYearEnd = new Date(startYear + 1, startMonth - 1, startDay);
+
+  leaveYearEnd.setDate(leaveYearEnd.getDate() - 1);
+
+  return {
+    start: formatDateForApi(leaveYearStart),
+    end: formatDateForApi(leaveYearEnd),
+    label: `${leaveYearStart.getFullYear()}-${leaveYearEnd.getFullYear()}`,
+  };
+}
+
+function formatDateForApi(date: Date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+
+  return `${year}-${month}-${day}`;
+}
+
+function getEmployeeOptionLabel(employee: Employee) {
+  const user = employee.userId;
+
+  if (user && typeof user !== "string") {
+    const name =
+      user.displayName ||
+      [user.firstName, user.middleName, user.lastName]
+        .filter(Boolean)
+        .join(" ");
+
+    const companyAccess = employee.companyAccessId;
+
+    const employeeCode =
+      companyAccess && typeof companyAccess !== "string"
+        ? companyAccess.employeeCode
+        : "";
+
+    return employeeCode
+      ? `${name || "Employee"} (${employeeCode})`
+      : name || "Employee";
+  }
+
+  const companyAccess = employee.companyAccessId;
+
+  if (companyAccess && typeof companyAccess !== "string") {
+    return companyAccess.employeeCode || "Employee";
+  }
+
+  return "Employee";
 }
 
 const inputClassName =
