@@ -68,6 +68,32 @@ export interface LeaveBalanceListFilters {
     sortOrder?: "asc" | "desc";
 }
 
+/* =========================================================
+   SUMMARY
+   ========================================================= */
+
+export interface LeaveBalanceSummary {
+    totalBalances: number;
+    availableDays: number;
+    pendingDays: number;
+    usedDays: number;
+}
+
+export interface LeaveBalanceSummaryFilters {
+    employeeId?: string;
+    companyAccessId?: string;
+
+    leaveTypeId?: string;
+    leavePolicyId?: string;
+
+    allocationMethod?: LeaveAllocationMethod;
+
+    status?: LeaveBalanceStatus;
+
+    leaveYearStart?: string;
+    leaveYearEnd?: string;
+}
+
 export interface EmployeeLeaveBalanceFilters {
     leaveTypeId?: string;
 
@@ -102,6 +128,37 @@ export interface InitializeLeaveBalancePayload {
     carriedForwardDays?: number;
 }
 
+export interface InitializeBulkLeaveBalancesPayload {
+    leavePolicyId: string;
+
+    leaveYearStart: string;
+    leaveYearEnd: string;
+    leaveYearLabel: string;
+
+    /**
+     * Omit or send an empty array to initialize
+     * all eligible active employees.
+     */
+    employeeIds?: string[];
+}
+
+export interface InitializeBulkLeaveBalancesResult {
+    processedEmployees: number;
+    processedLeaveTypes: number;
+    possibleBalances: number;
+
+    created: number;
+    skippedExisting: number;
+
+    failedBatches: number;
+
+    failures: Array<{
+        message: string;
+        employeeId?: string;
+        leaveTypeId?: string;
+    }>;
+}
+
 export interface AdjustLeaveBalancePayload {
     adjustmentDays: number;
     periodKey?: string;
@@ -110,6 +167,31 @@ export interface AdjustLeaveBalancePayload {
 
 export interface AccrueLeaveBalancePayload {
     periodDate: string;
+}
+
+export interface AccrueBulkLeaveBalancesPayload {
+    periodDate: string;
+}
+
+export interface AccrueBulkLeaveBalancesResult {
+    periodKey: string;
+
+    processed: number;
+    eligible: number;
+    accrued: number;
+    alreadyAccrued: number;
+
+    skippedInactiveEmployee: number;
+    skippedInactiveCompanyAccess: number;
+
+    failed: number;
+
+    failures: Array<{
+        balanceId?: string;
+        employeeId?: string;
+        leaveTypeId?: string;
+        message: string;
+    }>;
 }
 
 /* =========================================================
@@ -142,6 +224,27 @@ function buildListParams(filters?: LeaveBalanceListFilters) {
 
         sortBy: filters.sortBy,
         sortOrder: filters.sortOrder,
+    };
+}
+
+function buildSummaryParams(filters?: LeaveBalanceSummaryFilters) {
+    if (!filters) {
+        return undefined;
+    }
+
+    return {
+        employeeId: filters.employeeId,
+        companyAccessId: filters.companyAccessId,
+
+        leaveTypeId: filters.leaveTypeId,
+        leavePolicyId: filters.leavePolicyId,
+
+        allocationMethod: filters.allocationMethod,
+
+        status: filters.status,
+
+        leaveYearStart: filters.leaveYearStart,
+        leaveYearEnd: filters.leaveYearEnd,
     };
 }
 
@@ -187,6 +290,32 @@ export const leaveBalanceService = {
     },
 
     /**
+ * Bulk initialize leave balances.
+ *
+ * When employeeIds is omitted or empty,
+ * the backend initializes missing balances for
+ * all eligible active employees in the company.
+ *
+ * Existing balances are skipped safely.
+ *
+ * Requires:
+ * leave.balance_manage
+ */
+    async initializeBulk(
+        companyId: string,
+        payload: InitializeBulkLeaveBalancesPayload,
+    ): Promise<InitializeBulkLeaveBalancesResult> {
+        const response = await api.post<
+            ApiResponse<InitializeBulkLeaveBalancesResult>
+        >(
+            `/companies/${companyId}/leave/balances/initialize-bulk`,
+            payload,
+        );
+
+        return response.data.data;
+    },
+
+    /**
      * List leave balances visible to the authenticated user.
      *
      * Backend scope remains authoritative.
@@ -199,6 +328,30 @@ export const leaveBalanceService = {
             `/companies/${companyId}/leave/balances`,
             {
                 params: buildListParams(filters),
+            },
+        );
+
+        return response.data.data;
+    },
+
+    /**
+ * Get aggregate leave balance totals visible to
+ * the authenticated user.
+ *
+ * The backend applies the same scope restrictions
+ * as the balance list.
+ *
+ * Requires:
+ * leave.balance_read
+ */
+    async getSummary(
+        companyId: string,
+        filters?: LeaveBalanceSummaryFilters,
+    ): Promise<LeaveBalanceSummary> {
+        const response = await api.get<ApiResponse<LeaveBalanceSummary>>(
+            `/companies/${companyId}/leave/balances/summary`,
+            {
+                params: buildSummaryParams(filters),
             },
         );
 
@@ -271,6 +424,29 @@ export const leaveBalanceService = {
     ): Promise<LeaveBalance> {
         const response = await api.post<ApiResponse<LeaveBalance>>(
             `/companies/${companyId}/leave/balances/${balanceId}/accrue`,
+            payload,
+        );
+
+        return response.data.data;
+    },
+
+    /**
+ * Credit all eligible MONTHLY_ACCRUAL leave balances
+ * for a company for the selected month.
+ *
+ * Existing accruals are skipped safely by the backend.
+ *
+ * Requires:
+ * leave.balance_manage
+ */
+    async accrueBulk(
+        companyId: string,
+        payload: AccrueBulkLeaveBalancesPayload,
+    ): Promise<AccrueBulkLeaveBalancesResult> {
+        const response = await api.post<
+            ApiResponse<AccrueBulkLeaveBalancesResult>
+        >(
+            `/companies/${companyId}/leave/balances/accrue-bulk`,
             payload,
         );
 

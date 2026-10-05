@@ -582,9 +582,31 @@ function RequestRow({
             </div>
           </div>
 
-          <p className="mt-1 text-xs text-slate-500">
-            {formatDays(request.requestedDays)}
-          </p>
+          <div className="mt-2 space-y-1.5">
+            <p className="text-xs text-slate-500">
+              {formatDays(request.requestedDays)} requested
+            </p>
+
+            <div className="flex flex-wrap items-center gap-1.5">
+              {request.paidDays > 0 && (
+                <span className="inline-flex rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-700 ring-1 ring-inset ring-emerald-600/20">
+                  {formatDays(request.paidDays)} paid
+                </span>
+              )}
+
+              {request.unpaidDays > 0 && (
+                <span className="inline-flex rounded-full bg-red-50 px-2 py-0.5 text-[11px] font-semibold text-red-700 ring-1 ring-inset ring-red-600/20">
+                  {formatDays(request.unpaidDays)} unpaid
+                </span>
+              )}
+            </div>
+
+            {request.payrollAdjustmentRequired && request.unpaidDays > 0 && (
+              <p className="text-[11px] font-medium text-amber-700">
+                Payroll adjustment applicable
+              </p>
+            )}
+          </div>
         </div>
 
         {/* =====================================================

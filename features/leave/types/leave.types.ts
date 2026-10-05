@@ -64,6 +64,11 @@ export type LeaveDayClassification =
     | "WEEKLY_OFF"
     | "PUBLIC_HOLIDAY";
 
+export type LeaveDateAllocationType =
+    | "PAID"
+    | "UNPAID"
+    | "MIXED"
+    | "NOT_APPLICABLE";
 /* =========================================================
    COMMON REFERENCES
    ========================================================= */
@@ -237,6 +242,13 @@ export interface LeavePolicy {
 export interface LeaveMonthlyBalance {
     periodKey: string;
 
+    /**
+     * True when this month's entitlement has actually been credited.
+     *
+     * False means the bucket may only exist for a future reservation.
+     */
+    isAccrued?: boolean;
+
     creditedDays: number;
     adjustedDays: number;
     pendingDays: number;
@@ -319,6 +331,19 @@ export interface LeaveDateDetail {
     countedAsLeave: boolean;
 
     attendanceId: string | null;
+
+    allocationType: LeaveDateAllocationType;
+
+    paidDays: number;
+    unpaidDays: number;
+
+    paidLeaveTypeId: string | null;
+    paidLeaveTypeName: string;
+    paidLeaveTypeCode: string;
+
+    unpaidLeaveTypeId: string | null;
+    unpaidLeaveTypeName: string;
+    unpaidLeaveTypeCode: string;
 }
 
 export interface LeaveBalanceAllocation {
@@ -379,6 +404,9 @@ export interface LeaveRequest {
     dateDetails: LeaveDateDetail[];
 
     requestedDays: number;
+
+    paidDays: number;
+    unpaidDays: number;
 
     reason: string;
 
@@ -449,6 +477,42 @@ export interface CreateLeaveRequestPayload {
     reason: string;
 
     attachmentUrl?: string;
+}
+
+export interface LeaveRequestPreviewType {
+    id: string;
+    name: string;
+    code: string;
+    paymentType: LeavePaymentType;
+    allocationMethod: LeaveAllocationMethod;
+}
+
+export interface LeaveRequestPreviewUnpaidType {
+    id: string;
+    name: string;
+    code: string;
+}
+
+export interface LeaveRequestPreview {
+    leaveType: LeaveRequestPreviewType;
+
+    unpaidLeaveType: LeaveRequestPreviewUnpaidType | null;
+
+    fromDate: string;
+    toDate: string;
+
+    startDayPortion: LeaveDayPortion;
+    endDayPortion: LeaveDayPortion;
+
+    requestedDays: number;
+    paidDays: number;
+    unpaidDays: number;
+
+    payrollAdjustmentRequired: boolean;
+
+    balanceAllocations: LeaveBalanceAllocation[];
+
+    dateDetails: LeaveDateDetail[];
 }
 
 export interface LeaveActionPayload {

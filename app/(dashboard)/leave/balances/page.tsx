@@ -17,7 +17,10 @@ import { toast } from "sonner";
 import { employeeService } from "@/features/employees/services/employee.service";
 import type { Employee } from "@/features/employees/types/employee.types";
 
-import { leaveBalanceService } from "@/features/leave/services/leave-balance.service";
+import {
+  leaveBalanceService,
+  type LeaveBalanceSummary,
+} from "@/features/leave/services/leave-balance.service";
 import { leavePolicyService } from "@/features/leave/services/leave-policy.service";
 import { leaveTypeService } from "@/features/leave/services/leave-type.service";
 
@@ -44,10 +47,35 @@ export default function LeaveBalancesPage() {
   const [balances, setBalances] = useState<LeaveBalance[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
+  const [balanceSummary, setBalanceSummary] = useState<LeaveBalanceSummary>({
+    totalBalances: 0,
+    availableDays: 0,
+    pendingDays: 0,
+    usedDays: 0,
+  });
+
+  const [isSummaryLoading, setIsSummaryLoading] = useState(true);
+
+  const [balancePage, setBalancePage] = useState(1);
+  const [balanceLimit] = useState(20);
+
+  const [balanceSearchInput, setBalanceSearchInput] = useState("");
+  const [balanceSearch, setBalanceSearch] = useState("");
+
+  const [balancePagination, setBalancePagination] = useState({
+    page: 1,
+    limit: 20,
+    total: 0,
+    totalPages: 1,
+  });
+
   const [selectedBalance, setSelectedBalance] = useState<LeaveBalance | null>(
     null,
   );
 
+  const [detailsBalance, setDetailsBalance] = useState<LeaveBalance | null>(
+    null,
+  );
   const [adjustmentDays, setAdjustmentDays] = useState("");
   const [adjustmentReason, setAdjustmentReason] = useState("");
   const [adjustmentPeriodKey, setAdjustmentPeriodKey] = useState("");
@@ -60,9 +88,21 @@ export default function LeaveBalancesPage() {
   const [isInitializeOpen, setIsInitializeOpen] = useState(false);
 
   const [employees, setEmployees] = useState<Employee[]>([]);
+  const [employeeSearchInput, setEmployeeSearchInput] = useState("");
+  const [employeeSearch, setEmployeeSearch] = useState("");
+  const [isSearchingEmployees, setIsSearchingEmployees] = useState(false);
+  const [selectedInitializeEmployee, setSelectedInitializeEmployee] =
+    useState<Employee | null>(null);
+
+  const [employeeExistingBalances, setEmployeeExistingBalances] = useState<
+    LeaveBalance[]
+  >([]);
+
+  const [isLoadingEmployeeBalances, setIsLoadingEmployeeBalances] =
+    useState(false);
+
   const [leaveTypes, setLeaveTypes] = useState<LeaveType[]>([]);
   const [leavePolicies, setLeavePolicies] = useState<LeavePolicy[]>([]);
-
   const [initializeEmployeeId, setInitializeEmployeeId] = useState("");
   const [initializeLeaveTypeId, setInitializeLeaveTypeId] = useState("");
   const [initializePolicyId, setInitializePolicyId] = useState("");
@@ -71,6 +111,7 @@ export default function LeaveBalancesPage() {
 
   const [isInitializing, setIsInitializing] = useState(false);
 
+  const [isBulkInitializing, setIsBulkInitializing] = useState(false);
   /* =========================================================
    MONTHLY LEAVE CREDIT
    ========================================================= */
@@ -78,6 +119,64 @@ export default function LeaveBalancesPage() {
   const [creditBalance, setCreditBalance] = useState<LeaveBalance | null>(null);
   const [creditPeriodKey, setCreditPeriodKey] = useState("");
   const [isCrediting, setIsCrediting] = useState(false);
+
+  /* =========================================================
+   BULK MONTHLY LEAVE ACCRUAL
+   ========================================================= */
+
+  const [isBulkAccrualOpen, setIsBulkAccrualOpen] = useState(false);
+  const [bulkAccrualPeriodKey, setBulkAccrualPeriodKey] = useState("");
+  const [isBulkAccruing, setIsBulkAccruing] = useState(false);
+
+  const loadSummary = useCallback(async () => {
+    if (!company?._id || !canRead) {
+      setBalanceSummary({
+        totalBalances: 0,
+        availableDays: 0,
+        pendingDays: 0,
+        usedDays: 0,
+      });
+
+      setIsSummaryLoading(false);
+      return;
+    }
+
+    try {
+      setIsSummaryLoading(true);
+
+      const result = await leaveBalanceService.getSummary(company._id, {
+        status: "ACTIVE",
+      });
+
+      setBalanceSummary(result);
+    } catch (error) {
+      setBalanceSummary({
+        totalBalances: 0,
+        availableDays: 0,
+        pendingDays: 0,
+        usedDays: 0,
+      });
+
+      toast.error(
+        getApiErrorMessage(error, "Unable to load leave balance summary."),
+      );
+    } finally {
+      setIsSummaryLoading(false);
+    }
+  }, [company?._id, canRead]);
+
+  useEffect(() => {
+    const timeout = window.setTimeout(() => {
+      const normalizedSearch = balanceSearchInput.trim();
+
+      setBalancePage(1);
+      setBalanceSearch(normalizedSearch);
+    }, 400);
+
+    return () => {
+      window.clearTimeout(timeout);
+    };
+  }, [balanceSearchInput]);
   /* =========================================================
      LOAD BALANCES
      ========================================================= */
@@ -85,6 +184,12 @@ export default function LeaveBalancesPage() {
   const loadBalances = useCallback(async () => {
     if (!company?._id || !canRead) {
       setBalances([]);
+      setBalancePagination({
+        page: 1,
+        limit: balanceLimit,
+        total: 0,
+        totalPages: 1,
+      });
       setIsLoading(false);
       return;
     }
@@ -93,14 +198,22 @@ export default function LeaveBalancesPage() {
       setIsLoading(true);
 
       const result = await leaveBalanceService.list(company._id, {
-        page: 1,
-        limit: 100,
+        page: balancePage,
+        limit: balanceLimit,
         status: "ACTIVE",
+        ...(balanceSearch ? { search: balanceSearch } : {}),
         sortBy: "createdAt",
         sortOrder: "desc",
       });
 
       setBalances(result.items);
+
+      setBalancePagination({
+        page: result.pagination.page,
+        limit: result.pagination.limit,
+        total: result.pagination.total,
+        totalPages: result.pagination.totalPages,
+      });
     } catch (error) {
       setBalances([]);
 
@@ -108,7 +221,7 @@ export default function LeaveBalancesPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [company?._id, canRead]);
+  }, [company?._id, canRead, balancePage, balanceLimit, balanceSearch]);
 
   const loadInitializeData = useCallback(async () => {
     if (!company?._id || !canManage) {
@@ -118,32 +231,22 @@ export default function LeaveBalancesPage() {
     try {
       setIsLoadingInitializeData(true);
 
-      const [employeeResult, leaveTypeResult, policyResult] = await Promise.all(
-        [
-          employeeService.getEmployees(company._id, {
-            page: 1,
-            limit: 100,
-          }),
+      const [leaveTypeResult, policyResult] = await Promise.all([
+        leaveTypeService.list(company._id, {
+          page: 1,
+          limit: 100,
+          status: "ACTIVE",
+          sortBy: "name",
+          sortOrder: "asc",
+        }),
 
-          leaveTypeService.list(company._id, {
-            page: 1,
-            limit: 100,
-            status: "ACTIVE",
-            sortBy: "name",
-            sortOrder: "asc",
-          }),
-
-          leavePolicyService.list(company._id, {
-            page: 1,
-            limit: 100,
-            status: "ACTIVE",
-            isDefault: true,
-          }),
-        ],
-      );
-
-      setEmployees(employeeResult.records);
-
+        leavePolicyService.list(company._id, {
+          page: 1,
+          limit: 100,
+          status: "ACTIVE",
+          isDefault: true,
+        }),
+      ]);
       setLeaveTypes(
         leaveTypeResult.items.filter(
           (leaveType) =>
@@ -171,6 +274,68 @@ export default function LeaveBalancesPage() {
     }
   }, [company?._id, canManage]);
 
+  useEffect(() => {
+    if (!isInitializeOpen) {
+      return;
+    }
+
+    const timeout = window.setTimeout(() => {
+      setEmployeeSearch(employeeSearchInput.trim());
+    }, 400);
+
+    return () => {
+      window.clearTimeout(timeout);
+    };
+  }, [employeeSearchInput, isInitializeOpen]);
+
+  useEffect(() => {
+    if (!company?._id || !canManage || !isInitializeOpen) {
+      return;
+    }
+
+    if (employeeSearch.length < 2) {
+      setEmployees([]);
+      setIsSearchingEmployees(false);
+      return;
+    }
+
+    const companyId: string = company._id;
+    let cancelled = false;
+
+    async function searchEmployees() {
+      try {
+        setIsSearchingEmployees(true);
+
+        const result = await employeeService.getEmployees(companyId, {
+          page: 1,
+          limit: 20,
+          status: "ACTIVE",
+          search: employeeSearch,
+        });
+
+        if (!cancelled) {
+          setEmployees(result.records);
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setEmployees([]);
+
+          toast.error(getApiErrorMessage(error, "Unable to search employees."));
+        }
+      } finally {
+        if (!cancelled) {
+          setIsSearchingEmployees(false);
+        }
+      }
+    }
+
+    void searchEmployees();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [company?._id, canManage, isInitializeOpen, employeeSearch]);
+
   function openInitializeBalance() {
     if (!canManage) {
       toast.error("You do not have permission to initialize leave balances.");
@@ -180,20 +345,31 @@ export default function LeaveBalancesPage() {
     setInitializeEmployeeId("");
     setInitializeLeaveTypeId("");
     setInitializePolicyId("");
+
+    setEmployeeSearchInput("");
+    setEmployeeSearch("");
+    setEmployees([]);
+    setSelectedInitializeEmployee(null);
+
     setIsInitializeOpen(true);
 
     void loadInitializeData();
   }
 
   function closeInitializeBalance() {
-    if (isInitializing) {
+    if (isInitializing || isBulkInitializing) {
       return;
     }
-
     setIsInitializeOpen(false);
+
     setInitializeEmployeeId("");
     setInitializeLeaveTypeId("");
     setInitializePolicyId("");
+
+    setEmployeeSearchInput("");
+    setEmployeeSearch("");
+    setEmployees([]);
+    setSelectedInitializeEmployee(null);
   }
 
   const selectedInitializePolicy = useMemo(
@@ -214,35 +390,96 @@ export default function LeaveBalancesPage() {
     );
   }, [selectedInitializePolicy]);
 
+  useEffect(() => {
+    if (
+      !company?._id ||
+      !canManage ||
+      !isInitializeOpen ||
+      !initializeEmployeeId ||
+      !initializeLeaveYear
+    ) {
+      setEmployeeExistingBalances([]);
+      setIsLoadingEmployeeBalances(false);
+      return;
+    }
+
+    const companyId: string = company._id;
+    const employeeId = initializeEmployeeId;
+    const leaveYearStart = initializeLeaveYear.start;
+    const leaveYearEnd = initializeLeaveYear.end;
+
+    let cancelled = false;
+
+    async function loadEmployeeExistingBalances() {
+      try {
+        setIsLoadingEmployeeBalances(true);
+
+        const result = await leaveBalanceService.getByEmployee(
+          companyId,
+          employeeId,
+          {
+            leaveYearStart,
+            leaveYearEnd,
+          },
+        );
+
+        if (!cancelled) {
+          setEmployeeExistingBalances(result);
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setEmployeeExistingBalances([]);
+
+          toast.error(
+            getApiErrorMessage(
+              error,
+              "Unable to load employee leave balances.",
+            ),
+          );
+        }
+      } finally {
+        if (!cancelled) {
+          setIsLoadingEmployeeBalances(false);
+        }
+      }
+    }
+
+    void loadEmployeeExistingBalances();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    company?._id,
+    canManage,
+    isInitializeOpen,
+    initializeEmployeeId,
+    initializeLeaveYear,
+  ]);
+
   const availableInitializeLeaveTypes = useMemo(() => {
     if (!initializeEmployeeId || !initializeLeaveYear) {
       return leaveTypes;
     }
 
     return leaveTypes.filter((leaveType) => {
-      const alreadyInitialized = balances.some((balance) => {
-        const balanceEmployeeId =
-          typeof balance.employeeId === "string"
-            ? balance.employeeId
-            : balance.employeeId?._id;
-
+      const alreadyInitialized = employeeExistingBalances.some((balance) => {
         const balanceLeaveTypeId =
           typeof balance.leaveTypeId === "string"
             ? balance.leaveTypeId
             : balance.leaveTypeId?._id;
 
-        return (
-          balanceEmployeeId === initializeEmployeeId &&
-          balanceLeaveTypeId === leaveType._id &&
-          balance.leaveYearStart.slice(0, 10) === initializeLeaveYear.start &&
-          balance.leaveYearEnd.slice(0, 10) === initializeLeaveYear.end
-        );
+        return balanceLeaveTypeId === leaveType._id;
       });
 
       return !alreadyInitialized;
     });
-  }, [leaveTypes, balances, initializeEmployeeId, initializeLeaveYear]);
-
+  }, [
+    leaveTypes,
+    initializeEmployeeId,
+    initializeLeaveYear,
+    employeeExistingBalances,
+  ]);
   async function handleInitializeBalance(
     event: React.FormEvent<HTMLFormElement>,
   ) {
@@ -297,7 +534,7 @@ export default function LeaveBalancesPage() {
       setInitializeLeaveTypeId("");
       setInitializePolicyId("");
 
-      await loadBalances();
+      await Promise.all([loadBalances(), loadSummary()]);
     } catch (error) {
       toast.error(
         getApiErrorMessage(error, "Unable to initialize leave balance."),
@@ -307,31 +544,76 @@ export default function LeaveBalancesPage() {
     }
   }
 
+  async function handleBulkInitializeBalances() {
+    if (!company?._id) {
+      return;
+    }
+
+    if (!canManage) {
+      toast.error("You do not have permission to initialize leave balances.");
+      return;
+    }
+
+    if (!initializePolicyId) {
+      toast.error("No active default leave policy is available.");
+      return;
+    }
+
+    if (!initializeLeaveYear) {
+      toast.error("Unable to determine the current leave year.");
+      return;
+    }
+
+    try {
+      setIsBulkInitializing(true);
+
+      const result = await leaveBalanceService.initializeBulk(company._id, {
+        leavePolicyId: initializePolicyId,
+        leaveYearStart: initializeLeaveYear.start,
+        leaveYearEnd: initializeLeaveYear.end,
+        leaveYearLabel: initializeLeaveYear.label,
+      });
+
+      if (result.failedBatches > 0) {
+        toast.warning(
+          `Initialization completed with ${result.failedBatches} failed batch${
+            result.failedBatches === 1 ? "" : "es"
+          }.`,
+        );
+      } else if (result.created === 0) {
+        toast.success(
+          `All ${result.skippedExisting} applicable leave balances are already initialized.`,
+        );
+      } else {
+        toast.success(
+          `Created ${result.created} leave balance${
+            result.created === 1 ? "" : "s"
+          }. ${result.skippedExisting} already existed.`,
+        );
+      }
+
+      setIsInitializeOpen(false);
+      setInitializeEmployeeId("");
+      setInitializeLeaveTypeId("");
+      setInitializePolicyId("");
+
+      await Promise.all([loadBalances(), loadSummary()]);
+    } catch (error) {
+      toast.error(
+        getApiErrorMessage(error, "Unable to bulk initialize leave balances."),
+      );
+    } finally {
+      setIsBulkInitializing(false);
+    }
+  }
+
   useEffect(() => {
     void loadBalances();
   }, [loadBalances]);
 
-  /* =========================================================
-     SUMMARY
-     ========================================================= */
-
-  const summary = useMemo(() => {
-    return balances.reduce(
-      (result, balance) => {
-        result.available += getAvailableDays(balance);
-        result.pending += balance.pendingDays ?? 0;
-        result.used += balance.usedDays ?? 0;
-
-        return result;
-      },
-      {
-        available: 0,
-        pending: 0,
-        used: 0,
-      },
-    );
-  }, [balances]);
-
+  useEffect(() => {
+    void loadSummary();
+  }, [loadSummary]);
   /* =========================================================
      OPEN ADJUSTMENT
      ========================================================= */
@@ -439,11 +721,99 @@ export default function LeaveBalancesPage() {
       setCreditBalance(null);
       setCreditPeriodKey("");
 
-      await loadBalances();
+      await Promise.all([loadBalances(), loadSummary()]);
     } catch (error) {
       toast.error(getApiErrorMessage(error, "Unable to credit monthly leave."));
     } finally {
       setIsCrediting(false);
+    }
+  }
+
+  /* =========================================================
+   BULK MONTHLY LEAVE ACCRUAL
+   ========================================================= */
+
+  function openBulkMonthlyAccrual() {
+    if (!canManage) {
+      toast.error("You do not have permission to credit leave balances.");
+      return;
+    }
+
+    setBulkAccrualPeriodKey(getCurrentPeriodKey());
+    setIsBulkAccrualOpen(true);
+  }
+
+  function closeBulkMonthlyAccrual() {
+    if (isBulkAccruing) {
+      return;
+    }
+
+    setIsBulkAccrualOpen(false);
+    setBulkAccrualPeriodKey("");
+  }
+
+  async function handleBulkMonthlyAccrual(
+    event: React.FormEvent<HTMLFormElement>,
+  ) {
+    event.preventDefault();
+
+    if (!company?._id) {
+      return;
+    }
+
+    if (!canManage) {
+      toast.error("You do not have permission to credit leave balances.");
+      return;
+    }
+
+    if (!bulkAccrualPeriodKey) {
+      toast.error("Select a month to credit.");
+      return;
+    }
+
+    try {
+      setIsBulkAccruing(true);
+
+      const result = await leaveBalanceService.accrueBulk(company._id, {
+        periodDate: `${bulkAccrualPeriodKey}-01`,
+      });
+
+      if (result.failed > 0) {
+        toast.warning(
+          `Monthly accrual completed with ${result.failed} failed balance${
+            result.failed === 1 ? "" : "s"
+          }. ${result.accrued} credited and ${result.alreadyAccrued} already credited.`,
+        );
+      } else if (result.accrued === 0 && result.alreadyAccrued > 0) {
+        toast.success(
+          `All ${result.alreadyAccrued} eligible leave balances were already credited for ${formatPeriodKey(
+            result.periodKey,
+          )}.`,
+        );
+      } else if (result.processed === 0) {
+        toast.success(
+          `No applicable monthly leave balances were found for ${formatPeriodKey(
+            result.periodKey,
+          )}.`,
+        );
+      } else {
+        toast.success(
+          `Monthly accrual completed for ${formatPeriodKey(
+            result.periodKey,
+          )}. ${result.accrued} credited and ${result.alreadyAccrued} already credited.`,
+        );
+      }
+
+      setIsBulkAccrualOpen(false);
+      setBulkAccrualPeriodKey("");
+
+      await Promise.all([loadBalances(), loadSummary()]);
+    } catch (error) {
+      toast.error(
+        getApiErrorMessage(error, "Unable to run monthly leave accrual."),
+      );
+    } finally {
+      setIsBulkAccruing(false);
     }
   }
 
@@ -498,7 +868,7 @@ export default function LeaveBalancesPage() {
 
       closeAdjustment();
 
-      await loadBalances();
+      await Promise.all([loadBalances(), loadSummary()]);
     } catch (error) {
       toast.error(getApiErrorMessage(error, "Unable to adjust leave balance."));
     } finally {
@@ -546,14 +916,34 @@ export default function LeaveBalancesPage() {
             </button>
           )}
 
+          {canManage && (
+            <button
+              type="button"
+              onClick={openBulkMonthlyAccrual}
+              disabled={isBulkAccruing}
+              className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-4 text-sm font-semibold text-blue-700 transition hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {isBulkAccruing ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <RefreshCw className="h-4 w-4" />
+              )}
+              Run Monthly Accrual
+            </button>
+          )}
+
           <button
             type="button"
-            onClick={() => void loadBalances()}
-            disabled={isLoading}
+            onClick={() => {
+              void Promise.all([loadBalances(), loadSummary()]);
+            }}
+            disabled={isLoading || isSummaryLoading}
             className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-50"
           >
             <RefreshCw
-              className={`h-4 w-4 ${isLoading ? "animate-spin" : ""}`}
+              className={`h-4 w-4 ${
+                isLoading || isSummaryLoading ? "animate-spin" : ""
+              }`}
             />
             Refresh
           </button>
@@ -565,11 +955,24 @@ export default function LeaveBalancesPage() {
          ===================================================== */}
 
       <div className="grid gap-4 sm:grid-cols-3">
-        <SummaryCard title="Available" value={formatDays(summary.available)} />
+        <SummaryCard
+          title="Currently Available"
+          value={
+            isSummaryLoading ? "..." : formatDays(balanceSummary.availableDays)
+          }
+        />
 
-        <SummaryCard title="Pending" value={formatDays(summary.pending)} />
+        <SummaryCard
+          title="Pending"
+          value={
+            isSummaryLoading ? "..." : formatDays(balanceSummary.pendingDays)
+          }
+        />
 
-        <SummaryCard title="Used" value={formatDays(summary.used)} />
+        <SummaryCard
+          title="Used"
+          value={isSummaryLoading ? "..." : formatDays(balanceSummary.usedDays)}
+        />
       </div>
 
       {/* =====================================================
@@ -584,7 +987,7 @@ export default function LeaveBalancesPage() {
             Loading leave balances...
           </p>
         </section>
-      ) : balances.length === 0 ? (
+      ) : balanceSummary.totalBalances === 0 ? (
         <section className="rounded-2xl border border-slate-200 bg-white px-6 py-16 text-center shadow-sm">
           <WalletCards className="mx-auto h-10 w-10 text-slate-300" />
 
@@ -599,26 +1002,149 @@ export default function LeaveBalancesPage() {
       ) : (
         <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
           <div className="border-b border-slate-100 p-5 sm:p-6">
-            <h2 className="font-bold text-slate-950">Leave balances</h2>
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+              <div>
+                <h2 className="font-bold text-slate-950">Leave balances</h2>
 
-            <p className="mt-1 text-sm text-slate-500">
-              {canManage
-                ? "Review employee balances and make authorized adjustments."
-                : "Review leave balances available within your scope."}
-            </p>
+                <p className="mt-1 text-sm text-slate-500">
+                  {canManage
+                    ? "Review employee balances and make authorized adjustments."
+                    : "Review leave balances available within your scope."}
+                </p>
+              </div>
+
+              <div className="relative w-full lg:w-80">
+                <input
+                  type="text"
+                  value={balanceSearchInput}
+                  onChange={(event) =>
+                    setBalanceSearchInput(event.target.value)
+                  }
+                  placeholder="Search employee, code or leave type..."
+                  className="h-10 w-full rounded-xl border border-slate-300 bg-white px-3 pr-10 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10"
+                />
+
+                {balanceSearchInput && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setBalanceSearchInput("");
+                      setBalanceSearch("");
+                      setBalancePage(1);
+                    }}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md p-1 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
+                    aria-label="Clear balance search"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                )}
+              </div>
+            </div>
           </div>
 
-          <div className="divide-y divide-slate-100">
-            {balances.map((balance) => (
-              <BalanceRow
-                key={balance._id}
-                balance={balance}
-                canManage={canManage}
-                onAdjust={() => openAdjustment(balance)}
-                onCreditMonthly={() => openMonthlyCredit(balance)}
-              />
-            ))}
-          </div>
+          {balances.length === 0 ? (
+            <div className="px-6 py-16 text-center">
+              <WalletCards className="mx-auto h-10 w-10 text-slate-300" />
+
+              <h3 className="mt-4 text-base font-bold text-slate-950">
+                No matching leave balances found
+              </h3>
+
+              <p className="mt-2 text-sm text-slate-500">
+                Try another employee name, employee code or leave type.
+              </p>
+
+              {balanceSearchInput && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setBalanceSearchInput("");
+                    setBalanceSearch("");
+                    setBalancePage(1);
+                  }}
+                  className="mt-4 text-sm font-semibold text-blue-700 transition hover:text-blue-800"
+                >
+                  Clear search
+                </button>
+              )}
+            </div>
+          ) : (
+            <>
+              <div className="divide-y divide-slate-100">
+                {balances.map((balance) => (
+                  <BalanceRow
+                    key={balance._id}
+                    balance={balance}
+                    canManage={canManage}
+                    onViewDetails={() => setDetailsBalance(balance)}
+                    onAdjust={() => openAdjustment(balance)}
+                    onCreditMonthly={() => openMonthlyCredit(balance)}
+                  />
+                ))}
+              </div>
+
+              <div className="flex flex-col gap-3 border-t border-slate-100 px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+                <p className="text-sm text-slate-500">
+                  Showing{" "}
+                  <span className="font-semibold text-slate-700">
+                    {(balancePagination.page - 1) * balancePagination.limit + 1}
+                  </span>
+                  {" - "}
+                  <span className="font-semibold text-slate-700">
+                    {Math.min(
+                      balancePagination.page * balancePagination.limit,
+                      balancePagination.total,
+                    )}
+                  </span>{" "}
+                  of{" "}
+                  <span className="font-semibold text-slate-700">
+                    {balancePagination.total}
+                  </span>{" "}
+                  balances
+                </p>
+
+                <div className="flex items-center gap-3">
+                  <span className="text-sm text-slate-500">
+                    Page{" "}
+                    <span className="font-semibold text-slate-700">
+                      {balancePagination.page}
+                    </span>{" "}
+                    of{" "}
+                    <span className="font-semibold text-slate-700">
+                      {balancePagination.totalPages}
+                    </span>
+                  </span>
+
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setBalancePage((current) => Math.max(1, current - 1))
+                    }
+                    disabled={isLoading || balancePagination.page <= 1}
+                    className="h-9 rounded-lg border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    Previous
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setBalancePage((current) =>
+                        Math.min(balancePagination.totalPages, current + 1),
+                      )
+                    }
+                    disabled={
+                      isLoading ||
+                      balancePagination.page >= balancePagination.totalPages
+                    }
+                    className="h-9 rounded-lg border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    Next
+                  </button>
+                </div>
+              </div>
+            </>
+          )}
         </section>
       )}
 
@@ -637,14 +1163,15 @@ export default function LeaveBalancesPage() {
                 </h2>
 
                 <p className="mt-1 text-sm text-slate-500">
-                  Create a leave balance for an employee.
+                  Initialize balances company-wide or for an individual
+                  employee.
                 </p>
               </div>
 
               <button
                 type="button"
                 onClick={closeInitializeBalance}
-                disabled={isInitializing}
+                disabled={isInitializing || isBulkInitializing}
                 className="shrink-0 rounded-lg p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 disabled:opacity-50"
                 aria-label="Close initialize balance modal"
               >
@@ -665,29 +1192,158 @@ export default function LeaveBalancesPage() {
                     </div>
                   ) : (
                     <>
+                      <div className="rounded-xl border border-blue-200 bg-blue-50 p-4">
+                        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                          <div>
+                            <p className="text-sm font-bold text-blue-950">
+                              Initialize company balances
+                            </p>
+
+                            <p className="mt-1 text-xs leading-5 text-blue-700">
+                              Create all missing balances for eligible active
+                              employees and applicable leave types. Existing
+                              balances will be skipped.
+                            </p>
+                          </div>
+
+                          <button
+                            type="button"
+                            onClick={() => void handleBulkInitializeBalances()}
+                            disabled={
+                              isBulkInitializing ||
+                              isInitializing ||
+                              !initializePolicyId ||
+                              !initializeLeaveYear
+                            }
+                            className="inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded-xl bg-blue-700 px-4 text-sm font-semibold text-white transition hover:bg-blue-800 disabled:cursor-not-allowed disabled:opacity-50"
+                          >
+                            {isBulkInitializing && (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            )}
+
+                            {isBulkInitializing
+                              ? "Initializing..."
+                              : "Initialize All"}
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-3">
+                        <div className="h-px flex-1 bg-slate-200" />
+
+                        <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                          Or initialize individually
+                        </span>
+
+                        <div className="h-px flex-1 bg-slate-200" />
+                      </div>
+                      {/* EMPLOYEE */}
                       {/* EMPLOYEE */}
                       <div>
                         <label className="mb-2 block text-sm font-semibold text-slate-700">
                           Employee
                         </label>
 
-                        <select
-                          value={initializeEmployeeId}
-                          onChange={(event) => {
-                            setInitializeEmployeeId(event.target.value);
-                            setInitializeLeaveTypeId("");
-                          }}
-                          disabled={isInitializing}
-                          className={inputClassName}
-                        >
-                          <option value="">Select employee</option>
+                        {selectedInitializeEmployee ? (
+                          <div className="flex items-center justify-between gap-3 rounded-xl border border-slate-300 bg-white px-3 py-3">
+                            <div className="min-w-0">
+                              <p className="truncate text-sm font-semibold text-slate-900">
+                                {getEmployeeOptionLabel(
+                                  selectedInitializeEmployee,
+                                )}
+                              </p>
 
-                          {employees.map((employee) => (
-                            <option key={employee._id} value={employee._id}>
-                              {getEmployeeOptionLabel(employee)}
-                            </option>
-                          ))}
-                        </select>
+                              <p className="mt-0.5 text-xs text-slate-500">
+                                Selected employee
+                              </p>
+                            </div>
+
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSelectedInitializeEmployee(null);
+                                setInitializeEmployeeId("");
+                                setInitializeLeaveTypeId("");
+                                setEmployeeExistingBalances([]);
+                                setEmployeeSearchInput("");
+                                setEmployeeSearch("");
+                                setEmployees([]);
+                              }}
+                              disabled={isInitializing || isBulkInitializing}
+                              className="shrink-0 rounded-lg p-1.5 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 disabled:opacity-50"
+                              aria-label="Change employee"
+                            >
+                              <X className="h-4 w-4" />
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="relative">
+                            <input
+                              type="text"
+                              value={employeeSearchInput}
+                              onChange={(event) => {
+                                setEmployeeSearchInput(event.target.value);
+                                setInitializeEmployeeId("");
+                                setInitializeLeaveTypeId("");
+                              }}
+                              disabled={isInitializing || isBulkInitializing}
+                              placeholder="Search by employee name or code..."
+                              autoComplete="off"
+                              className={`${inputClassName} pr-10`}
+                            />
+
+                            {isSearchingEmployees && (
+                              <Loader2 className="absolute right-3 top-3.5 h-4 w-4 animate-spin text-slate-400" />
+                            )}
+
+                            {employeeSearch.length >= 2 &&
+                              !isSearchingEmployees && (
+                                <div className="mt-2 max-h-56 overflow-y-auto rounded-xl border border-slate-200 bg-white shadow-lg">
+                                  {employees.length > 0 ? (
+                                    employees.map((employee) => (
+                                      <button
+                                        key={employee._id}
+                                        type="button"
+                                        onClick={() => {
+                                          setSelectedInitializeEmployee(
+                                            employee,
+                                          );
+                                          setInitializeEmployeeId(employee._id);
+                                          setInitializeLeaveTypeId("");
+                                          setEmployeeExistingBalances([]);
+                                          setEmployeeSearchInput("");
+                                          setEmployeeSearch("");
+                                          setEmployees([]);
+                                        }}
+                                        className="block w-full border-b border-slate-100 px-3 py-3 text-left transition last:border-b-0 hover:bg-slate-50"
+                                      >
+                                        <p className="text-sm font-semibold text-slate-900">
+                                          {getEmployeeOptionLabel(employee)}
+                                        </p>
+
+                                        {getEmployeeDesignation(employee) && (
+                                          <p className="mt-0.5 text-xs text-slate-500">
+                                            {getEmployeeDesignation(employee)}
+                                          </p>
+                                        )}
+                                      </button>
+                                    ))
+                                  ) : (
+                                    <p className="px-3 py-4 text-sm text-slate-500">
+                                      No matching active employees found.
+                                    </p>
+                                  )}
+                                </div>
+                              )}
+
+                            {employeeSearchInput.trim().length > 0 &&
+                              employeeSearchInput.trim().length < 2 && (
+                                <p className="mt-1.5 text-xs text-slate-500">
+                                  Enter at least 2 characters to search.
+                                </p>
+                              )}
+                          </div>
+                        )}
                       </div>
 
                       {/* LEAVE TYPE */}
@@ -701,11 +1357,22 @@ export default function LeaveBalancesPage() {
                           onChange={(event) =>
                             setInitializeLeaveTypeId(event.target.value)
                           }
-                          disabled={isInitializing}
+                          disabled={
+                            isInitializing ||
+                            isBulkInitializing ||
+                            isLoadingInitializeData ||
+                            isLoadingEmployeeBalances ||
+                            !initializeEmployeeId ||
+                            !initializePolicyId ||
+                            !initializeLeaveYear
+                          }
                           className={inputClassName}
                         >
-                          <option value="">Select leave type</option>
-
+                          <option value="">
+                            {isLoadingEmployeeBalances
+                              ? "Checking existing balances..."
+                              : "Select leave type"}
+                          </option>
                           {availableInitializeLeaveTypes.map((leaveType) => (
                             <option key={leaveType._id} value={leaveType._id}>
                               {leaveType.name} ({leaveType.code})
@@ -733,7 +1400,7 @@ export default function LeaveBalancesPage() {
                           onChange={(event) =>
                             setInitializePolicyId(event.target.value)
                           }
-                          disabled={isInitializing}
+                          disabled={isInitializing || isBulkInitializing}
                           className={inputClassName}
                         >
                           <option value="">Select policy</option>
@@ -779,7 +1446,7 @@ export default function LeaveBalancesPage() {
                 <button
                   type="button"
                   onClick={closeInitializeBalance}
-                  disabled={isInitializing}
+                  disabled={isInitializing || isBulkInitializing}
                   className="h-10 rounded-xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 transition hover:bg-slate-100 disabled:opacity-50"
                 >
                   Cancel
@@ -789,7 +1456,9 @@ export default function LeaveBalancesPage() {
                   type="submit"
                   disabled={
                     isInitializing ||
+                    isBulkInitializing ||
                     isLoadingInitializeData ||
+                    isLoadingEmployeeBalances ||
                     !initializeEmployeeId ||
                     !initializeLeaveTypeId ||
                     !initializePolicyId ||
@@ -801,6 +1470,122 @@ export default function LeaveBalancesPage() {
                     <Loader2 className="h-4 w-4 animate-spin" />
                   )}
                   Initialize Balance
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* =====================================================
+    BULK MONTHLY LEAVE ACCRUAL MODAL
+   ===================================================== */}
+
+      {isBulkAccrualOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-slate-950/50 p-3 sm:p-4">
+          <div className="flex max-h-[calc(100dvh-24px)] w-full max-w-lg flex-col overflow-hidden rounded-2xl bg-white shadow-xl sm:max-h-[calc(100dvh-32px)]">
+            {/* HEADER */}
+            <div className="flex shrink-0 items-start justify-between border-b border-slate-100 p-4 sm:p-5">
+              <div className="min-w-0 pr-3">
+                <h2 className="text-lg font-bold text-slate-950">
+                  Run Monthly Leave Accrual
+                </h2>
+
+                <p className="mt-1 text-sm text-slate-500">
+                  Credit monthly leave entitlement for eligible employees.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={closeBulkMonthlyAccrual}
+                disabled={isBulkAccruing}
+                className="shrink-0 rounded-lg p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 disabled:opacity-50"
+                aria-label="Close monthly accrual modal"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <form
+              onSubmit={handleBulkMonthlyAccrual}
+              className="flex min-h-0 flex-1 flex-col"
+            >
+              <div className="min-h-0 flex-1 overflow-y-auto">
+                <div className="space-y-5 p-4 sm:p-5">
+                  {/* MONTH */}
+                  <div>
+                    <label className="mb-2 block text-sm font-semibold text-slate-700">
+                      Accrual month
+                    </label>
+
+                    <input
+                      type="month"
+                      value={bulkAccrualPeriodKey}
+                      onChange={(event) =>
+                        setBulkAccrualPeriodKey(event.target.value)
+                      }
+                      max={getCurrentPeriodKey()}
+                      disabled={isBulkAccruing}
+                      className={inputClassName}
+                    />
+
+                    <p className="mt-1.5 text-xs text-slate-500">
+                      Select the current month or an earlier month that needs to
+                      be processed.
+                    </p>
+                  </div>
+
+                  {/* SELECTED PERIOD */}
+                  {bulkAccrualPeriodKey && (
+                    <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                      <p className="text-xs font-medium text-slate-400">
+                        Selected period
+                      </p>
+
+                      <p className="mt-1 font-bold text-slate-950">
+                        {formatPeriodKey(bulkAccrualPeriodKey)}
+                      </p>
+                    </div>
+                  )}
+
+                  {/* INFO */}
+                  <div className="rounded-xl border border-blue-100 bg-blue-50 p-4 text-sm leading-6 text-blue-800">
+                    This will credit the configured monthly entitlement for all
+                    eligible active employee leave balances in the selected
+                    month. Balances already credited for that month will be
+                    skipped.
+                  </div>
+
+                  <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm leading-6 text-amber-800">
+                    Use this company-wide action for normal manual processing or
+                    recovery of a missed month. Individual monthly credit
+                    remains available for employee-specific recovery.
+                  </div>
+                </div>
+              </div>
+
+              {/* FOOTER */}
+              <div className="flex shrink-0 flex-col-reverse gap-2 border-t border-slate-100 bg-slate-50 p-4 sm:flex-row sm:justify-end sm:p-5">
+                <button
+                  type="button"
+                  onClick={closeBulkMonthlyAccrual}
+                  disabled={isBulkAccruing}
+                  className="h-10 rounded-xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 transition hover:bg-slate-100 disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+
+                <button
+                  type="submit"
+                  disabled={isBulkAccruing || !bulkAccrualPeriodKey}
+                  className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-slate-950 px-4 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {isBulkAccruing && (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  )}
+
+                  {isBulkAccruing ? "Processing..." : "Run Monthly Accrual"}
                 </button>
               </div>
             </form>
@@ -1155,6 +1940,150 @@ export default function LeaveBalancesPage() {
           </div>
         </div>
       )}
+      {/* =====================================================
+    BALANCE DETAILS MODAL
+   ===================================================== */}
+
+      {detailsBalance && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-slate-950/50 p-3 sm:p-4">
+          <div className="flex max-h-[calc(100dvh-24px)] w-full max-w-3xl flex-col overflow-hidden rounded-2xl bg-white shadow-xl sm:max-h-[calc(100dvh-32px)]">
+            {/* HEADER */}
+            <div className="flex shrink-0 items-start justify-between border-b border-slate-100 p-4 sm:p-5">
+              <div className="min-w-0 pr-3">
+                <h2 className="text-lg font-bold text-slate-950">
+                  Leave Balance Details
+                </h2>
+
+                <p className="mt-1 text-sm text-slate-500">
+                  {getEmployeeName(detailsBalance)} ·{" "}
+                  {getLeaveTypeName(detailsBalance)}
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setDetailsBalance(null)}
+                className="shrink-0 rounded-lg p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
+                aria-label="Close leave balance details"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {/* SCROLLABLE BODY */}
+            <div className="min-h-0 flex-1 overflow-y-auto">
+              <div className="space-y-6 p-4 sm:p-5">
+                {/* BALANCE SUMMARY */}
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                  <div className="rounded-xl bg-slate-50 p-4">
+                    <p className="text-xs font-medium text-slate-400">
+                      Leave year
+                    </p>
+
+                    <p className="mt-1 font-bold text-slate-950">
+                      {detailsBalance.leaveYearLabel}
+                    </p>
+                  </div>
+
+                  <div className="rounded-xl bg-slate-50 p-4">
+                    <p className="text-xs font-medium text-slate-400">
+                      Allocation
+                    </p>
+
+                    <p className="mt-1 font-bold text-slate-950">
+                      {formatEnum(detailsBalance.allocationMethod)}
+                    </p>
+                  </div>
+
+                  <div className="rounded-xl bg-blue-50 p-4">
+                    <p className="text-xs font-medium text-blue-600">
+                      Available
+                    </p>
+
+                    <p className="mt-1 font-bold text-blue-700">
+                      {formatDays(getAvailableDays(detailsBalance))}
+                    </p>
+                  </div>
+
+                  <div className="rounded-xl bg-slate-50 p-4">
+                    <p className="text-xs font-medium text-slate-400">Status</p>
+
+                    <p className="mt-1 font-bold text-slate-950">
+                      {formatEnum(detailsBalance.status)}
+                    </p>
+                  </div>
+                </div>
+
+                {/* TOTALS */}
+                <div>
+                  <h3 className="mb-3 text-sm font-bold text-slate-950">
+                    Balance summary
+                  </h3>
+
+                  <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                    <div className="rounded-xl border border-slate-200 p-4">
+                      <p className="text-xs text-slate-400">Allocated</p>
+                      <p className="mt-1 font-bold text-slate-950">
+                        {formatDays(detailsBalance.allocatedDays ?? 0)}
+                      </p>
+                    </div>
+
+                    <div className="rounded-xl border border-slate-200 p-4">
+                      <p className="text-xs text-slate-400">Accrued</p>
+                      <p className="mt-1 font-bold text-slate-950">
+                        {formatDays(detailsBalance.accruedDays ?? 0)}
+                      </p>
+                    </div>
+
+                    <div className="rounded-xl border border-slate-200 p-4">
+                      <p className="text-xs text-slate-400">Pending</p>
+                      <p className="mt-1 font-bold text-slate-950">
+                        {formatDays(detailsBalance.pendingDays ?? 0)}
+                      </p>
+                    </div>
+
+                    <div className="rounded-xl border border-slate-200 p-4">
+                      <p className="text-xs text-slate-400">Used</p>
+                      <p className="mt-1 font-bold text-slate-950">
+                        {formatDays(detailsBalance.usedDays ?? 0)}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* MONTHLY BREAKDOWN */}
+                {detailsBalance.allocationMethod === "MONTHLY_ACCRUAL" && (
+                  <div>
+                    <div className="mb-3">
+                      <h3 className="text-sm font-bold text-slate-950">
+                        Monthly breakdown
+                      </h3>
+
+                      <p className="mt-1 text-xs text-slate-500">
+                        Review credited, projected, adjusted, pending, used and
+                        lapsed leave for each month.
+                      </p>
+                    </div>
+
+                    <MonthlyBalanceBreakdown balance={detailsBalance} />
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* FOOTER */}
+            <div className="flex shrink-0 justify-end border-t border-slate-100 bg-slate-50 p-4 sm:p-5">
+              <button
+                type="button"
+                onClick={() => setDetailsBalance(null)}
+                className="h-10 rounded-xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 transition hover:bg-slate-100"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -1166,11 +2095,13 @@ export default function LeaveBalancesPage() {
 function BalanceRow({
   balance,
   canManage,
+  onViewDetails,
   onAdjust,
   onCreditMonthly,
 }: {
   balance: LeaveBalance;
   canManage: boolean;
+  onViewDetails: () => void;
   onAdjust: () => void;
   onCreditMonthly: () => void;
 }) {
@@ -1178,7 +2109,8 @@ function BalanceRow({
 
   return (
     <div className="p-5 sm:p-6">
-      <div className="flex flex-col gap-5 xl:flex-row xl:items-center xl:justify-between">
+      <div className="grid gap-5 xl:grid-cols-[minmax(220px,1fr)_minmax(320px,1.2fr)_auto] xl:items-center">
+        {/* EMPLOYEE / LEAVE TYPE */}
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
             <h3 className="font-bold text-slate-950">
@@ -1195,56 +2127,51 @@ function BalanceRow({
           </p>
         </div>
 
-        {balance.allocationMethod === "MONTHLY_ACCRUAL" ? (
-          <MonthlyBalanceBreakdown balance={balance} />
-        ) : (
-          <div className="grid grid-cols-2 gap-4 sm:grid-cols-5">
-            <BalanceMetric
-              label="Allocated"
-              value={balance.allocatedDays ?? 0}
-              help="Leave credited to you upfront for the leave year."
-            />
+        {/* COMPACT BALANCE SUMMARY */}
+        <div className="grid grid-cols-3 gap-4">
+          <BalanceMetric
+            label="Available"
+            value={available}
+            help="Leave currently available after credited leave, adjustments, pending requests, used leave and expired leave are considered."
+            emphasize
+            tooltipAlign="left"
+          />
 
-            <BalanceMetric
-              label="Adjusted"
-              value={balance.adjustedDays ?? 0}
-              help="Manual balance changes made by HR or an administrator. Positive values add leave and negative values deduct leave."
-              showSign
-            />
+          <BalanceMetric
+            label="Pending"
+            value={balance.pendingDays ?? 0}
+            help="Leave days currently reserved for requests awaiting a final decision."
+          />
 
-            <BalanceMetric
-              label="Pending"
-              value={balance.pendingDays ?? 0}
-              help="Leave days currently reserved for requests that are still awaiting a final decision."
-            />
+          <BalanceMetric
+            label="Used"
+            value={balance.usedDays ?? 0}
+            help="Leave days already consumed through approved leave requests."
+            tooltipAlign="right"
+          />
+        </div>
 
-            <BalanceMetric
-              label="Used"
-              value={balance.usedDays ?? 0}
-              help="Leave days already consumed through approved leave requests."
-            />
+        {/* ACTIONS */}
+        <div className="flex shrink-0 flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={onViewDetails}
+            className="h-10 rounded-xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+          >
+            View Details
+          </button>
 
-            <BalanceMetric
-              label="Available"
-              value={available}
-              help="Leave currently available for you to use after adjustments, pending requests, used leave and expired leave are considered."
-              emphasize
-            />
-          </div>
-        )}
+          {canManage && balance.allocationMethod === "MONTHLY_ACCRUAL" && (
+            <button
+              type="button"
+              onClick={onCreditMonthly}
+              className="h-10 rounded-xl bg-slate-950 px-4 text-sm font-semibold text-white transition hover:bg-slate-800"
+            >
+              Credit Monthly Leave
+            </button>
+          )}
 
-        {canManage && (
-          <div className="flex shrink-0 flex-wrap gap-2">
-            {balance.allocationMethod === "MONTHLY_ACCRUAL" && (
-              <button
-                type="button"
-                onClick={onCreditMonthly}
-                className="h-10 rounded-xl bg-slate-950 px-4 text-sm font-semibold text-white transition hover:bg-slate-800"
-              >
-                Credit Monthly Leave
-              </button>
-            )}
-
+          {canManage && (
             <button
               type="button"
               onClick={onAdjust}
@@ -1252,8 +2179,8 @@ function BalanceRow({
             >
               Adjust Balance
             </button>
-          </div>
-        )}
+          )}
+        </div>
       </div>
     </div>
   );
@@ -1275,12 +2202,25 @@ function MonthlyBalanceBreakdown({ balance }: { balance: LeaveBalance }) {
   return (
     <div className="space-y-3">
       {monthlyBalances.map((month) => {
-        const available =
-          (month.creditedDays ?? 0) +
-          (month.adjustedDays ?? 0) -
-          (month.pendingDays ?? 0) -
-          (month.usedDays ?? 0) -
-          (month.lapsedDays ?? 0);
+        const isAccrued =
+          month.isAccrued === true || Number(month.creditedDays ?? 0) > 0;
+
+        const isFutureProjected =
+          !isAccrued && month.periodKey > getCurrentPeriodKey();
+
+        const baseDays = isAccrued
+          ? Number(month.creditedDays ?? 0)
+          : isFutureProjected
+            ? getMonthlyEntitlement(balance)
+            : 0;
+        const available = Math.max(
+          0,
+          baseDays +
+            Number(month.adjustedDays ?? 0) -
+            Number(month.pendingDays ?? 0) -
+            Number(month.usedDays ?? 0) -
+            Number(month.lapsedDays ?? 0),
+        );
 
         return (
           <div
@@ -1294,7 +2234,11 @@ function MonthlyBalanceBreakdown({ balance }: { balance: LeaveBalance }) {
                 </p>
 
                 <p className="mt-0.5 text-xs text-slate-500">
-                  Monthly leave balance
+                  {isAccrued
+                    ? "Monthly leave balance"
+                    : isFutureProjected
+                      ? "Projected future entitlement"
+                      : "Not yet accrued"}
                 </p>
               </div>
 
@@ -1309,9 +2253,15 @@ function MonthlyBalanceBreakdown({ balance }: { balance: LeaveBalance }) {
 
             <div className="grid grid-cols-2 gap-x-6 gap-y-4 sm:grid-cols-5">
               <BalanceMetric
-                label="Credited"
-                value={month.creditedDays ?? 0}
-                help="Leave credited to you for this month according to the company's leave policy."
+                label={isFutureProjected ? "Entitlement" : "Credited"}
+                value={baseDays}
+                help={
+                  isAccrued
+                    ? "Leave actually credited for this month according to the company's leave policy."
+                    : isFutureProjected
+                      ? "Expected monthly entitlement for this future month. It has not been credited yet."
+                      : "No leave has been credited for this month yet."
+                }
               />
               <BalanceMetric
                 label="Adjusted"
@@ -1580,8 +2530,13 @@ function getAvailableAccrualPeriods(balance: LeaveBalance) {
     return [];
   }
 
-  const alreadyCreditedPeriods = new Set(
-    (balance.monthlyBalances ?? []).map((month) => month.periodKey),
+  const alreadyAccruedPeriods = new Set(
+    (balance.monthlyBalances ?? [])
+      .filter(
+        (month) =>
+          month.isAccrued === true || Number(month.creditedDays ?? 0) > 0,
+      )
+      .map((month) => month.periodKey),
   );
 
   const currentPeriodKey = getCurrentPeriodKey();
@@ -1608,7 +2563,7 @@ function getAvailableAccrualPeriods(balance: LeaveBalance) {
     // Do not allow future months.
     if (
       periodKey <= currentPeriodKey &&
-      !alreadyCreditedPeriods.has(periodKey)
+      !alreadyAccruedPeriods.has(periodKey)
     ) {
       periods.push({
         value: periodKey,
@@ -1700,6 +2655,16 @@ function getEmployeeOptionLabel(employee: Employee) {
   }
 
   return "Employee";
+}
+
+function getEmployeeDesignation(employee: Employee) {
+  const companyAccess = employee.companyAccessId;
+
+  if (!companyAccess || typeof companyAccess === "string") {
+    return "";
+  }
+
+  return companyAccess.designation ?? "";
 }
 
 const inputClassName =

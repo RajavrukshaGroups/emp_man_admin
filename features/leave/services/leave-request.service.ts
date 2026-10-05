@@ -6,9 +6,9 @@ import type {
     LeaveCancellationRequestPayload,
     LeaveRequest,
     LeaveRequestFilters,
+    LeaveRequestPreview,
     RejectLeavePayload,
 } from "../types/leave.types";
-
 /* =========================================================
    API RESPONSE TYPES
    ========================================================= */
@@ -85,6 +85,26 @@ function buildLeaveRequestParams(filters?: LeaveRequestFilters) {
    ========================================================= */
 
 export const leaveRequestService = {
+
+    /**
+   * Preview a leave request before submission.
+   *
+   * Read-only:
+   * - does not create a leave request
+   * - does not reserve leave balance
+   * - calculates paid / unpaid allocation
+   */
+    async preview(
+        companyId: string,
+        payload: CreateLeaveRequestPayload,
+    ): Promise<LeaveRequestPreview> {
+        const response = await api.post<ApiResponse<LeaveRequestPreview>>(
+            `/companies/${companyId}/leave/requests/preview`,
+            payload,
+        );
+
+        return response.data.data;
+    },
     /**
      * Submit a leave request.
      */

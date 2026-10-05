@@ -8,11 +8,10 @@ import { toast } from "sonner";
 
 import { leaveRequestService } from "@/features/leave/services/leave-request.service";
 import { leaveTypeService } from "@/features/leave/services/leave-type.service";
-import { leaveBalanceService } from "@/features/leave/services/leave-balance.service";
 
 import type {
-  LeaveBalance,
   LeaveDayPortion,
+  LeaveRequestPreview,
   LeaveType,
 } from "@/features/leave/types/leave.types";
 
@@ -48,162 +47,49 @@ export default function ApplyLeavePage() {
   const canApply = permissions.includes("leave.apply");
 
   const [leaveTypes, setLeaveTypes] = useState<LeaveType[]>([]);
-  const [leaveBalances, setLeaveBalances] = useState<LeaveBalance[]>([]);
   const [form, setForm] = useState<ApplyLeaveForm>(initialForm);
 
   const [isLoadingTypes, setIsLoadingTypes] = useState(true);
-  const [isLoadingBalances, setIsLoadingBalances] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  const [preview, setPreview] = useState<LeaveRequestPreview | null>(null);
+  const [isLoadingPreview, setIsLoadingPreview] = useState(false);
+  const [previewError, setPreviewError] = useState<string | null>(null);
   /* =========================================================
      SELECTED LEAVE TYPE
      ========================================================= */
-
-  /* =========================================================
-   SELECTED LEAVE TYPE
-   ========================================================= */
-
   const selectedLeaveType = useMemo(() => {
     return (
       leaveTypes.find((leaveType) => leaveType._id === form.leaveTypeId) ?? null
     );
   }, [leaveTypes, form.leaveTypeId]);
 
-  const selectedLeaveBalance = useMemo(() => {
-    if (!selectedLeaveType) {
-      return null;
-    }
-
-    return (
-      leaveBalances.find((balance) => {
-        const leaveTypeId =
-          typeof balance.leaveTypeId === "string"
-            ? balance.leaveTypeId
-            : balance.leaveTypeId?._id;
-
-        return leaveTypeId === selectedLeaveType._id;
-      }) ?? null
-    );
-  }, [leaveBalances, selectedLeaveType]);
-
-  const availableBalance = useMemo(() => {
-    if (!selectedLeaveBalance) {
-      return 0;
-    }
-
-    return (
-      Number(selectedLeaveBalance.allocatedDays ?? 0) +
-      Number(selectedLeaveBalance.accruedDays ?? 0) +
-      Number(selectedLeaveBalance.carriedForwardDays ?? 0) +
-      Number(selectedLeaveBalance.adjustedDays ?? 0) -
-      Number(selectedLeaveBalance.pendingDays ?? 0) -
-      Number(selectedLeaveBalance.usedDays ?? 0) -
-      Number(selectedLeaveBalance.lapsedDays ?? 0)
-    );
-  }, [selectedLeaveBalance]);
-
-  const selectedPeriodKey = useMemo(() => {
-    if (!form.fromDate || !form.toDate) {
-      return null;
-    }
-
-    // V1 eligibility calculation handles one calendar month at a time.
-    if (form.fromDate.slice(0, 7) !== form.toDate.slice(0, 7)) {
-      return null;
-    }
-
-    return form.fromDate.slice(0, 7);
-  }, [form.fromDate, form.toDate]);
-
-  const selectedCalendarDays = useMemo(() => {
-    if (!form.fromDate || !form.toDate) {
-      return 0;
-    }
-
-    const fromDate = new Date(`${form.fromDate}T00:00:00`);
-    const toDate = new Date(`${form.toDate}T00:00:00`);
-
-    if (
-      Number.isNaN(fromDate.getTime()) ||
-      Number.isNaN(toDate.getTime()) ||
-      toDate < fromDate
-    ) {
-      return 0;
-    }
-
-    const millisecondsPerDay = 1000 * 60 * 60 * 24;
-
-    return (
-      Math.floor((toDate.getTime() - fromDate.getTime()) / millisecondsPerDay) +
-      1
-    );
-  }, [form.fromDate, form.toDate]);
-
-  const leaveEligibility = useMemo(() => {
-    return leaveTypes.map((leaveType) => {
-      const balance = leaveBalances.find(
-        (item) => getLeaveTypeIdFromBalance(item) === leaveType._id,
-      );
-
-      const usableDays = getUsableLeaveDaysForPeriod(
-        leaveType,
-        balance,
-        selectedPeriodKey,
-      );
-
-      return {
-        leaveType,
-        balance,
-        usableDays,
-      };
-    });
-  }, [leaveTypes, leaveBalances, selectedPeriodKey]);
-
   const hasSelectedDates = Boolean(form.fromDate && form.toDate);
 
-  const hasUsablePaidLeave = useMemo(() => {
-    if (!hasSelectedDates || !selectedPeriodKey) {
-      return false;
-    }
-
-    return leaveEligibility.some(
-      ({ leaveType, usableDays }) =>
-        leaveType.paymentType === "PAID" && usableDays > 0,
-    );
-  }, [leaveEligibility, hasSelectedDates, selectedPeriodKey]);
-
   const selectableLeaveTypes = useMemo(() => {
-    if (!hasSelectedDates || !selectedPeriodKey) {
+    if (!hasSelectedDates) {
       return [];
     }
 
     return leaveTypes.filter((leaveType) => {
       /*
-       * Paid leave is selectable only when it is actually usable
-       * for the selected period.
+       * Leave types returned by this page are already ACTIVE.
+       *
+       * Do not hide a paid leave type merely because the frontend
+       * cannot see an accrued balance for the selected dates.
+       *
+       * The backend is authoritative for:
+       * - current balance
+       * - monthly entitlement
+       * - future projected entitlement
+       * - monthly usage limits
+       * - maximum consecutive paid days
+       * - automatic paid -> LOP overflow
+       * - cross-month allocation
        */
-      if (leaveType.paymentType === "PAID") {
-        const eligibility = leaveEligibility.find(
-          (item) => item.leaveType._id === leaveType._id,
-        );
-
-        return (eligibility?.usableDays ?? 0) > 0;
-      }
-
-      /*
-       * Unpaid leave becomes selectable only when there is
-       * no usable paid leave for the selected period.
-       */
-      return !hasUsablePaidLeave;
+      return leaveType.status === "ACTIVE";
     });
-  }, [
-    leaveTypes,
-    leaveEligibility,
-    hasSelectedDates,
-    selectedPeriodKey,
-    hasUsablePaidLeave,
-  ]);
-
+  }, [leaveTypes, hasSelectedDates]);
   useEffect(() => {
     if (!form.leaveTypeId) {
       return;
@@ -220,10 +106,6 @@ export default function ApplyLeavePage() {
       }));
     }
   }, [selectableLeaveTypes, form.leaveTypeId]);
-
-  const exceedsMaximumConsecutiveDays =
-    selectedLeaveType?.maximumConsecutiveDays != null &&
-    selectedCalendarDays > selectedLeaveType.maximumConsecutiveDays;
 
   /* =========================================================
      LOAD ACTIVE LEAVE TYPES
@@ -262,40 +144,97 @@ export default function ApplyLeavePage() {
   }, [company?._id, canApply]);
 
   /* =========================================================
-   LOAD READABLE LEAVE BALANCES
+   LEAVE REQUEST PREVIEW
    ========================================================= */
 
   useEffect(() => {
-    async function loadLeaveBalances() {
-      if (!company?._id || !permissions.includes("leave.balance_read")) {
-        setLeaveBalances([]);
-        setIsLoadingBalances(false);
-        return;
-      }
-
-      try {
-        setIsLoadingBalances(true);
-
-        const result = await leaveBalanceService.list(company._id, {
-          page: 1,
-          limit: 100,
-          status: "ACTIVE",
-        });
-
-        setLeaveBalances(result.items);
-      } catch (error) {
-        setLeaveBalances([]);
-
-        toast.error(
-          getApiErrorMessage(error, "Unable to load your leave balances."),
-        );
-      } finally {
-        setIsLoadingBalances(false);
-      }
+    if (
+      !company?._id ||
+      !canApply ||
+      !form.leaveTypeId ||
+      !form.fromDate ||
+      !form.toDate ||
+      form.toDate < form.fromDate
+    ) {
+      setPreview(null);
+      setPreviewError(null);
+      setIsLoadingPreview(false);
+      return;
     }
 
-    void loadLeaveBalances();
-  }, [company?._id, permissions]);
+    let cancelled = false;
+
+    const timeoutId = window.setTimeout(async () => {
+      try {
+        setIsLoadingPreview(true);
+        setPreviewError(null);
+
+        const startDayPortion =
+          selectedLeaveType?.allowHalfDay === false
+            ? "FULL_DAY"
+            : form.startDayPortion;
+
+        const endDayPortion =
+          selectedLeaveType?.allowHalfDay === false
+            ? "FULL_DAY"
+            : form.endDayPortion;
+
+        const result = await leaveRequestService.preview(company._id, {
+          leaveTypeId: form.leaveTypeId,
+          fromDate: form.fromDate,
+          toDate: form.toDate,
+          startDayPortion,
+          endDayPortion,
+
+          /*
+           * Preview uses the same validation schema as create.
+           * The reason must therefore satisfy the backend validation.
+           */
+          reason:
+            form.reason.trim().length >= 3
+              ? form.reason.trim()
+              : "Leave preview",
+
+          attachmentUrl: form.attachmentUrl.trim() || undefined,
+        });
+
+        if (cancelled) {
+          return;
+        }
+
+        setPreview(result);
+      } catch (error) {
+        if (cancelled) {
+          return;
+        }
+
+        setPreview(null);
+        setPreviewError(
+          getApiErrorMessage(error, "Unable to calculate leave preview."),
+        );
+      } finally {
+        if (!cancelled) {
+          setIsLoadingPreview(false);
+        }
+      }
+    }, 350);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timeoutId);
+    };
+  }, [
+    company?._id,
+    canApply,
+    form.leaveTypeId,
+    form.fromDate,
+    form.toDate,
+    form.startDayPortion,
+    form.endDayPortion,
+    form.reason,
+    form.attachmentUrl,
+    selectedLeaveType,
+  ]);
 
   /* =========================================================
      FORM UPDATE
@@ -340,18 +279,6 @@ export default function ApplyLeavePage() {
 
     if (form.toDate < form.fromDate) {
       toast.error("To date cannot be earlier than from date.");
-      return;
-    }
-
-    if (exceedsMaximumConsecutiveDays) {
-      toast.error(
-        `${selectedLeaveType?.name ?? "This leave type"} allows a maximum of ${
-          selectedLeaveType?.maximumConsecutiveDays
-        } consecutive day${
-          selectedLeaveType?.maximumConsecutiveDays === 1 ? "" : "s"
-        }.`,
-      );
-
       return;
     }
 
@@ -518,158 +445,7 @@ export default function ApplyLeavePage() {
                   No active leave types are currently available.
                 </p>
               )}
-
-              {!isLoadingTypes && leaveTypes.length > 0 && (
-                <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-4">
-                  <p className="text-sm font-bold text-slate-900">
-                    Your leave availability
-                  </p>
-
-                  <p className="mt-1 text-xs leading-5 text-slate-500">
-                    Review your paid leave availability before selecting unpaid
-                    leave.
-                  </p>
-
-                  <div className="mt-3 space-y-2">
-                    {leaveEligibility.map(
-                      ({ leaveType, balance, usableDays }) => {
-                        const aggregateAvailable = balance
-                          ? Number(balance.allocatedDays ?? 0) +
-                            Number(balance.accruedDays ?? 0) +
-                            Number(balance.carriedForwardDays ?? 0) +
-                            Number(balance.adjustedDays ?? 0) -
-                            Number(balance.pendingDays ?? 0) -
-                            Number(balance.usedDays ?? 0) -
-                            Number(balance.lapsedDays ?? 0)
-                          : 0;
-
-                        const monthlyBalance =
-                          selectedPeriodKey &&
-                          leaveType.allocationMethod === "MONTHLY_ACCRUAL"
-                            ? balance?.monthlyBalances?.find(
-                                (item) => item.periodKey === selectedPeriodKey,
-                              )
-                            : undefined;
-
-                        const monthlyUsageReached =
-                          selectedPeriodKey != null &&
-                          leaveType.allocationMethod === "MONTHLY_ACCRUAL" &&
-                          leaveType.maximumMonthlyUsageDays != null &&
-                          Number(monthlyBalance?.usedDays ?? 0) +
-                            Number(monthlyBalance?.pendingDays ?? 0) >=
-                            Number(leaveType.maximumMonthlyUsageDays);
-
-                        return (
-                          <div
-                            key={leaveType._id}
-                            className="flex flex-col gap-1 rounded-lg bg-white px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between"
-                          >
-                            <div>
-                              <p className="text-sm font-semibold text-slate-800">
-                                {leaveType.name}
-                              </p>
-
-                              <p className="text-xs text-slate-500">
-                                {leaveType.paymentType === "PAID"
-                                  ? "Paid leave"
-                                  : "Unpaid leave"}
-                              </p>
-                            </div>
-
-                            <div className="text-left sm:text-right">
-                              {!form.fromDate || !form.toDate ? (
-                                leaveType.requiresBalance ? (
-                                  isLoadingBalances ? (
-                                    <p className="text-xs text-slate-400">
-                                      Loading balance...
-                                    </p>
-                                  ) : balance ? (
-                                    <>
-                                      <p className="text-sm font-bold text-slate-900">
-                                        {formatDays(aggregateAvailable)} total
-                                        balance
-                                      </p>
-
-                                      <p className="mt-0.5 text-xs text-slate-500">
-                                        Select dates to check availability
-                                      </p>
-                                    </>
-                                  ) : (
-                                    <p className="text-xs font-semibold text-amber-700">
-                                      No balance available
-                                    </p>
-                                  )
-                                ) : (
-                                  <p className="text-xs font-semibold text-amber-700">
-                                    No balance required
-                                  </p>
-                                )
-                              ) : leaveType.paymentType === "UNPAID" ? (
-                                <p className="text-xs font-semibold text-amber-700">
-                                  Unpaid leave
-                                </p>
-                              ) : !balance ? (
-                                <p className="text-xs font-semibold text-amber-700">
-                                  No balance available
-                                </p>
-                              ) : usableDays > 0 ? (
-                                <>
-                                  <p className="text-sm font-bold text-emerald-700">
-                                    {formatDays(usableDays)} usable
-                                  </p>
-
-                                  {aggregateAvailable !== usableDays && (
-                                    <p className="mt-0.5 text-xs text-slate-400">
-                                      {formatDays(aggregateAvailable)} total
-                                      balance
-                                    </p>
-                                  )}
-                                </>
-                              ) : (
-                                <>
-                                  <p className="text-sm font-bold text-amber-700">
-                                    Not available for selected dates
-                                  </p>
-
-                                  {monthlyUsageReached && (
-                                    <p className="mt-0.5 text-xs text-slate-500">
-                                      Monthly usage limit reached
-                                    </p>
-                                  )}
-                                  {aggregateAvailable > 0 && (
-                                    <p className="mt-0.5 text-xs text-slate-400">
-                                      {formatDays(aggregateAvailable)} remain in
-                                      your total balance
-                                    </p>
-                                  )}
-                                </>
-                              )}
-                            </div>
-                          </div>
-                        );
-                      },
-                    )}
-                  </div>
-                </div>
-              )}
             </div>
-
-            {exceedsMaximumConsecutiveDays && selectedLeaveType && (
-              <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
-                <p className="text-sm font-semibold text-amber-900">
-                  Selected leave period exceeds the allowed consecutive leave
-                  limit.
-                </p>
-
-                <p className="mt-1 text-sm leading-6 text-amber-800">
-                  {selectedLeaveType.name} allows a maximum of{" "}
-                  {selectedLeaveType.maximumConsecutiveDays} consecutive day
-                  {selectedLeaveType.maximumConsecutiveDays === 1 ? "" : "s"}.
-                  You selected {selectedCalendarDays} calendar day
-                  {selectedCalendarDays === 1 ? "" : "s"}.
-                </p>
-              </div>
-            )}
 
             {/* Portions */}
 
@@ -775,8 +551,8 @@ export default function ApplyLeavePage() {
               disabled={
                 isSubmitting ||
                 isLoadingTypes ||
-                leaveTypes.length === 0 ||
-                exceedsMaximumConsecutiveDays
+                isLoadingPreview ||
+                leaveTypes.length === 0
               }
               className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-slate-950 px-5 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
             >
@@ -828,14 +604,8 @@ export default function ApplyLeavePage() {
 
                 {selectedLeaveType.requiresBalance ? (
                   <InfoRow
-                    label="Available balance"
-                    value={
-                      isLoadingBalances
-                        ? "Loading..."
-                        : selectedLeaveBalance
-                          ? formatDays(availableBalance)
-                          : "No balance available"
-                    }
+                    label="Balance"
+                    value="Validated for selected dates"
                   />
                 ) : (
                   <InfoRow label="Balance" value="Not required" />
@@ -912,15 +682,130 @@ export default function ApplyLeavePage() {
             )}
           </section>
 
-          <section className="rounded-2xl border border-blue-100 bg-blue-50 p-5">
-            <h3 className="text-sm font-bold text-blue-950">
-              Before submitting
-            </h3>
+          <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <h3 className="text-sm font-bold text-slate-950">
+                  Leave summary
+                </h3>
 
-            <p className="mt-2 text-sm leading-6 text-blue-800">
-              Leave duration, balance availability and company policy rules will
-              be validated by the system when you submit the request.
-            </p>
+                <p className="mt-1 text-xs text-slate-500">
+                  Based on the selected dates and current leave entitlement.
+                </p>
+              </div>
+
+              {isLoadingPreview && (
+                <Loader2 className="h-4 w-4 shrink-0 animate-spin text-slate-400" />
+              )}
+            </div>
+
+            {!form.leaveTypeId || !form.fromDate || !form.toDate ? (
+              <p className="mt-4 text-sm leading-6 text-slate-500">
+                Select the leave dates and leave type to view the leave summary.
+              </p>
+            ) : isLoadingPreview && !preview ? (
+              <div className="mt-4 flex items-center gap-2 text-sm text-slate-500">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Calculating leave allocation...
+              </div>
+            ) : previewError ? (
+              <div className="mt-4 rounded-xl border border-red-200 bg-red-50 p-3">
+                <p className="text-xs font-semibold text-red-700">
+                  Unable to calculate leave summary
+                </p>
+
+                <p className="mt-1 text-xs leading-5 text-red-600">
+                  {previewError}
+                </p>
+              </div>
+            ) : preview ? (
+              <div className="mt-4 space-y-4">
+                <div className="grid grid-cols-3 gap-2">
+                  <PreviewStat
+                    label="Requested"
+                    value={formatDays(preview.requestedDays)}
+                  />
+
+                  <PreviewStat
+                    label="Paid"
+                    value={formatDays(preview.paidDays)}
+                  />
+
+                  <PreviewStat
+                    label="Unpaid"
+                    value={formatDays(preview.unpaidDays)}
+                  />
+                </div>
+
+                {preview.dateDetails.length > 0 && (
+                  <div className="space-y-2 border-t border-slate-100 pt-4">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                      Date allocation
+                    </p>
+
+                    <div className="space-y-2">
+                      {preview.dateDetails.map((detail) => (
+                        <div
+                          key={detail.date}
+                          className="flex items-center justify-between gap-3 rounded-xl bg-slate-50 px-3 py-2"
+                        >
+                          <div className="min-w-0">
+                            <p className="text-xs font-semibold text-slate-800">
+                              {formatPreviewDate(detail.date)}
+                            </p>
+
+                            <p className="mt-0.5 text-xs text-slate-500">
+                              {getPreviewAllocationLabel(detail)}
+                            </p>
+                          </div>
+
+                          <span
+                            className={`shrink-0 rounded-full px-2 py-1 text-[11px] font-bold ${
+                              detail.allocationType === "PAID"
+                                ? "bg-emerald-100 text-emerald-700"
+                                : detail.allocationType === "MIXED"
+                                  ? "bg-amber-100 text-amber-700"
+                                  : "bg-red-100 text-red-700"
+                            }`}
+                          >
+                            {formatEnum(detail.allocationType)}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {preview.payrollAdjustmentRequired &&
+                  preview.unpaidDays > 0 && (
+                    <div className="rounded-xl border border-amber-200 bg-amber-50 p-3">
+                      <p className="text-xs font-bold text-amber-900">
+                        Payroll adjustment
+                      </p>
+
+                      <p className="mt-1 text-xs leading-5 text-amber-800">
+                        {formatDays(preview.unpaidDays)} of this request will be
+                        treated as unpaid leave and may result in salary
+                        deduction if approved.
+                      </p>
+                    </div>
+                  )}
+
+                {!preview.payrollAdjustmentRequired && preview.paidDays > 0 && (
+                  <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3">
+                    <p className="text-xs font-semibold text-emerald-800">
+                      The selected leave period is currently covered by paid
+                      leave entitlement.
+                    </p>
+                  </div>
+                )}
+
+                <p className="text-[11px] leading-5 text-slate-400">
+                  This is a preview. The final allocation is recalculated when
+                  the request is submitted.
+                </p>
+              </div>
+            ) : null}
           </section>
         </aside>
       </form>
@@ -991,6 +876,51 @@ function InfoRow({ label, value }: { label: string; value: string }) {
   );
 }
 
+function PreviewStat({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-xl bg-slate-50 p-3">
+      <p className="text-[11px] font-medium text-slate-400">{label}</p>
+
+      <p className="mt-1 text-sm font-bold text-slate-950">{value}</p>
+    </div>
+  );
+}
+
+function formatPreviewDate(value: string) {
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+
+  return new Intl.DateTimeFormat("en-IN", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    timeZone: "UTC",
+  }).format(date);
+}
+
+function getPreviewAllocationLabel(
+  detail: LeaveRequestPreview["dateDetails"][number],
+) {
+  if (detail.allocationType === "MIXED") {
+    return `${formatDays(detail.paidDays)} paid + ${formatDays(
+      detail.unpaidDays,
+    )} unpaid`;
+  }
+
+  if (detail.allocationType === "PAID") {
+    return detail.paidLeaveTypeName || "Paid leave";
+  }
+
+  if (detail.allocationType === "UNPAID") {
+    return detail.unpaidLeaveTypeName || "Unpaid leave";
+  }
+
+  return formatEnum(detail.dayClassification);
+}
+
 const inputClassName =
   "h-11 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm text-slate-900 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 disabled:bg-slate-50 disabled:text-slate-500";
 
@@ -1010,98 +940,4 @@ function formatDays(value: number) {
   const normalized = Number(Number(value ?? 0).toFixed(2));
 
   return `${normalized} day${normalized === 1 ? "" : "s"}`;
-}
-
-function getLeaveTypeIdFromBalance(balance: LeaveBalance) {
-  return typeof balance.leaveTypeId === "string"
-    ? balance.leaveTypeId
-    : balance.leaveTypeId?._id;
-}
-
-function getUsableLeaveDaysForPeriod(
-  leaveType: LeaveType,
-  balance: LeaveBalance | undefined,
-  periodKey: string | null,
-) {
-  if (leaveType.paymentType !== "PAID") {
-    return 0;
-  }
-
-  if (!leaveType.requiresBalance) {
-    return Number.POSITIVE_INFINITY;
-  }
-
-  if (!balance) {
-    return 0;
-  }
-
-  const aggregateAvailable =
-    Number(balance.allocatedDays ?? 0) +
-    Number(balance.accruedDays ?? 0) +
-    Number(balance.carriedForwardDays ?? 0) +
-    Number(balance.adjustedDays ?? 0) -
-    Number(balance.pendingDays ?? 0) -
-    Number(balance.usedDays ?? 0) -
-    Number(balance.lapsedDays ?? 0);
-
-  if (aggregateAvailable <= 0) {
-    return 0;
-  }
-
-  /*
-   * Non-monthly leave types can use the aggregate balance.
-   */
-  if (leaveType.allocationMethod !== "MONTHLY_ACCRUAL") {
-    return aggregateAvailable;
-  }
-
-  /*
-   * Monthly eligibility depends on the selected month.
-   */
-  if (!periodKey) {
-    return 0;
-  }
-
-  const monthlyBalance = balance.monthlyBalances?.find(
-    (item) => item.periodKey === periodKey,
-  );
-
-  if (!monthlyBalance) {
-    return 0;
-  }
-
-  const monthlyAvailable =
-    Number(monthlyBalance.creditedDays ?? 0) +
-    Number(monthlyBalance.adjustedDays ?? 0) -
-    Number(monthlyBalance.pendingDays ?? 0) -
-    Number(monthlyBalance.usedDays ?? 0) -
-    Number(monthlyBalance.lapsedDays ?? 0);
-
-  if (monthlyAvailable <= 0) {
-    return 0;
-  }
-
-  /*
-   * A monthly usage cap is separate from balance.
-   *
-   * Pending requests are included because those days are already
-   * reserved and should not be offered again in the UI.
-   */
-  if (leaveType.maximumMonthlyUsageDays != null) {
-    const alreadyCommitted =
-      Number(monthlyBalance.usedDays ?? 0) +
-      Number(monthlyBalance.pendingDays ?? 0);
-
-    const remainingMonthlyUsage = Math.max(
-      0,
-      Number(leaveType.maximumMonthlyUsageDays) - alreadyCommitted,
-    );
-
-    return Math.max(
-      0,
-      Math.min(aggregateAvailable, monthlyAvailable, remainingMonthlyUsage),
-    );
-  }
-
-  return Math.max(0, Math.min(aggregateAvailable, monthlyAvailable));
 }

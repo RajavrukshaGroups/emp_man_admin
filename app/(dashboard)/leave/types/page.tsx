@@ -18,6 +18,7 @@ import { toast } from "sonner";
 import {
   leaveTypeService,
   type CreateLeaveTypePayload,
+  type UpdateLeaveTypePayload,
 } from "@/features/leave/services/leave-type.service";
 
 import type {
@@ -52,10 +53,15 @@ export default function LeaveTypesPage() {
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
 
+  const [editingLeaveType, setEditingLeaveType] = useState<LeaveType | null>(
+    null,
+  );
+
+  const [isUpdating, setIsUpdating] = useState(false);
+
   const [form, setForm] = useState<CreateLeaveTypeFormState>(
     getInitialCreateForm(),
   );
-
   /* =========================================================
      LOAD LEAVE TYPES
      ========================================================= */
@@ -121,6 +127,78 @@ export default function LeaveTypesPage() {
     }
 
     setIsCreateOpen(false);
+    setForm(getInitialCreateForm());
+  }
+
+  function openEditModal(leaveType: LeaveType) {
+    if (!canManage) {
+      return;
+    }
+
+    setForm({
+      name: leaveType.name,
+      code: leaveType.code,
+      description: leaveType.description ?? "",
+
+      paymentType: leaveType.paymentType,
+      requiresBalance: leaveType.requiresBalance,
+
+      allocationMethod: leaveType.allocationMethod,
+
+      annualEntitlementDays: String(leaveType.annualEntitlementDays ?? 0),
+      monthlyEntitlementDays: String(leaveType.monthlyEntitlementDays ?? 0),
+
+      maximumMonthlyUsageDays:
+        leaveType.maximumMonthlyUsageDays === null ||
+        leaveType.maximumMonthlyUsageDays === undefined
+          ? ""
+          : String(leaveType.maximumMonthlyUsageDays),
+
+      allowMonthlyAccumulation: leaveType.allowMonthlyAccumulation,
+      allowHalfDay: leaveType.allowHalfDay,
+
+      minimumServiceDays: String(leaveType.minimumServiceDays ?? 0),
+      minimumNoticeDays: String(leaveType.minimumNoticeDays ?? 0),
+
+      maximumConsecutiveDays:
+        leaveType.maximumConsecutiveDays === null ||
+        leaveType.maximumConsecutiveDays === undefined
+          ? ""
+          : String(leaveType.maximumConsecutiveDays),
+
+      allowBackdatedApplication: leaveType.allowBackdatedApplication,
+      maximumBackdatedDays: String(leaveType.maximumBackdatedDays ?? 0),
+
+      requireAttachment: leaveType.requireAttachment,
+
+      attachmentRequiredFromDays:
+        leaveType.attachmentRequiredFromDays === null ||
+        leaveType.attachmentRequiredFromDays === undefined
+          ? ""
+          : String(leaveType.attachmentRequiredFromDays),
+
+      allowNegativeBalance: leaveType.allowNegativeBalance,
+
+      carryForwardEnabled: leaveType.carryForwardEnabled,
+      maximumCarryForwardDays: String(leaveType.maximumCarryForwardDays ?? 0),
+
+      effectiveFrom: leaveType.effectiveFrom.slice(0, 10),
+      effectiveTo: leaveType.effectiveTo
+        ? leaveType.effectiveTo.slice(0, 10)
+        : "",
+
+      status: leaveType.status,
+    });
+
+    setEditingLeaveType(leaveType);
+  }
+
+  function closeEditModal() {
+    if (isUpdating) {
+      return;
+    }
+
+    setEditingLeaveType(null);
     setForm(getInitialCreateForm());
   }
 
@@ -278,6 +356,146 @@ export default function LeaveTypesPage() {
     }
   }
 
+  async function handleUpdateLeaveType(
+    event: React.FormEvent<HTMLFormElement>,
+  ) {
+    event.preventDefault();
+
+    if (!company?._id || !editingLeaveType) {
+      return;
+    }
+
+    if (!canManage) {
+      toast.error("You do not have permission to update leave types.");
+      return;
+    }
+
+    if (!form.name.trim()) {
+      toast.error("Leave type name is required.");
+      return;
+    }
+
+    if (!form.code.trim()) {
+      toast.error("Leave type code is required.");
+      return;
+    }
+
+    if (!form.effectiveFrom) {
+      toast.error("Effective from date is required.");
+      return;
+    }
+
+    if (
+      form.allocationMethod === "MONTHLY_ACCRUAL" &&
+      Number(form.monthlyEntitlementDays) <= 0
+    ) {
+      toast.error("Monthly entitlement must be greater than 0.");
+      return;
+    }
+
+    if (
+      form.allocationMethod === "ANNUAL_UPFRONT" &&
+      Number(form.annualEntitlementDays) <= 0
+    ) {
+      toast.error("Annual entitlement must be greater than 0.");
+      return;
+    }
+
+    try {
+      setIsUpdating(true);
+
+      const payload: UpdateLeaveTypePayload = {
+        name: form.name.trim(),
+        code: form.code.trim().toUpperCase(),
+
+        description: form.description.trim(),
+
+        paymentType: form.paymentType,
+
+        requiresBalance:
+          form.allocationMethod === "NO_BALANCE" ? false : form.requiresBalance,
+
+        allocationMethod: form.allocationMethod,
+
+        annualEntitlementDays:
+          form.allocationMethod === "ANNUAL_UPFRONT"
+            ? Number(form.annualEntitlementDays)
+            : 0,
+
+        monthlyEntitlementDays:
+          form.allocationMethod === "MONTHLY_ACCRUAL"
+            ? Number(form.monthlyEntitlementDays)
+            : 0,
+
+        maximumMonthlyUsageDays:
+          form.maximumMonthlyUsageDays.trim() === ""
+            ? null
+            : Number(form.maximumMonthlyUsageDays),
+
+        allowMonthlyAccumulation:
+          form.allocationMethod === "MONTHLY_ACCRUAL"
+            ? form.allowMonthlyAccumulation
+            : false,
+
+        allowHalfDay: form.allowHalfDay,
+
+        minimumServiceDays: Number(form.minimumServiceDays),
+        minimumNoticeDays: Number(form.minimumNoticeDays),
+
+        maximumConsecutiveDays:
+          form.maximumConsecutiveDays.trim() === ""
+            ? null
+            : Number(form.maximumConsecutiveDays),
+
+        allowBackdatedApplication: form.allowBackdatedApplication,
+
+        maximumBackdatedDays: form.allowBackdatedApplication
+          ? Number(form.maximumBackdatedDays)
+          : 0,
+
+        requireAttachment: form.requireAttachment,
+
+        attachmentRequiredFromDays: form.requireAttachment
+          ? form.attachmentRequiredFromDays.trim() === ""
+            ? null
+            : Number(form.attachmentRequiredFromDays)
+          : null,
+
+        allowNegativeBalance:
+          form.allocationMethod === "NO_BALANCE"
+            ? false
+            : form.allowNegativeBalance,
+
+        carryForwardEnabled:
+          form.allocationMethod === "ANNUAL_UPFRONT"
+            ? form.carryForwardEnabled
+            : false,
+
+        maximumCarryForwardDays:
+          form.allocationMethod === "ANNUAL_UPFRONT" && form.carryForwardEnabled
+            ? Number(form.maximumCarryForwardDays)
+            : 0,
+
+        effectiveFrom: form.effectiveFrom,
+        effectiveTo: form.effectiveTo || null,
+        status: form.status,
+      };
+
+      await leaveTypeService.update(company._id, editingLeaveType._id, payload);
+
+      toast.success("Leave type updated successfully.");
+
+      setEditingLeaveType(null);
+      setForm(getInitialCreateForm());
+
+      await loadLeaveTypes();
+    } catch (error) {
+      toast.error(getApiErrorMessage(error, "Unable to update leave type."));
+    } finally {
+      setIsUpdating(false);
+    }
+  }
+
   /* =========================================================
      PERMISSION
      ========================================================= */
@@ -300,6 +518,17 @@ export default function LeaveTypesPage() {
         </section>
       </div>
     );
+  }
+
+  const isSaving = isCreating || isUpdating;
+
+  function closeLeaveTypeModal() {
+    if (editingLeaveType) {
+      closeEditModal();
+      return;
+    }
+
+    closeCreateModal();
   }
 
   return (
@@ -451,12 +680,13 @@ export default function LeaveTypesPage() {
                 key={leaveType._id}
                 leaveType={leaveType}
                 canManage={canManage}
+                onEdit={openEditModal}
               />
             ))}
           </div>
         </section>
       )}
-      {isCreateOpen && (
+      {(isCreateOpen || editingLeaveType) && (
         <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-slate-950/50 p-3 sm:p-4">
           <div className="flex max-h-[calc(100dvh-24px)] w-full max-w-3xl flex-col overflow-hidden rounded-2xl bg-white shadow-xl sm:max-h-[calc(100dvh-32px)]">
             {/* HEADER */}
@@ -464,27 +694,34 @@ export default function LeaveTypesPage() {
             <div className="flex shrink-0 items-start justify-between border-b border-slate-100 p-4 sm:p-5">
               <div>
                 <h2 className="text-lg font-bold text-slate-950">
-                  Create Leave Type
+                  {editingLeaveType ? "Edit Leave Type" : "Create Leave Type"}
                 </h2>
-
                 <p className="mt-1 text-sm text-slate-500">
-                  Configure entitlement, allocation and usage rules.
+                  {editingLeaveType
+                    ? `Update the configuration for ${editingLeaveType.name}.`
+                    : "Configure entitlement, allocation and usage rules."}
                 </p>
               </div>
 
               <button
                 type="button"
-                onClick={closeCreateModal}
-                disabled={isCreating}
+                onClick={closeLeaveTypeModal}
+                disabled={isSaving}
                 className="rounded-lg p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 disabled:opacity-50"
-                aria-label="Close create leave type modal"
+                aria-label={
+                  editingLeaveType
+                    ? "Close edit leave type modal"
+                    : "Close create leave type modal"
+                }
               >
                 <X className="h-5 w-5" />
               </button>
             </div>
 
             <form
-              onSubmit={handleCreateLeaveType}
+              onSubmit={
+                editingLeaveType ? handleUpdateLeaveType : handleCreateLeaveType
+              }
               className="flex min-h-0 flex-1 flex-col"
             >
               <div className="min-h-0 flex-1 overflow-y-auto">
@@ -504,7 +741,7 @@ export default function LeaveTypesPage() {
                           }
                           placeholder="Example: Sick Leave"
                           className={inputClassName}
-                          disabled={isCreating}
+                          disabled={isSaving}
                         />
                       </FormField>
 
@@ -516,7 +753,7 @@ export default function LeaveTypesPage() {
                           }
                           placeholder="Example: SL"
                           className={inputClassName}
-                          disabled={isCreating}
+                          disabled={isSaving}
                         />
                       </FormField>
                     </div>
@@ -529,7 +766,7 @@ export default function LeaveTypesPage() {
                           updateForm("description", event.target.value)
                         }
                         placeholder="Describe when this leave type should be used."
-                        disabled={isCreating}
+                        disabled={isSaving}
                         className={textareaClassName}
                       />
                     </FormField>
@@ -552,7 +789,7 @@ export default function LeaveTypesPage() {
                             )
                           }
                           className={inputClassName}
-                          disabled={isCreating}
+                          disabled={isSaving}
                         >
                           <option value="PAID">Paid</option>
                           <option value="UNPAID">Unpaid</option>
@@ -569,7 +806,7 @@ export default function LeaveTypesPage() {
                             )
                           }
                           className={inputClassName}
-                          disabled={isCreating}
+                          disabled={isSaving}
                         >
                           <option value="MONTHLY_ACCRUAL">
                             Monthly accrual
@@ -589,7 +826,7 @@ export default function LeaveTypesPage() {
                         onChange={(value) =>
                           updateForm("requiresBalance", value)
                         }
-                        disabled={isCreating}
+                        disabled={isSaving}
                       />
                     )}
 
@@ -628,7 +865,7 @@ export default function LeaveTypesPage() {
                                 )
                               }
                               className={inputClassName}
-                              disabled={isCreating}
+                              disabled={isSaving}
                             />
                           </FormField>
 
@@ -649,7 +886,7 @@ export default function LeaveTypesPage() {
                               }
                               placeholder="No limit"
                               className={inputClassName}
-                              disabled={isCreating}
+                              disabled={isSaving}
                             />
                           </FormField>
                         </div>
@@ -661,7 +898,7 @@ export default function LeaveTypesPage() {
                           onChange={(value) =>
                             updateForm("allowMonthlyAccumulation", value)
                           }
-                          disabled={isCreating}
+                          disabled={isSaving}
                         />
                       </>
                     )}
@@ -684,7 +921,7 @@ export default function LeaveTypesPage() {
                             )
                           }
                           className={inputClassName}
-                          disabled={isCreating}
+                          disabled={isSaving}
                         />
                       </FormField>
                     )}
@@ -716,7 +953,7 @@ export default function LeaveTypesPage() {
                             updateForm("minimumServiceDays", event.target.value)
                           }
                           className={inputClassName}
-                          disabled={isCreating}
+                          disabled={isSaving}
                         />
                       </FormField>
 
@@ -730,7 +967,7 @@ export default function LeaveTypesPage() {
                             updateForm("minimumNoticeDays", event.target.value)
                           }
                           className={inputClassName}
-                          disabled={isCreating}
+                          disabled={isSaving}
                         />
                       </FormField>
 
@@ -751,7 +988,7 @@ export default function LeaveTypesPage() {
                           }
                           placeholder="No limit"
                           className={inputClassName}
-                          disabled={isCreating}
+                          disabled={isSaving}
                         />
                       </FormField>
                     </div>
@@ -761,7 +998,7 @@ export default function LeaveTypesPage() {
                       description="Employees may request first-half or second-half leave."
                       checked={form.allowHalfDay}
                       onChange={(value) => updateForm("allowHalfDay", value)}
-                      disabled={isCreating}
+                      disabled={isSaving}
                     />
 
                     <ToggleField
@@ -772,7 +1009,7 @@ export default function LeaveTypesPage() {
                         updateForm("allowNegativeBalance", value)
                       }
                       disabled={
-                        isCreating || form.allocationMethod === "NO_BALANCE"
+                        isSaving || form.allocationMethod === "NO_BALANCE"
                       }
                     />
                   </FormSection>
@@ -790,7 +1027,7 @@ export default function LeaveTypesPage() {
                       onChange={(value) =>
                         updateForm("allowBackdatedApplication", value)
                       }
-                      disabled={isCreating}
+                      disabled={isSaving}
                     />
 
                     {form.allowBackdatedApplication && (
@@ -807,7 +1044,7 @@ export default function LeaveTypesPage() {
                             )
                           }
                           className={inputClassName}
-                          disabled={isCreating}
+                          disabled={isSaving}
                         />
                       </FormField>
                     )}
@@ -826,7 +1063,7 @@ export default function LeaveTypesPage() {
                       onChange={(value) =>
                         updateForm("requireAttachment", value)
                       }
-                      disabled={isCreating}
+                      disabled={isSaving}
                     />
 
                     {form.requireAttachment && (
@@ -847,7 +1084,7 @@ export default function LeaveTypesPage() {
                           }
                           placeholder="Example: 2"
                           className={inputClassName}
-                          disabled={isCreating}
+                          disabled={isSaving}
                         />
                       </FormField>
                     )}
@@ -867,7 +1104,7 @@ export default function LeaveTypesPage() {
                         onChange={(value) =>
                           updateForm("carryForwardEnabled", value)
                         }
-                        disabled={isCreating}
+                        disabled={isSaving}
                       />
 
                       {form.carryForwardEnabled && (
@@ -884,7 +1121,7 @@ export default function LeaveTypesPage() {
                               )
                             }
                             className={inputClassName}
-                            disabled={isCreating}
+                            disabled={isSaving}
                           />
                         </FormField>
                       )}
@@ -906,7 +1143,7 @@ export default function LeaveTypesPage() {
                             updateForm("effectiveFrom", event.target.value)
                           }
                           className={inputClassName}
-                          disabled={isCreating}
+                          disabled={isSaving}
                         />
                       </FormField>
 
@@ -918,7 +1155,7 @@ export default function LeaveTypesPage() {
                             updateForm("effectiveTo", event.target.value)
                           }
                           className={inputClassName}
-                          disabled={isCreating}
+                          disabled={isSaving}
                         />
                       </FormField>
                     </div>
@@ -933,7 +1170,7 @@ export default function LeaveTypesPage() {
                           )
                         }
                         className={inputClassName}
-                        disabled={isCreating}
+                        disabled={isSaving}
                       >
                         <option value="ACTIVE">Active</option>
                         <option value="INACTIVE">Inactive</option>
@@ -942,14 +1179,12 @@ export default function LeaveTypesPage() {
                   </FormSection>
                 </div>
               </div>
-
               {/* FOOTER */}
-
               <div className="flex shrink-0 flex-col-reverse gap-2 border-t border-slate-100 bg-slate-50 p-4 sm:flex-row sm:justify-end sm:p-5">
                 <button
                   type="button"
-                  onClick={closeCreateModal}
-                  disabled={isCreating}
+                  onClick={closeLeaveTypeModal}
+                  disabled={isSaving}
                   className="h-10 rounded-xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 transition hover:bg-slate-100 disabled:opacity-50"
                 >
                   Cancel
@@ -957,11 +1192,11 @@ export default function LeaveTypesPage() {
 
                 <button
                   type="submit"
-                  disabled={isCreating}
+                  disabled={isSaving}
                   className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-slate-950 px-4 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:opacity-50"
                 >
-                  {isCreating && <Loader2 className="h-4 w-4 animate-spin" />}
-                  Create Leave Type
+                  {isSaving && <Loader2 className="h-4 w-4 animate-spin" />}
+                  {editingLeaveType ? "Save Changes" : "Create Leave Type"}
                 </button>
               </div>
             </form>
@@ -979,9 +1214,11 @@ export default function LeaveTypesPage() {
 function LeaveTypeRow({
   leaveType,
   canManage,
+  onEdit,
 }: {
   leaveType: LeaveType;
   canManage: boolean;
+  onEdit: (leaveType: LeaveType) => void;
 }) {
   return (
     <div className="p-5 sm:p-6">
@@ -1083,9 +1320,7 @@ function LeaveTypeRow({
         {canManage && (
           <button
             type="button"
-            onClick={() =>
-              toast.info(`Edit form for ${leaveType.name} will be added next.`)
-            }
+            onClick={() => onEdit(leaveType)}
             className="inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
           >
             <Pencil className="h-4 w-4" />

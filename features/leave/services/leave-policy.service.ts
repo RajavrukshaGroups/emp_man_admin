@@ -31,6 +31,8 @@ export interface LeavePolicyListResponse {
         limit: number;
         total: number;
         totalPages: number;
+        hasNextPage: boolean;
+        hasPreviousPage: boolean;
     };
 }
 

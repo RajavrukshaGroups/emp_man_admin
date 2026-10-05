@@ -31,6 +31,9 @@ export default function LeavePage() {
   const canReadBalances = permissions.includes("leave.balance_read");
   const canManageBalances = permissions.includes("leave.balance_manage");
 
+  const canReadPolicies = permissions.includes("leave.policy_read");
+  const canManagePolicies = permissions.includes("leave.policy_manage");
+
   const isCompanyAdministrator = role?.code === "COMPANY_ADMIN";
 
   const canReviewRequests = canRecommend || canApprove || canReject;
@@ -121,10 +124,14 @@ export default function LeavePage() {
           />
         )}
 
-        {isCompanyAdministrator && (
+        {canReadPolicies && (
           <LeaveNavigationCard
             title="Leave Policies"
-            description="Configure leave-year rules, approval workflow and cancellation settings."
+            description={
+              canManagePolicies
+                ? "Configure leave-year rules, approval workflow and cancellation settings."
+                : "View the leave policies configured for your company."
+            }
             href="/leave/policies"
             icon={Settings2}
           />
