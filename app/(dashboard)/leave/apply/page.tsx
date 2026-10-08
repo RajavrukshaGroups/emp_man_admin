@@ -2,12 +2,24 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, CalendarDays, FileText, Loader2, Send } from "lucide-react";
+import {
+  ArrowLeft,
+  CalendarDays,
+  ChevronLeft,
+  ChevronRight,
+  FileText,
+  Loader2,
+  Send,
+} from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import { leaveRequestService } from "@/features/leave/services/leave-request.service";
 import { leaveTypeService } from "@/features/leave/services/leave-type.service";
+
+import { workCalendarService } from "@/features/work-calendar/services/work-calendar.service";
+
+import type { ResolvedWorkDay } from "@/features/work-calendar/types/work-calendar.types";
 
 import type {
   LeaveDayPortion,
@@ -55,6 +67,37 @@ export default function ApplyLeavePage() {
   const [preview, setPreview] = useState<LeaveRequestPreview | null>(null);
   const [isLoadingPreview, setIsLoadingPreview] = useState(false);
   const [previewError, setPreviewError] = useState<string | null>(null);
+
+  const today = useMemo(() => new Date(), []);
+
+  const [calendarYear, setCalendarYear] = useState(today.getFullYear());
+  const [calendarMonth, setCalendarMonth] = useState(today.getMonth());
+
+  const [calendarDays, setCalendarDays] = useState<ResolvedWorkDay[]>([]);
+  const [isLoadingCalendar, setIsLoadingCalendar] = useState(false);
+
+  const [selectionAnchor, setSelectionAnchor] = useState<string | null>(null);
+
+  const calendarMonthRange = useMemo(() => {
+    const fromDate = `${calendarYear}-${String(calendarMonth + 1).padStart(
+      2,
+      "0",
+    )}-01`;
+
+    const lastDay = new Date(
+      Date.UTC(calendarYear, calendarMonth + 1, 0),
+    ).getUTCDate();
+
+    const toDate = `${calendarYear}-${String(calendarMonth + 1).padStart(
+      2,
+      "0",
+    )}-${String(lastDay).padStart(2, "0")}`;
+
+    return {
+      fromDate,
+      toDate,
+    };
+  }, [calendarYear, calendarMonth]);
   /* =========================================================
      SELECTED LEAVE TYPE
      ========================================================= */
@@ -142,6 +185,60 @@ export default function ApplyLeavePage() {
 
     void loadLeaveTypes();
   }, [company?._id, canApply]);
+
+  /* =========================================================
+   LOAD RESOLVED WORK CALENDAR
+   ========================================================= */
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadResolvedCalendar() {
+      if (!company?._id) {
+        setCalendarDays([]);
+        return;
+      }
+
+      try {
+        setIsLoadingCalendar(true);
+
+        const result = await workCalendarService.resolveRange(
+          company._id,
+          calendarMonthRange.fromDate,
+          calendarMonthRange.toDate,
+        );
+
+        if (cancelled) {
+          return;
+        }
+
+        setCalendarDays(result.days);
+      } catch (error) {
+        if (cancelled) {
+          return;
+        }
+
+        setCalendarDays([]);
+
+        toast.error(
+          getApiErrorMessage(
+            error,
+            "Unable to load the company work calendar.",
+          ),
+        );
+      } finally {
+        if (!cancelled) {
+          setIsLoadingCalendar(false);
+        }
+      }
+    }
+
+    void loadResolvedCalendar();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [company?._id, calendarMonthRange.fromDate, calendarMonthRange.toDate]);
 
   /* =========================================================
    LEAVE REQUEST PREVIEW
@@ -248,6 +345,74 @@ export default function ApplyLeavePage() {
       ...current,
       [key]: value,
     }));
+  }
+
+  function handleCalendarDateClick(date: string) {
+    if (isSubmitting) {
+      return;
+    }
+
+    // First click:
+    // immediately treat it as a valid single-day leave.
+    if (!selectionAnchor) {
+      setSelectionAnchor(date);
+
+      setForm((current) => ({
+        ...current,
+        fromDate: date,
+        toDate: date,
+      }));
+
+      return;
+    }
+
+    // Clicking the same date again keeps it as a single-day request.
+    if (selectionAnchor === date) {
+      setForm((current) => ({
+        ...current,
+        fromDate: date,
+        toDate: date,
+      }));
+
+      setSelectionAnchor(null);
+      return;
+    }
+
+    // Second click completes the leave period.
+    const fromDate = date < selectionAnchor ? date : selectionAnchor;
+    const toDate = date < selectionAnchor ? selectionAnchor : date;
+
+    setForm((current) => ({
+      ...current,
+      fromDate,
+      toDate,
+    }));
+
+    setSelectionAnchor(null);
+  }
+
+  function goToPreviousMonth() {
+    setSelectionAnchor(null);
+
+    if (calendarMonth === 0) {
+      setCalendarMonth(11);
+      setCalendarYear((current) => current - 1);
+      return;
+    }
+
+    setCalendarMonth((current) => current - 1);
+  }
+
+  function goToNextMonth() {
+    setSelectionAnchor(null);
+
+    if (calendarMonth === 11) {
+      setCalendarMonth(0);
+      setCalendarYear((current) => current + 1);
+      return;
+    }
+
+    setCalendarMonth((current) => current + 1);
   }
 
   /* =========================================================
@@ -383,29 +548,245 @@ export default function ApplyLeavePage() {
           <div className="space-y-6 p-5 sm:p-6">
             {/* Dates */}
 
-            <div className="grid gap-4 sm:grid-cols-2">
-              <FormField label="From date" required>
-                <input
-                  type="date"
-                  value={form.fromDate}
-                  onChange={(event) =>
-                    updateForm("fromDate", event.target.value)
-                  }
-                  disabled={isSubmitting}
-                  className={inputClassName}
-                />
-              </FormField>
+            {/* Leave Date Calendar */}
 
-              <FormField label="To date" required>
-                <input
-                  type="date"
-                  value={form.toDate}
-                  min={form.fromDate || undefined}
-                  onChange={(event) => updateForm("toDate", event.target.value)}
-                  disabled={isSubmitting}
-                  className={inputClassName}
-                />
-              </FormField>
+            <div className="space-y-3">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
+                <div>
+                  <label className="text-sm font-semibold text-slate-700">
+                    Leave dates
+                    <span className="ml-1 text-red-500">*</span>
+                  </label>
+                  <p className="mt-1 text-xs leading-5 text-slate-500">
+                    Select a date for one-day leave, or select a start and end
+                    date for multiple days.
+                  </p>
+                </div>
+                <Link
+                  href="/work-calendar"
+                  className="w-fit shrink-0 text-xs font-semibold text-blue-600 transition hover:text-blue-700"
+                >
+                  View work calendar
+                </Link>
+              </div>
+
+              <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
+                {/* Month navigation */}
+                <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
+                  <button
+                    type="button"
+                    onClick={goToPreviousMonth}
+                    disabled={isSubmitting || isLoadingCalendar}
+                    className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                    aria-label="Previous month"
+                  >
+                    <ChevronLeft className="h-4 w-4" />
+                  </button>
+
+                  <div className="text-center">
+                    <p className="text-sm font-bold text-slate-950">
+                      {new Intl.DateTimeFormat("en-IN", {
+                        month: "long",
+                        year: "numeric",
+                        timeZone: "UTC",
+                      }).format(
+                        new Date(Date.UTC(calendarYear, calendarMonth, 1)),
+                      )}
+                    </p>
+
+                    {isLoadingCalendar && (
+                      <p className="mt-0.5 text-[11px] text-slate-400">
+                        Loading company calendar...
+                      </p>
+                    )}
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={goToNextMonth}
+                    disabled={isSubmitting || isLoadingCalendar}
+                    className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                    aria-label="Next month"
+                  >
+                    <ChevronRight className="h-4 w-4" />
+                  </button>
+                </div>
+
+                {/* Week headings */}
+                <div className="grid grid-cols-7 border-b border-slate-100 bg-slate-50">
+                  {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map(
+                    (day) => (
+                      <div
+                        key={day}
+                        className="py-2 text-center text-[9px] font-semibold uppercase tracking-wide text-slate-400 sm:text-[11px]"
+                      >
+                        {day}
+                      </div>
+                    ),
+                  )}
+                </div>
+
+                {/* Calendar */}
+                {isLoadingCalendar ? (
+                  <div className="flex min-h-64 items-center justify-center">
+                    <div className="flex items-center gap-2 text-sm text-slate-500">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Loading calendar...
+                    </div>
+                  </div>
+                ) : calendarDays.length === 0 ? (
+                  <div className="flex min-h-64 items-center justify-center px-6 text-center">
+                    <p className="text-sm text-slate-500">
+                      Work calendar information is unavailable for this month.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-7 gap-0.5 p-1 sm:gap-1 sm:p-2">
+                    {Array.from({
+                      length: new Date(
+                        Date.UTC(calendarYear, calendarMonth, 1),
+                      ).getUTCDay(),
+                    }).map((_, index) => (
+                      <div
+                        key={`empty-${index}`}
+                        className="min-h-12 sm:min-h-14 lg:min-h-16"
+                      />
+                    ))}
+                    {calendarDays.map((day) => {
+                      const dayNumber = Number(day.date.slice(8, 10));
+
+                      const isWeeklyOff = day.classification === "WEEKLY_OFF";
+                      const isHoliday = day.classification === "HOLIDAY";
+                      const isWorkingOverride =
+                        day.source === "WORKING_DAY_OVERRIDE";
+
+                      const isSelected =
+                        Boolean(form.fromDate && form.toDate) &&
+                        day.date >= form.fromDate &&
+                        day.date <= form.toDate;
+
+                      const isStart = day.date === form.fromDate;
+                      const isEnd = day.date === form.toDate;
+
+                      const isSelectionAnchor = day.date === selectionAnchor;
+
+                      return (
+                        <button
+                          key={day.date}
+                          type="button"
+                          onClick={() => handleCalendarDateClick(day.date)}
+                          disabled={isSubmitting}
+                          className={`relative min-h-12 rounded-lg border p-1.5 text-left transition sm:min-h-14 sm:p-2 lg:min-h-16 ${
+                            isStart || isEnd || isSelectionAnchor
+                              ? "border-slate-950 bg-slate-950 text-white"
+                              : isSelected
+                                ? "border-slate-200 bg-slate-100 text-slate-950"
+                                : isHoliday
+                                  ? "border-blue-200 bg-blue-50 text-blue-900 hover:bg-blue-100"
+                                  : isWeeklyOff
+                                    ? "border-amber-200 bg-amber-50 text-amber-900 hover:bg-amber-100"
+                                    : isWorkingOverride
+                                      ? "border-emerald-200 bg-emerald-50 text-emerald-900 hover:bg-emerald-100"
+                                      : "border-transparent text-slate-700 hover:border-slate-200 hover:bg-slate-50"
+                          } disabled:cursor-not-allowed disabled:opacity-60`}
+                        >
+                          <span className="text-xs font-bold sm:text-sm">
+                            {dayNumber}
+                          </span>
+                          <span
+                            className={`mt-0.5 block truncate text-[9px] font-semibold sm:text-[10px] ${
+                              isStart || isEnd || isSelectionAnchor
+                                ? "text-white/80"
+                                : isHoliday
+                                  ? "text-blue-700"
+                                  : isWeeklyOff
+                                    ? "text-amber-700"
+                                    : isWorkingOverride
+                                      ? "text-emerald-700"
+                                      : "text-slate-400"
+                            }`}
+                          >
+                            {isHoliday ? (
+                              day.name || "Holiday"
+                            ) : isWeeklyOff ? (
+                              <>
+                                <span className="sm:hidden">Off</span>
+                                <span className="hidden sm:inline">
+                                  Weekly Off
+                                </span>
+                              </>
+                            ) : isWorkingOverride ? (
+                              <>
+                                <span className="sm:hidden">Work</span>
+                                <span className="hidden sm:inline">
+                                  Working
+                                </span>
+                              </>
+                            ) : (
+                              ""
+                            )}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              {/* Legend */}
+              <div className="flex flex-wrap gap-x-4 gap-y-2 text-[11px] font-medium text-slate-500">
+                <span className="inline-flex items-center gap-1.5">
+                  <span className="h-2.5 w-2.5 rounded-sm bg-slate-950" />
+                  Selected
+                </span>
+
+                <span className="inline-flex items-center gap-1.5">
+                  <span className="h-2.5 w-2.5 rounded-sm border border-amber-200 bg-amber-100" />
+                  Weekly Off
+                </span>
+
+                <span className="inline-flex items-center gap-1.5">
+                  <span className="h-2.5 w-2.5 rounded-sm border border-blue-200 bg-blue-100" />
+                  Holiday
+                </span>
+
+                <span className="inline-flex items-center gap-1.5">
+                  <span className="h-2.5 w-2.5 rounded-sm border border-emerald-200 bg-emerald-100" />
+                  Working override
+                </span>
+              </div>
+
+              {/* Selected period */}
+              {form.fromDate && form.toDate ? (
+                <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+                  <p className="text-xs font-medium text-slate-500">
+                    Selected leave period
+                  </p>
+
+                  <div className="mt-1 flex flex-wrap items-center gap-2 text-sm font-bold text-slate-950">
+                    <span>{formatPreviewDate(form.fromDate)}</span>
+
+                    {form.fromDate !== form.toDate && (
+                      <>
+                        <span className="text-slate-400">→</span>
+                        <span>{formatPreviewDate(form.toDate)}</span>
+                      </>
+                    )}
+                  </div>
+
+                  {selectionAnchor && (
+                    <p className="mt-1 text-xs text-blue-600">
+                      Select another date to complete the leave period.
+                    </p>
+                  )}
+                </div>
+              ) : (
+                <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 px-4 py-3">
+                  <p className="text-xs text-slate-500">
+                    Select a date from the calendar to begin.
+                  </p>
+                </div>
+              )}
             </div>
 
             {/* Leave Type */}
@@ -552,7 +933,9 @@ export default function ApplyLeavePage() {
                 isSubmitting ||
                 isLoadingTypes ||
                 isLoadingPreview ||
-                leaveTypes.length === 0
+                leaveTypes.length === 0 ||
+                !preview ||
+                Boolean(previewError)
               }
               className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-slate-950 px-5 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
             >
@@ -744,34 +1127,72 @@ export default function ApplyLeavePage() {
                     </p>
 
                     <div className="space-y-2">
-                      {preview.dateDetails.map((detail) => (
-                        <div
-                          key={detail.date}
-                          className="flex items-center justify-between gap-3 rounded-xl bg-slate-50 px-3 py-2"
-                        >
-                          <div className="min-w-0">
-                            <p className="text-xs font-semibold text-slate-800">
-                              {formatPreviewDate(detail.date)}
-                            </p>
+                      {preview.dateDetails.map((detail) => {
+                        const isWeeklyOff =
+                          detail.dayClassification === "WEEKLY_OFF";
 
-                            <p className="mt-0.5 text-xs text-slate-500">
-                              {getPreviewAllocationLabel(detail)}
-                            </p>
-                          </div>
+                        const isHoliday =
+                          detail.dayClassification === "HOLIDAY";
 
-                          <span
-                            className={`shrink-0 rounded-full px-2 py-1 text-[11px] font-bold ${
-                              detail.allocationType === "PAID"
-                                ? "bg-emerald-100 text-emerald-700"
-                                : detail.allocationType === "MIXED"
-                                  ? "bg-amber-100 text-amber-700"
-                                  : "bg-red-100 text-red-700"
+                        const isExcluded =
+                          !detail.countedAsLeave ||
+                          detail.allocationType === "NOT_APPLICABLE";
+
+                        return (
+                          <div
+                            key={detail.date}
+                            className={`flex items-center justify-between gap-3 rounded-xl border px-3 py-2 ${
+                              isWeeklyOff
+                                ? "border-amber-200 bg-amber-50"
+                                : isHoliday
+                                  ? "border-blue-200 bg-blue-50"
+                                  : "border-slate-100 bg-slate-50"
                             }`}
                           >
-                            {formatEnum(detail.allocationType)}
-                          </span>
-                        </div>
-                      ))}
+                            <div className="min-w-0">
+                              <p className="text-xs font-semibold text-slate-800">
+                                {formatPreviewDate(detail.date)}
+                              </p>
+
+                              <p
+                                className={`mt-0.5 text-xs ${
+                                  isWeeklyOff
+                                    ? "text-amber-700"
+                                    : isHoliday
+                                      ? "text-blue-700"
+                                      : "text-slate-500"
+                                }`}
+                              >
+                                {isWeeklyOff
+                                  ? "Weekly Off — excluded from leave"
+                                  : isHoliday
+                                    ? "Holiday — excluded from leave"
+                                    : getPreviewAllocationLabel(detail)}
+                              </p>
+                            </div>
+
+                            <span
+                              className={`shrink-0 rounded-full px-2 py-1 text-[11px] font-bold ${
+                                isExcluded
+                                  ? isWeeklyOff
+                                    ? "bg-amber-100 text-amber-700"
+                                    : isHoliday
+                                      ? "bg-blue-100 text-blue-700"
+                                      : "bg-slate-200 text-slate-600"
+                                  : detail.allocationType === "PAID"
+                                    ? "bg-emerald-100 text-emerald-700"
+                                    : detail.allocationType === "MIXED"
+                                      ? "bg-amber-100 text-amber-700"
+                                      : "bg-red-100 text-red-700"
+                              }`}
+                            >
+                              {isExcluded
+                                ? "Excluded"
+                                : formatEnum(detail.allocationType)}
+                            </span>
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
                 )}

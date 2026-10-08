@@ -62,8 +62,8 @@ export type LeaveDateDayPortion =
 export type LeaveDayClassification =
     | "WORKING_DAY"
     | "WEEKLY_OFF"
-    | "PUBLIC_HOLIDAY";
-
+    | "HOLIDAY";
+    
 export type LeaveDateAllocationType =
     | "PAID"
     | "UNPAID"

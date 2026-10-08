@@ -77,9 +77,18 @@ export default function LeavePoliciesPage() {
 
       const result = await leavePolicyService.list(company._id, {
         page: 1,
-        limit: 100,
-        ...(search.trim() ? { search: search.trim() } : {}),
-        ...(status !== "ALL" ? { status } : {}),
+        limit: canManage ? 100 : 1,
+
+        ...(canManage
+          ? {
+              ...(search.trim() ? { search: search.trim() } : {}),
+              ...(status !== "ALL" ? { status } : {}),
+            }
+          : {
+              status: "ACTIVE",
+              isDefault: true,
+            }),
+
         sortBy: "name",
         sortOrder: "asc",
       });
@@ -94,7 +103,7 @@ export default function LeavePoliciesPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [company?._id, canRead, search, status]);
+  }, [company?._id, canRead, canManage, search, status]);
 
   useEffect(() => {
     const timeout = window.setTimeout(() => {
@@ -477,49 +486,52 @@ export default function LeavePoliciesPage() {
         </div>
       </div>
 
-      {/* SUMMARY */}
+      {canManage && (
+        <>
+          {/* SUMMARY */}
 
-      <div className="grid gap-4 sm:grid-cols-3">
-        <SummaryCard title="Policies" value={String(policies.length)} />
+          <div className="grid gap-4 sm:grid-cols-3">
+            <SummaryCard title="Policies" value={String(policies.length)} />
 
-        <SummaryCard title="Active" value={String(activeCount)} />
+            <SummaryCard title="Active" value={String(activeCount)} />
 
-        <SummaryCard
-          title="Default Policy"
-          value={defaultPolicy?.name ?? "Not configured"}
-        />
-      </div>
-
-      {/* FILTERS */}
-
-      <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
-        <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_220px]">
-          <div className="relative">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-
-            <input
-              type="text"
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-              placeholder="Search leave policy..."
-              className={`${inputClassName} pl-9`}
+            <SummaryCard
+              title="Default Policy"
+              value={defaultPolicy?.name ?? "Not configured"}
             />
           </div>
 
-          <select
-            value={status}
-            onChange={(event) =>
-              setStatus(event.target.value as LeaveStatus | "ALL")
-            }
-            className={inputClassName}
-          >
-            <option value="ALL">All statuses</option>
-            <option value="ACTIVE">Active</option>
-            <option value="INACTIVE">Inactive</option>
-          </select>
-        </div>
-      </section>
+          {/* FILTERS */}
 
+          <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
+            <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_220px]">
+              <div className="relative">
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+
+                <input
+                  type="text"
+                  value={search}
+                  onChange={(event) => setSearch(event.target.value)}
+                  placeholder="Search leave policy..."
+                  className={`${inputClassName} pl-9`}
+                />
+              </div>
+
+              <select
+                value={status}
+                onChange={(event) =>
+                  setStatus(event.target.value as LeaveStatus | "ALL")
+                }
+                className={inputClassName}
+              >
+                <option value="ALL">All statuses</option>
+                <option value="ACTIVE">Active</option>
+                <option value="INACTIVE">Inactive</option>
+              </select>
+            </div>
+          </section>
+        </>
+      )}
       {/* LIST */}
 
       {isLoading ? (
@@ -546,12 +558,13 @@ export default function LeavePoliciesPage() {
       ) : (
         <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
           <div className="border-b border-slate-100 p-5 sm:p-6">
-            <h2 className="font-bold text-slate-950">Company Leave Policies</h2>
-
+            <h2 className="font-bold text-slate-950">
+              {canManage ? "Company Leave Policies" : "Applicable Leave Policy"}
+            </h2>
             <p className="mt-1 text-sm text-slate-500">
               {canManage
                 ? "Review and configure company-wide leave rules."
-                : "Review the leave policies configured for your company."}
+                : "Review the leave rules currently applicable to you."}
             </p>
           </div>
 
