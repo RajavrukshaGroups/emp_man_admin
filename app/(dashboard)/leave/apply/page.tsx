@@ -109,6 +109,9 @@ export default function ApplyLeavePage() {
 
   const hasSelectedDates = Boolean(form.fromDate && form.toDate);
 
+  const isSingleDayLeave =
+    Boolean(form.fromDate && form.toDate) && form.fromDate === form.toDate;
+
   const selectableLeaveTypes = useMemo(() => {
     if (!hasSelectedDates) {
       return [];
@@ -260,6 +263,9 @@ export default function ApplyLeavePage() {
     }
 
     let cancelled = false;
+    setPreview(null);
+    setPreviewError(null);
+    setIsLoadingPreview(true);
 
     const timeoutId = window.setTimeout(async () => {
       try {
@@ -830,52 +836,117 @@ export default function ApplyLeavePage() {
 
             {/* Portions */}
 
-            <div className="grid gap-4 sm:grid-cols-2">
-              <FormField label="First day">
-                <select
-                  value={form.startDayPortion}
-                  onChange={(event) =>
-                    updateForm(
-                      "startDayPortion",
-                      event.target.value as LeaveDayPortion,
-                    )
-                  }
-                  disabled={
-                    isSubmitting || selectedLeaveType?.allowHalfDay === false
-                  }
-                  className={inputClassName}
-                >
-                  <option value="FULL_DAY">Full day</option>
-                  <option value="FIRST_HALF">First half</option>
-                  <option value="SECOND_HALF">Second half</option>
-                </select>
-              </FormField>
+            {/* =====================================================
+    LEAVE DURATION
+===================================================== */}
 
-              <FormField label="Last day">
-                <select
-                  value={form.endDayPortion}
-                  onChange={(event) =>
-                    updateForm(
-                      "endDayPortion",
-                      event.target.value as LeaveDayPortion,
-                    )
-                  }
-                  disabled={
-                    isSubmitting || selectedLeaveType?.allowHalfDay === false
-                  }
-                  className={inputClassName}
-                >
-                  <option value="FULL_DAY">Full day</option>
-                  <option value="FIRST_HALF">First half</option>
-                  <option value="SECOND_HALF">Second half</option>
-                </select>
-              </FormField>
-            </div>
+            {selectedLeaveType && (
+              <div className="space-y-3">
+                <div>
+                  <h3 className="text-sm font-semibold text-slate-700">
+                    Leave duration
+                  </h3>
+                  <p className="mt-1 text-xs text-slate-500">
+                    Choose whether you need a full day or a half day.
+                  </p>
+                </div>
 
-            {selectedLeaveType?.allowHalfDay === false && (
-              <p className="-mt-3 text-xs text-slate-500">
-                Half-day applications are not available for this leave type.
-              </p>
+                {!selectedLeaveType.allowHalfDay ? (
+                  <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+                    <p className="text-sm font-semibold text-slate-700">
+                      Full-day leave only
+                    </p>
+                    <p className="mt-1 text-xs text-slate-500">
+                      This leave type does not allow half-day applications.
+                    </p>
+                  </div>
+                ) : isSingleDayLeave ? (
+                  <div>
+                    <label className="mb-2 block text-sm font-semibold text-slate-700">
+                      Day duration
+                    </label>
+
+                    <p className="mb-2 text-xs text-slate-500">
+                      {formatPreviewDate(form.fromDate)}
+                    </p>
+
+                    <select
+                      value={form.startDayPortion}
+                      onChange={(event) => {
+                        const value = event.target.value as LeaveDayPortion;
+
+                        setForm((current) => ({
+                          ...current,
+                          startDayPortion: value,
+                          endDayPortion: value,
+                        }));
+                      }}
+                      disabled={isSubmitting}
+                      className={inputClassName}
+                    >
+                      <option value="FULL_DAY">Full day</option>
+                      <option value="FIRST_HALF">First half</option>
+                      <option value="SECOND_HALF">Second half</option>
+                    </select>
+                  </div>
+                ) : (
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    {/* Start date duration */}
+                    <div>
+                      <label className="mb-2 block text-sm font-semibold text-slate-700">
+                        Start date duration
+                      </label>
+
+                      <p className="mb-2 text-xs text-slate-500">
+                        {formatPreviewDate(form.fromDate)}
+                      </p>
+
+                      <select
+                        value={form.startDayPortion}
+                        onChange={(event) =>
+                          updateForm(
+                            "startDayPortion",
+                            event.target.value as LeaveDayPortion,
+                          )
+                        }
+                        disabled={isSubmitting}
+                        className={inputClassName}
+                      >
+                        <option value="FULL_DAY">Full day</option>
+                        <option value="FIRST_HALF">First half</option>
+                        <option value="SECOND_HALF">Second half</option>
+                      </select>
+                    </div>
+
+                    {/* End date duration */}
+                    <div>
+                      <label className="mb-2 block text-sm font-semibold text-slate-700">
+                        End date duration
+                      </label>
+
+                      <p className="mb-2 text-xs text-slate-500">
+                        {formatPreviewDate(form.toDate)}
+                      </p>
+
+                      <select
+                        value={form.endDayPortion}
+                        onChange={(event) =>
+                          updateForm(
+                            "endDayPortion",
+                            event.target.value as LeaveDayPortion,
+                          )
+                        }
+                        disabled={isSubmitting}
+                        className={inputClassName}
+                      >
+                        <option value="FULL_DAY">Full day</option>
+                        <option value="FIRST_HALF">First half</option>
+                        <option value="SECOND_HALF">Second half</option>
+                      </select>
+                    </div>
+                  </div>
+                )}
+              </div>
             )}
 
             {/* Reason */}
@@ -1163,11 +1234,23 @@ export default function ApplyLeavePage() {
                                       : "text-slate-500"
                                 }`}
                               >
-                                {isWeeklyOff
-                                  ? "Weekly Off — excluded from leave"
-                                  : isHoliday
-                                    ? "Holiday — excluded from leave"
-                                    : getPreviewAllocationLabel(detail)}
+                                {isWeeklyOff ? (
+                                  "Weekly Off — excluded from leave"
+                                ) : isHoliday ? (
+                                  "Holiday — excluded from leave"
+                                ) : (
+                                  <>
+                                    <span className="font-semibold text-slate-700">
+                                      {formatLeaveDayPortion(detail.dayPortion)}
+                                      {" · "}
+                                      {formatDays(detail.leaveDays)}
+                                    </span>
+
+                                    <span className="mt-0.5 block">
+                                      {getPreviewAllocationLabel(detail)}
+                                    </span>
+                                  </>
+                                )}{" "}
                               </p>
                             </div>
 
@@ -1361,4 +1444,25 @@ function formatDays(value: number) {
   const normalized = Number(Number(value ?? 0).toFixed(2));
 
   return `${normalized} day${normalized === 1 ? "" : "s"}`;
+}
+
+function formatLeaveDayPortion(
+  portion?: LeaveRequestPreview["dateDetails"][number]["dayPortion"],
+) {
+  switch (portion) {
+    case "FIRST_HALF":
+      return "First half";
+
+    case "SECOND_HALF":
+      return "Second half";
+
+    case "FULL_DAY":
+      return "Full day";
+
+    case "NOT_APPLICABLE":
+      return "Not applicable";
+
+    default:
+      return "Not applicable";
+  }
 }

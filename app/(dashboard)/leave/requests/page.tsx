@@ -582,7 +582,39 @@ function RequestRow({
             </div>
           </div>
 
-          <div className="mt-2 space-y-1.5">
+          <div className="mt-2 space-y-2">
+            {(request.startDayPortion !== "FULL_DAY" ||
+              request.endDayPortion !== "FULL_DAY") && (
+              <div className="space-y-1.5 rounded-lg border border-blue-100 bg-blue-50/60 p-2.5">
+                <div className="flex flex-wrap items-center gap-2 text-xs">
+                  <Clock3 className="h-3.5 w-3.5 shrink-0 text-blue-600" />
+
+                  <span className="font-medium text-slate-700">
+                    {formatDate(request.fromDate)}
+                  </span>
+
+                  <span className="font-semibold text-blue-700">
+                    {formatLeavePortion(request.startDayPortion)}
+                  </span>
+                </div>
+
+                {request.fromDate.slice(0, 10) !==
+                  request.toDate.slice(0, 10) && (
+                  <div className="flex flex-wrap items-center gap-2 text-xs">
+                    <Clock3 className="h-3.5 w-3.5 shrink-0 text-blue-600" />
+
+                    <span className="font-medium text-slate-700">
+                      {formatDate(request.toDate)}
+                    </span>
+
+                    <span className="font-semibold text-blue-700">
+                      {formatLeavePortion(request.endDayPortion)}
+                    </span>
+                  </div>
+                )}
+              </div>
+            )}
+
             <p className="text-xs text-slate-500">
               {formatDays(request.requestedDays)} requested
             </p>
@@ -767,6 +799,27 @@ function ActionModal({
               <p className="mt-1 text-sm text-slate-500">
                 {formatDays(actionState.request.requestedDays)}
               </p>
+              {(actionState.request.startDayPortion !== "FULL_DAY" ||
+                actionState.request.endDayPortion !== "FULL_DAY") && (
+                <div className="mt-3 space-y-1 text-xs text-slate-700">
+                  <p>
+                    {formatDate(actionState.request.fromDate)}:{" "}
+                    <strong>
+                      {formatLeavePortion(actionState.request.startDayPortion)}
+                    </strong>
+                  </p>
+
+                  {actionState.request.fromDate.slice(0, 10) !==
+                    actionState.request.toDate.slice(0, 10) && (
+                    <p>
+                      {formatDate(actionState.request.toDate)}:{" "}
+                      <strong>
+                        {formatLeavePortion(actionState.request.endDayPortion)}
+                      </strong>
+                    </p>
+                  )}
+                </div>
+              )}
             </div>
 
             <div>
@@ -962,6 +1015,19 @@ function getDepartmentTeam(request: LeaveRequest) {
   const values = [department?.name, team?.name].filter(Boolean);
 
   return values.length > 0 ? values.join(" · ") : "—";
+}
+
+function formatLeavePortion(
+  portion?: "FULL_DAY" | "FIRST_HALF" | "SECOND_HALF",
+) {
+  switch (portion) {
+    case "FIRST_HALF":
+      return "First half · 0.5 day";
+    case "SECOND_HALF":
+      return "Second half · 0.5 day";
+    default:
+      return "Full day";
+  }
 }
 
 function formatDate(value: string) {
