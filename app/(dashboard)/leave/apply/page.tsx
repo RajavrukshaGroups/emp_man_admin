@@ -11,7 +11,7 @@ import {
   Loader2,
   Send,
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { leaveRequestService } from "@/features/leave/services/leave-request.service";
@@ -23,6 +23,7 @@ import type { ResolvedWorkDay } from "@/features/work-calendar/types/work-calend
 
 import type {
   LeaveDayPortion,
+  LeaveRequest,
   LeaveRequestPreview,
   LeaveType,
 } from "@/features/leave/types/leave.types";
@@ -54,9 +55,18 @@ export default function ApplyLeavePage() {
   const router = useRouter();
 
   const company = useAuthStore((state) => state.company);
+  const companyAccess = useAuthStore((state) => state.companyAccess);
   const permissions = useAuthStore((state) => state.permissions);
 
   const canApply = permissions.includes("leave.apply");
+  const canReadLeaves = permissions.includes("leave.read");
+
+  const leaveCacheKey = `${company?._id ?? ""}:${companyAccess?._id ?? ""}`;
+
+  const previousLeaveCacheKey = useRef(leaveCacheKey);
+
+  const currentLeaveCacheKey = useRef(leaveCacheKey);
+  currentLeaveCacheKey.current = leaveCacheKey;
 
   const [leaveTypes, setLeaveTypes] = useState<LeaveType[]>([]);
   const [form, setForm] = useState<ApplyLeaveForm>(initialForm);
@@ -76,7 +86,68 @@ export default function ApplyLeavePage() {
   const [calendarDays, setCalendarDays] = useState<ResolvedWorkDay[]>([]);
   const [isLoadingCalendar, setIsLoadingCalendar] = useState(false);
 
+  const [existingLeaveRequests, setExistingLeaveRequests] = useState<
+    LeaveRequest[]
+  >([]);
+
+  const [isLoadingExistingLeaves, setIsLoadingExistingLeaves] = useState(false);
+
+  const [leaveRefreshKey, setLeaveRefreshKey] = useState(0);
+
+  const [existingLeavesError, setExistingLeavesError] = useState<string | null>(
+    null,
+  );
+
   const [selectionAnchor, setSelectionAnchor] = useState<string | null>(null);
+
+  const [viewingExistingLeave, setViewingExistingLeave] =
+    useState<LeaveRequest | null>(null);
+
+  useEffect(() => {
+    if (previousLeaveCacheKey.current === leaveCacheKey) {
+      return;
+    }
+
+    previousLeaveCacheKey.current = leaveCacheKey;
+
+    setExistingLeaveRequests([]);
+    setExistingLeavesError(null);
+    setViewingExistingLeave(null);
+    setSelectionAnchor(null);
+    setForm(initialForm);
+    setPreview(null);
+    setPreviewError(null);
+  }, [leaveCacheKey]);
+
+  const blockingLeaveRequests = useMemo(() => {
+    return existingLeaveRequests.filter((request) =>
+      ["PENDING", "RECOMMENDED", "APPROVED"].includes(request.status),
+    );
+  }, [existingLeaveRequests]);
+
+  const existingLeavesByDate = useMemo(() => {
+    const leaveMap = new Map<string, LeaveRequest[]>();
+
+    for (const request of existingLeaveRequests) {
+      const start = request.fromDate.slice(0, 10);
+      const end = request.toDate.slice(0, 10);
+
+      const current = new Date(`${start}T00:00:00.000Z`);
+      const last = new Date(`${end}T00:00:00.000Z`);
+
+      while (current <= last) {
+        const dateKey = current.toISOString().slice(0, 10);
+
+        const requests = leaveMap.get(dateKey) ?? [];
+        requests.push(request);
+        leaveMap.set(dateKey, requests);
+
+        current.setUTCDate(current.getUTCDate() + 1);
+      }
+    }
+
+    return leaveMap;
+  }, [existingLeaveRequests]);
 
   const calendarMonthRange = useMemo(() => {
     const fromDate = `${calendarYear}-${String(calendarMonth + 1).padStart(
@@ -243,6 +314,124 @@ export default function ApplyLeavePage() {
     };
   }, [company?._id, calendarMonthRange.fromDate, calendarMonthRange.toDate]);
 
+  useEffect(() => {
+    function handleVisibilityChange() {
+      if (document.visibilityState === "visible") {
+        setLeaveRefreshKey((current) => current + 1);
+      }
+    }
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, []);
+
+  /* =========================================================
+   LOAD EXISTING LEAVE REQUESTS
+   ========================================================= */
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const requestCacheKey = leaveCacheKey;
+
+    async function loadExistingLeaves() {
+      if (!company?._id || !companyAccess?._id || !canApply || !canReadLeaves) {
+        setExistingLeaveRequests([]);
+        setExistingLeavesError(null);
+        setIsLoadingExistingLeaves(false);
+        return;
+      }
+
+      try {
+        setIsLoadingExistingLeaves(true);
+        setExistingLeavesError(null);
+
+        const allRequests: LeaveRequest[] = [];
+        let page = 1;
+
+        while (true) {
+          const result = await leaveRequestService.list(company._id, {
+            companyAccessId: companyAccess._id,
+            fromDate: calendarMonthRange.fromDate,
+            toDate: calendarMonthRange.toDate,
+            page,
+            limit: 100,
+          });
+
+          if (cancelled || requestCacheKey !== currentLeaveCacheKey.current) {
+            return;
+          }
+          allRequests.push(...result.items);
+
+          if (result.items.length < 100) {
+            break;
+          }
+
+          page += 1;
+        }
+
+        if (!cancelled && requestCacheKey === currentLeaveCacheKey.current) {
+          setExistingLeaveRequests((previousRequests) => {
+            const requestsById = new Map<string, LeaveRequest>();
+
+            const monthStart = calendarMonthRange.fromDate;
+            const monthEnd = calendarMonthRange.toDate;
+
+            // Preserve cached requests belonging to other months.
+            for (const request of previousRequests) {
+              const requestStart = request.fromDate.slice(0, 10);
+              const requestEnd = request.toDate.slice(0, 10);
+
+              const overlapsRefreshedMonth =
+                requestStart <= monthEnd && requestEnd >= monthStart;
+
+              if (!overlapsRefreshedMonth) {
+                requestsById.set(request._id, request);
+              }
+            }
+
+            // Replace the refreshed month's records with the latest API data.
+            for (const request of allRequests) {
+              requestsById.set(request._id, request);
+            }
+
+            return Array.from(requestsById.values());
+          });
+        }
+      } catch (error) {
+        if (cancelled || requestCacheKey !== currentLeaveCacheKey.current) {
+          return;
+        }
+        setExistingLeaveRequests([]);
+        setExistingLeavesError(
+          getApiErrorMessage(error, "Unable to load existing leave requests."),
+        );
+      } finally {
+        if (!cancelled && requestCacheKey === currentLeaveCacheKey.current) {
+          setIsLoadingExistingLeaves(false);
+        }
+      }
+    }
+
+    void loadExistingLeaves();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    company?._id,
+    companyAccess?._id,
+    canApply,
+    canReadLeaves,
+    calendarMonthRange.fromDate,
+    calendarMonthRange.toDate,
+    leaveCacheKey,
+    leaveRefreshKey,
+  ]);
+
   /* =========================================================
    LEAVE REQUEST PREVIEW
    ========================================================= */
@@ -354,10 +543,30 @@ export default function ApplyLeavePage() {
   }
 
   function handleCalendarDateClick(date: string) {
-    if (isSubmitting) {
+    if (
+      isSubmitting ||
+      isLoadingCalendar ||
+      isLoadingExistingLeaves ||
+      !canReadLeaves ||
+      Boolean(existingLeavesError)
+    ) {
       return;
     }
 
+    const existingLeave = (existingLeavesByDate.get(date) ?? []).find(
+      (request) =>
+        request.status === "PENDING" ||
+        request.status === "RECOMMENDED" ||
+        request.status === "APPROVED",
+    );
+
+    if (existingLeave) {
+      setViewingExistingLeave(existingLeave);
+      setSelectionAnchor(null);
+      return;
+    }
+
+    setViewingExistingLeave(null);
     // First click:
     // immediately treat it as a valid single-day leave.
     if (!selectionAnchor) {
@@ -388,18 +597,38 @@ export default function ApplyLeavePage() {
     const fromDate = date < selectionAnchor ? date : selectionAnchor;
     const toDate = date < selectionAnchor ? selectionAnchor : date;
 
+    // Check whether the selected range overlaps existing active leave.
+    const overlappingLeave = blockingLeaveRequests.find(
+      (request) =>
+        request.fromDate.slice(0, 10) <= toDate &&
+        request.toDate.slice(0, 10) >= fromDate,
+    );
+    if (overlappingLeave) {
+      toast.error(
+        `The selected period overlaps an existing ${overlappingLeave.status.toLowerCase()} leave request (${formatPreviewDate(overlappingLeave.fromDate)} – ${formatPreviewDate(overlappingLeave.toDate)}).`,
+      );
+
+      setViewingExistingLeave(overlappingLeave);
+      setSelectionAnchor(null);
+
+      setForm((current) => ({
+        ...current,
+        fromDate: "",
+        toDate: "",
+      }));
+
+      return;
+    }
+
     setForm((current) => ({
       ...current,
       fromDate,
       toDate,
     }));
-
     setSelectionAnchor(null);
   }
 
   function goToPreviousMonth() {
-    setSelectionAnchor(null);
-
     if (calendarMonth === 0) {
       setCalendarMonth(11);
       setCalendarYear((current) => current - 1);
@@ -410,8 +639,6 @@ export default function ApplyLeavePage() {
   }
 
   function goToNextMonth() {
-    setSelectionAnchor(null);
-
     if (calendarMonth === 11) {
       setCalendarMonth(0);
       setCalendarYear((current) => current + 1);
@@ -438,6 +665,21 @@ export default function ApplyLeavePage() {
       return;
     }
 
+    if (!canReadLeaves) {
+      toast.error(
+        "Unable to verify existing leave requests. Please contact your administrator.",
+      );
+      return;
+    }
+
+    if (isLoadingExistingLeaves || existingLeavesError) {
+      toast.error(
+        existingLeavesError ??
+          "Existing leave requests are still loading. Please wait.",
+      );
+      return;
+    }
+
     if (!form.leaveTypeId) {
       toast.error("Please select a leave type.");
       return;
@@ -450,6 +692,21 @@ export default function ApplyLeavePage() {
 
     if (form.toDate < form.fromDate) {
       toast.error("To date cannot be earlier than from date.");
+      return;
+    }
+
+    const overlappingLeave = blockingLeaveRequests.find(
+      (request) =>
+        request.fromDate.slice(0, 10) <= form.toDate &&
+        request.toDate.slice(0, 10) >= form.fromDate,
+    );
+
+    if (overlappingLeave) {
+      toast.error(
+        `Your selected dates overlap an existing ${overlappingLeave.status.toLowerCase()} leave request.`,
+      );
+
+      setViewingExistingLeave(overlappingLeave);
       return;
     }
 
@@ -474,6 +731,47 @@ export default function ApplyLeavePage() {
 
     try {
       setIsSubmitting(true);
+
+      if (!companyAccess?._id) {
+        toast.error("Employee company access information is unavailable.");
+        return;
+      }
+
+      const matchingRequests: LeaveRequest[] = [];
+      let verificationPage = 1;
+
+      while (true) {
+        const result = await leaveRequestService.list(company._id, {
+          companyAccessId: companyAccess._id,
+          fromDate: form.fromDate,
+          toDate: form.toDate,
+          page: verificationPage,
+          limit: 100,
+        });
+
+        matchingRequests.push(...result.items);
+
+        if (result.items.length < 100) {
+          break;
+        }
+
+        verificationPage += 1;
+      }
+
+      const verifiedOverlap = matchingRequests.find(
+        (request) =>
+          ["PENDING", "RECOMMENDED", "APPROVED"].includes(request.status) &&
+          request.fromDate.slice(0, 10) <= form.toDate &&
+          request.toDate.slice(0, 10) >= form.fromDate,
+      );
+
+      if (verifiedOverlap) {
+        toast.error(
+          `The selected period overlaps an existing ${verifiedOverlap.status.toLowerCase()} leave request.`,
+        );
+        setViewingExistingLeave(verifiedOverlap);
+        return;
+      }
 
       await leaveRequestService.create(company._id, {
         leaveTypeId: form.leaveTypeId,
@@ -605,6 +903,12 @@ export default function ApplyLeavePage() {
                         Loading company calendar...
                       </p>
                     )}
+
+                    {isLoadingExistingLeaves && !isLoadingCalendar && (
+                      <p className="mt-0.5 text-[11px] text-slate-400">
+                        Checking existing leave requests...
+                      </p>
+                    )}
                   </div>
 
                   <button
@@ -661,6 +965,30 @@ export default function ApplyLeavePage() {
                     {calendarDays.map((day) => {
                       const dayNumber = Number(day.date.slice(8, 10));
 
+                      const existingLeaves =
+                        existingLeavesByDate.get(day.date) ?? [];
+
+                      const activeLeave = existingLeaves.find((request) =>
+                        ["PENDING", "RECOMMENDED", "APPROVED"].includes(
+                          request.status,
+                        ),
+                      );
+
+                      const leaveStatusLabel = activeLeave
+                        ? activeLeave.status === "APPROVED"
+                          ? "Approved"
+                          : activeLeave.status === "RECOMMENDED"
+                            ? "Recommended"
+                            : "Pending"
+                        : null;
+
+                      const leaveStatusClassName =
+                        activeLeave?.status === "APPROVED"
+                          ? "bg-emerald-100 text-emerald-800"
+                          : activeLeave?.status === "RECOMMENDED"
+                            ? "bg-violet-100 text-violet-800"
+                            : "bg-orange-100 text-orange-800";
+
                       const isWeeklyOff = day.classification === "WEEKLY_OFF";
                       const isHoliday = day.classification === "HOLIDAY";
                       const isWorkingOverride =
@@ -681,7 +1009,13 @@ export default function ApplyLeavePage() {
                           key={day.date}
                           type="button"
                           onClick={() => handleCalendarDateClick(day.date)}
-                          disabled={isSubmitting}
+                          disabled={
+                            isSubmitting ||
+                            isLoadingCalendar ||
+                            isLoadingExistingLeaves ||
+                            !canReadLeaves ||
+                            Boolean(existingLeavesError)
+                          }
                           className={`relative min-h-12 rounded-lg border p-1.5 text-left transition sm:min-h-14 sm:p-2 lg:min-h-16 ${
                             isStart || isEnd || isSelectionAnchor
                               ? "border-slate-950 bg-slate-950 text-white"
@@ -699,6 +1033,14 @@ export default function ApplyLeavePage() {
                           <span className="text-xs font-bold sm:text-sm">
                             {dayNumber}
                           </span>
+                          {activeLeave && leaveStatusLabel && (
+                            <span
+                              className={`mt-1 block truncate rounded px-1 py-0.5 text-center text-[8px] font-bold sm:text-[9px] ${leaveStatusClassName}`}
+                              title={`${activeLeave.leaveTypeName} — ${leaveStatusLabel}`}
+                            >
+                              {leaveStatusLabel}
+                            </span>
+                          )}
                           <span
                             className={`mt-0.5 block truncate text-[9px] font-semibold sm:text-[10px] ${
                               isStart || isEnd || isSelectionAnchor
@@ -760,7 +1102,71 @@ export default function ApplyLeavePage() {
                   <span className="h-2.5 w-2.5 rounded-sm border border-emerald-200 bg-emerald-100" />
                   Working override
                 </span>
+                <span className="inline-flex items-center gap-1.5">
+                  <span className="h-2.5 w-2.5 rounded-sm bg-orange-400" />
+                  Pending leave
+                </span>
+
+                <span className="inline-flex items-center gap-1.5">
+                  <span className="h-2.5 w-2.5 rounded-sm bg-violet-400" />
+                  Recommended leave
+                </span>
+
+                <span className="inline-flex items-center gap-1.5">
+                  <span className="h-2.5 w-2.5 rounded-sm bg-emerald-500" />
+                  Approved leave
+                </span>
               </div>
+
+              {viewingExistingLeave && (
+                <div className="rounded-xl border border-blue-200 bg-blue-50 p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-wide text-blue-600">
+                        Existing leave request
+                      </p>
+
+                      <h3 className="mt-1 text-sm font-bold text-slate-950">
+                        {viewingExistingLeave.leaveTypeName}
+                      </h3>
+
+                      <p className="mt-1 text-xs text-slate-600">
+                        {formatPreviewDate(viewingExistingLeave.fromDate)}
+                        {" → "}
+                        {formatPreviewDate(viewingExistingLeave.toDate)}
+                      </p>
+                    </div>
+
+                    <span className="rounded-full bg-white px-2.5 py-1 text-[11px] font-bold text-blue-700">
+                      {formatEnum(viewingExistingLeave.status)}
+                    </span>
+                  </div>
+
+                  <div className="mt-3 grid gap-2 text-xs text-slate-700 sm:grid-cols-2">
+                    <p>
+                      <span className="font-semibold">Start:</span>{" "}
+                      {formatEnum(viewingExistingLeave.startDayPortion)}
+                    </p>
+
+                    <p>
+                      <span className="font-semibold">End:</span>{" "}
+                      {formatEnum(viewingExistingLeave.endDayPortion)}
+                    </p>
+
+                    <p>
+                      <span className="font-semibold">Duration:</span>{" "}
+                      {formatDays(viewingExistingLeave.requestedDays)}
+                    </p>
+                  </div>
+
+                  <Link
+                    href="/leave/requests"
+                    className="mt-3 inline-flex text-xs font-bold text-blue-700 hover:text-blue-900"
+                  >
+                    View leave requests →
+                  </Link>
+                </div>
+              )}
 
               {/* Selected period */}
               {form.fromDate && form.toDate ? (
@@ -1004,6 +1410,9 @@ export default function ApplyLeavePage() {
                 isSubmitting ||
                 isLoadingTypes ||
                 isLoadingPreview ||
+                isLoadingExistingLeaves ||
+                !canReadLeaves ||
+                Boolean(existingLeavesError) ||
                 leaveTypes.length === 0 ||
                 !preview ||
                 Boolean(previewError)

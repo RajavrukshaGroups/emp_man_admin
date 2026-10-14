@@ -70,6 +70,7 @@ function buildLeaveRequestParams(filters?: LeaveRequestFilters) {
         cancellationStatus: filters.cancellationStatus,
 
         employeeId: filters.employeeId,
+        companyAccessId: filters.companyAccessId,
         departmentId: filters.departmentId,
         teamId: filters.teamId,
 

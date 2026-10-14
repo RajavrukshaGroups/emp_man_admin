@@ -6,6 +6,7 @@ import type {
     AttendanceManagementQuery,
     AttendanceManagementResponse,
     AttendanceRecord,
+    MyAttendanceCalendarResponse,
     CancelFieldVisitPayload,
     CheckInPayload,
     CheckOutPayload,
@@ -58,6 +59,28 @@ export const attendanceService = {
 
         return response.data.data;
     },
+
+
+    // ============================================================
+    // MY MONTHLY ATTENDANCE CALENDAR
+    // ============================================================
+
+    async getMyAttendanceCalendar(
+        companyId: string,
+        month: string,
+    ): Promise<MyAttendanceCalendarResponse> {
+        const response = await apiClient.get<
+            ApiResponse<MyAttendanceCalendarResponse>
+        >(
+            `/companies/${companyId}/attendance/me/calendar`,
+            {
+                params: { month },
+            },
+        );
+
+        return response.data.data;
+    },
+
 
 
     // ============================================================

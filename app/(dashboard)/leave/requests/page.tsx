@@ -14,7 +14,7 @@ import {
   X,
   XCircle,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { leaveRequestService } from "@/features/leave/services/leave-request.service";
@@ -64,6 +64,8 @@ export default function LeaveRequestsPage() {
   const [requests, setRequests] = useState<LeaveRequest[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
+  const requestSequenceRef = useRef(0);
+
   const [statusFilter, setStatusFilter] = useState<LeaveRequestStatus | "ALL">(
     "ALL",
   );
@@ -80,6 +82,8 @@ export default function LeaveRequestsPage() {
      ========================================================= */
 
   const loadRequests = useCallback(async () => {
+    const requestSequence = ++requestSequenceRef.current;
+
     if (!company?._id || !canRead) {
       setRequests([]);
       setIsLoading(false);
@@ -89,27 +93,70 @@ export default function LeaveRequestsPage() {
     try {
       setIsLoading(true);
 
-      const result = await leaveRequestService.list(company._id, {
-        page: 1,
-        limit: 100,
+      const allRequests: LeaveRequest[] = [];
+      const limit = 100;
+      let page = 1;
 
-        status: statusFilter === "ALL" ? undefined : statusFilter,
-      });
+      while (true) {
+        const result = await leaveRequestService.list(company._id, {
+          page,
+          limit,
+          status: statusFilter === "ALL" ? undefined : statusFilter,
+        });
 
-      setRequests(result.items);
+        // Ignore results from an outdated request.
+        if (requestSequence !== requestSequenceRef.current) {
+          return;
+        }
+
+        allRequests.push(...result.items);
+
+        if (result.items.length < limit) {
+          break;
+        }
+
+        page += 1;
+      }
+
+      if (requestSequence === requestSequenceRef.current) {
+        setRequests(allRequests);
+      }
     } catch (error) {
-      setRequests([]);
+      if (requestSequence === requestSequenceRef.current) {
+        setRequests([]);
 
-      toast.error(getApiErrorMessage(error, "Unable to load leave requests."));
+        toast.error(
+          getApiErrorMessage(error, "Unable to load leave requests."),
+        );
+      }
     } finally {
-      setIsLoading(false);
+      if (requestSequence === requestSequenceRef.current) {
+        setIsLoading(false);
+      }
     }
   }, [company?._id, canRead, statusFilter]);
 
   useEffect(() => {
     void loadRequests();
+
+    return () => {
+      requestSequenceRef.current += 1;
+    };
   }, [loadRequests]);
 
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        void loadRequests();
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [loadRequests]);
   /* =========================================================
      SEARCH
      ========================================================= */
@@ -499,11 +546,13 @@ function RequestRow({
 
   const canApproveRequest =
     canApprove &&
+    !isOwnRequest &&
     (request.status === "RECOMMENDED" ||
       (request.status === "PENDING" && !requiresRecommendation));
 
   const canRejectRequest =
     canReject &&
+    !isOwnRequest &&
     (request.status === "PENDING" || request.status === "RECOMMENDED");
 
   const canCancelRequest =
@@ -519,7 +568,9 @@ function RequestRow({
     request.cancellationStatus !== "APPROVED";
 
   const canReviewCancellation =
-    request.status === "APPROVED" && request.cancellationStatus === "PENDING";
+    !isOwnRequest &&
+    request.status === "APPROVED" &&
+    request.cancellationStatus === "PENDING";
 
   return (
     <article className="px-5 py-5 sm:px-6">

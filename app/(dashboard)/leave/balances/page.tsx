@@ -987,7 +987,7 @@ export default function LeaveBalancesPage() {
             Loading leave balances...
           </p>
         </section>
-      ) : balanceSummary.totalBalances === 0 ? (
+      ) : balancePagination.total === 0 && !balanceSearch ? (
         <section className="rounded-2xl border border-slate-200 bg-white px-6 py-16 text-center shadow-sm">
           <WalletCards className="mx-auto h-10 w-10 text-slate-300" />
 

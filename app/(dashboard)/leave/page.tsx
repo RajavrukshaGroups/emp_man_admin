@@ -171,11 +171,15 @@ export default function LeavePage() {
           <WorkspaceInfo
             label="Request access"
             value={
-              canReviewRequests
+              canRead && canReviewRequests
                 ? "Review & manage"
-                : canApply
+                : canRead && canApply
                   ? "Self service"
-                  : "Read only"
+                  : canRead
+                    ? "Read only"
+                    : canApply
+                      ? "Apply only"
+                      : "No request access"
             }
           />
         </div>

@@ -63,7 +63,7 @@ export type LeaveDayClassification =
     | "WORKING_DAY"
     | "WEEKLY_OFF"
     | "HOLIDAY";
-    
+
 export type LeaveDateAllocationType =
     | "PAID"
     | "UNPAID"
@@ -544,6 +544,7 @@ export interface LeaveRequestFilters {
     cancellationStatus?: LeaveCancellationStatus;
 
     employeeId?: string;
+    companyAccessId?: string;
     departmentId?: string;
     teamId?: string;
 

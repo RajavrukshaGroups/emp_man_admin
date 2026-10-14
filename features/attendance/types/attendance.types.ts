@@ -1039,3 +1039,69 @@ export interface DailyAttendanceSummaryResponse {
 
     pagination: AttendanceHistoryPagination;
 }
+
+
+// ============================================================
+// MY MONTHLY ATTENDANCE CALENDAR
+// ============================================================
+
+export type AttendanceCalendarDisplayStatus =
+    | "NO_ATTENDANCE_RECORDED"
+    | "UPCOMING"
+    | "PENDING"
+    | "PRESENT"
+    | "HALF_DAY"
+    | "ABSENT"
+    | "ON_LEAVE"
+    | "PARTIAL_LEAVE"
+    | "HOLIDAY"
+    | "WEEKLY_OFF";
+
+export interface AttendanceCalendarWorkDay {
+    isWorkingDay: boolean;
+    classification: string;
+    source: string;
+    name: string;
+}
+
+export interface AttendanceCalendarApprovedLeave {
+    leaveRequestId: string;
+    leaveTypeId: string;
+    dayPortion: "FIRST_HALF" | "SECOND_HALF" | "FULL_DAY";
+    leaveDays: number;
+    paidDays: number;
+    unpaidDays: number;
+    allocationType: string;
+}
+
+export interface AttendanceCalendarAttendance {
+    firstCheckInAt: string | null;
+    lastCheckOutAt: string | null;
+    totalWorkedMinutes: number;
+    totalBreakMinutes: number;
+    isLate: boolean;
+    isEarlyCheckout: boolean;
+    calculationStatus: string;
+}
+
+export interface AttendanceCalendarDay {
+    date: string;
+    displayStatus: AttendanceCalendarDisplayStatus;
+    workDay: AttendanceCalendarWorkDay;
+    attendanceId: string | null;
+    attendanceStatus: AttendanceStatus | null;
+    attendance: AttendanceCalendarAttendance | null;
+    approvedLeaves: AttendanceCalendarApprovedLeave[];
+    totalLeaveDays: number;
+    hasLeaveAttendanceConflict: boolean;
+}
+
+export interface MyAttendanceCalendarResponse {
+    month: string;
+    fromDate: string;
+    toDate: string;
+    timezone: string;
+    employeeId: string;
+    companyAccessId: string;
+    days: AttendanceCalendarDay[];
+}
