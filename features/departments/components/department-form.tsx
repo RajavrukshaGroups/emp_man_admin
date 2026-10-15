@@ -16,6 +16,8 @@ import { useCallback, useEffect, useState } from "react";
 import { useForm, type SubmitHandler } from "react-hook-form";
 import { toast } from "sonner";
 
+import { GlobalLoader } from "@/components/common/global-loader";
+
 import { companyAccessService } from "@/features/company-access/services/company-access.service";
 import type { CompanyAccess } from "@/features/company-access/types/company-access.types";
 
@@ -193,225 +195,237 @@ export function DepartmentForm() {
   };
 
   return (
-    <form onSubmit={handleSubmit(onSubmit)} className="space-y-6" noValidate>
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-        <div className="flex items-start gap-3">
-          <Link
-            href="/departments"
-            className="mt-0.5 inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 transition hover:bg-slate-50"
-          >
-            <ArrowLeft className="h-5 w-5" />
-          </Link>
+    <>
+      <GlobalLoader
+        isOpen={isLoadingOptions || isSubmitting}
+        message={
+          isSubmitting ? "Creating department..." : "Loading department form..."
+        }
+      />
+      <form onSubmit={handleSubmit(onSubmit)} className="space-y-6" noValidate>
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div className="flex items-start gap-3">
+            <Link
+              href="/departments"
+              className="mt-0.5 inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 transition hover:bg-slate-50"
+            >
+              <ArrowLeft className="h-5 w-5" />
+            </Link>
 
-          <div>
-            <h1 className="text-3xl font-bold tracking-tight text-slate-950">
-              Create department
-            </h1>
+            <div>
+              <h1 className="text-3xl font-bold tracking-tight text-slate-950">
+                Create department
+              </h1>
 
-            <p className="mt-1 text-sm text-slate-500">
-              Create a new department and configure its organisational
-              structure.
+              <p className="mt-1 text-sm text-slate-500">
+                Create a new department and configure its organisational
+                structure.
+              </p>
+            </div>
+          </div>
+
+          <div className="rounded-xl border border-blue-100 bg-blue-50 px-4 py-3">
+            <p className="text-xs font-semibold uppercase tracking-wide text-blue-700">
+              Company
+            </p>
+
+            <p className="mt-1 text-sm font-semibold text-blue-950">
+              {company?.name ?? "Active company"}
             </p>
           </div>
         </div>
 
-        <div className="rounded-xl border border-blue-100 bg-blue-50 px-4 py-3">
-          <p className="text-xs font-semibold uppercase tracking-wide text-blue-700">
-            Company
-          </p>
-
-          <p className="mt-1 text-sm font-semibold text-blue-950">
-            {company?.name ?? "Active company"}
-          </p>
-        </div>
-      </div>
-
-      <Section
-        icon={Building2}
-        title="Department information"
-        description="Enter the department name, code and description."
-      >
-        <Field label="Department name" required error={errors.name?.message}>
-          <input
-            type="text"
-            disabled={isSubmitting}
-            placeholder="Human Resources"
-            className={inputClassName}
-            {...register("name", {
-              required: "Department name is required.",
-
-              minLength: {
-                value: 2,
-                message: "Department name must contain at least 2 characters.",
-              },
-
-              maxLength: {
-                value: 100,
-                message: "Department name cannot exceed 100 characters.",
-              },
-            })}
-          />
-        </Field>
-
-        <Field
-          label="Department code"
-          required
-          error={errors.code?.message}
-          hint="The code will be converted to uppercase automatically."
+        <Section
+          icon={Building2}
+          title="Department information"
+          description="Enter the department name, code and description."
         >
-          <input
-            type="text"
-            disabled={isSubmitting}
-            placeholder="HR"
-            className={inputClassName}
-            {...register("code", {
-              required: "Department code is required.",
-
-              minLength: {
-                value: 2,
-                message: "Department code must contain at least 2 characters.",
-              },
-
-              maxLength: {
-                value: 20,
-                message: "Department code cannot exceed 20 characters.",
-              },
-            })}
-          />
-        </Field>
-      </Section>
-
-      <Section
-        icon={Network}
-        title="Organisation structure"
-        description="Configure the department head and hierarchy."
-      >
-        <Field
-          label="Department head"
-          hint="Optional. The department head must have active company access."
-        >
-          <select
-            disabled={isSubmitting || isLoadingOptions}
-            className={selectClassName}
-            {...register("departmentHeadId")}
-          >
-            <option value="">
-              {isLoadingOptions ? "Loading employees..." : "No department head"}
-            </option>
-
-            {departmentHeadOptions.map((companyAccess) => (
-              <option key={companyAccess._id} value={companyAccess._id}>
-                {getCompanyAccessDisplayName(companyAccess)}
-              </option>
-            ))}
-          </select>
-        </Field>
-
-        <Field
-          label="Parent department"
-          hint="Optional. Use this when the department belongs under another department."
-        >
-          <select
-            disabled={isSubmitting || isLoadingOptions}
-            className={selectClassName}
-            {...register("parentDepartmentId")}
-          >
-            <option value="">
-              {isLoadingOptions
-                ? "Loading departments..."
-                : "No parent department"}
-            </option>
-
-            {departments.map((department) => (
-              <option key={department._id} value={department._id}>
-                {department.name} ({department.code})
-              </option>
-            ))}
-          </select>
-        </Field>
-
-        <Field label="Status" required error={errors.status?.message}>
-          <select
-            disabled={isSubmitting}
-            className={selectClassName}
-            {...register("status", {
-              required: "Department status is required.",
-            })}
-          >
-            <option value="ACTIVE">Active</option>
-
-            <option value="INACTIVE">Inactive</option>
-          </select>
-        </Field>
-      </Section>
-
-      <Section
-        icon={FileText}
-        title="Department description"
-        description="Add information about the department's responsibilities."
-      >
-        <div className="sm:col-span-2 xl:col-span-3">
-          <Field label="Description" error={errors.description?.message}>
-            <textarea
+          <Field label="Department name" required error={errors.name?.message}>
+            <input
+              type="text"
               disabled={isSubmitting}
-              placeholder="Describe the department's responsibilities, functions and purpose..."
-              className={textAreaClassName}
-              {...register("description", {
-                maxLength: {
-                  value: 1000,
+              placeholder="Human Resources"
+              className={inputClassName}
+              {...register("name", {
+                required: "Department name is required.",
+
+                minLength: {
+                  value: 2,
                   message:
-                    "Department description cannot exceed 1,000 characters.",
+                    "Department name must contain at least 2 characters.",
+                },
+
+                maxLength: {
+                  value: 100,
+                  message: "Department name cannot exceed 100 characters.",
                 },
               })}
             />
           </Field>
-        </div>
-      </Section>
 
-      <div className="sticky bottom-0 z-20 rounded-2xl border border-slate-200 bg-white/95 p-4 shadow-lg backdrop-blur sm:flex sm:items-center sm:justify-between">
-        <div className="mb-3 sm:mb-0">
-          <p className="text-xs font-medium text-slate-600">
-            Create this department for{" "}
-            <span className="font-semibold">
-              {company?.name ?? "the active company"}
-            </span>
-            .
-          </p>
-
-          <p className="mt-1 text-xs text-slate-400">
-            Department name and code must be unique within the company.
-          </p>
-        </div>
-
-        <div className="flex flex-col-reverse gap-3 sm:flex-row">
-          <Link
-            href="/departments"
-            className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-slate-200 px-5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+          <Field
+            label="Department code"
+            required
+            error={errors.code?.message}
+            hint="The code will be converted to uppercase automatically."
           >
-            <ArrowLeft className="h-4 w-4" />
-            Cancel
-          </Link>
+            <input
+              type="text"
+              disabled={isSubmitting}
+              placeholder="HR"
+              className={inputClassName}
+              {...register("code", {
+                required: "Department code is required.",
 
-          <button
-            type="submit"
-            disabled={isSubmitting}
-            className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+                minLength: {
+                  value: 2,
+                  message:
+                    "Department code must contain at least 2 characters.",
+                },
+
+                maxLength: {
+                  value: 20,
+                  message: "Department code cannot exceed 20 characters.",
+                },
+              })}
+            />
+          </Field>
+        </Section>
+
+        <Section
+          icon={Network}
+          title="Organisation structure"
+          description="Configure the department head and hierarchy."
+        >
+          <Field
+            label="Department head"
+            hint="Optional. The department head must have active company access."
           >
-            {isSubmitting ? (
-              <>
-                <Loader2 className="h-4 w-4 animate-spin" />
-                Creating department...
-              </>
-            ) : (
-              <>
-                <Save className="h-4 w-4" />
-                Create department
-              </>
-            )}
-          </button>
+            <select
+              disabled={isSubmitting || isLoadingOptions}
+              className={selectClassName}
+              {...register("departmentHeadId")}
+            >
+              <option value="">
+                {isLoadingOptions
+                  ? "Loading employees..."
+                  : "No department head"}
+              </option>
+
+              {departmentHeadOptions.map((companyAccess) => (
+                <option key={companyAccess._id} value={companyAccess._id}>
+                  {getCompanyAccessDisplayName(companyAccess)}
+                </option>
+              ))}
+            </select>
+          </Field>
+
+          <Field
+            label="Parent department"
+            hint="Optional. Use this when the department belongs under another department."
+          >
+            <select
+              disabled={isSubmitting || isLoadingOptions}
+              className={selectClassName}
+              {...register("parentDepartmentId")}
+            >
+              <option value="">
+                {isLoadingOptions
+                  ? "Loading departments..."
+                  : "No parent department"}
+              </option>
+
+              {departments.map((department) => (
+                <option key={department._id} value={department._id}>
+                  {department.name} ({department.code})
+                </option>
+              ))}
+            </select>
+          </Field>
+
+          <Field label="Status" required error={errors.status?.message}>
+            <select
+              disabled={isSubmitting}
+              className={selectClassName}
+              {...register("status", {
+                required: "Department status is required.",
+              })}
+            >
+              <option value="ACTIVE">Active</option>
+
+              <option value="INACTIVE">Inactive</option>
+            </select>
+          </Field>
+        </Section>
+
+        <Section
+          icon={FileText}
+          title="Department description"
+          description="Add information about the department's responsibilities."
+        >
+          <div className="sm:col-span-2 xl:col-span-3">
+            <Field label="Description" error={errors.description?.message}>
+              <textarea
+                disabled={isSubmitting}
+                placeholder="Describe the department's responsibilities, functions and purpose..."
+                className={textAreaClassName}
+                {...register("description", {
+                  maxLength: {
+                    value: 1000,
+                    message:
+                      "Department description cannot exceed 1,000 characters.",
+                  },
+                })}
+              />
+            </Field>
+          </div>
+        </Section>
+
+        <div className="sticky bottom-0 z-20 rounded-2xl border border-slate-200 bg-white/95 p-4 shadow-lg backdrop-blur sm:flex sm:items-center sm:justify-between">
+          <div className="mb-3 sm:mb-0">
+            <p className="text-xs font-medium text-slate-600">
+              Create this department for{" "}
+              <span className="font-semibold">
+                {company?.name ?? "the active company"}
+              </span>
+              .
+            </p>
+
+            <p className="mt-1 text-xs text-slate-400">
+              Department name and code must be unique within the company.
+            </p>
+          </div>
+
+          <div className="flex flex-col-reverse gap-3 sm:flex-row">
+            <Link
+              href="/departments"
+              className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-slate-200 px-5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+            >
+              <ArrowLeft className="h-4 w-4" />
+              Cancel
+            </Link>
+
+            <button
+              type="submit"
+              disabled={isSubmitting || isLoadingOptions}
+              className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {isSubmitting ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Creating department...
+                </>
+              ) : (
+                <>
+                  <Save className="h-4 w-4" />
+                  Create department
+                </>
+              )}
+            </button>
+          </div>
         </div>
-      </div>
-    </form>
+      </form>
+    </>
   );
 }
 

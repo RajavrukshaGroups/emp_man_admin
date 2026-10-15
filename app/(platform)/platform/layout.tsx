@@ -12,6 +12,7 @@ import {
   ShieldCheck,
   UserCog,
 } from "lucide-react";
+import { GlobalLoader } from "@/components/common/global-loader";
 
 import { useEffect, useState } from "react";
 import { useAuthStore } from "@/store/auth.store";
@@ -53,6 +54,11 @@ export default function PlatformLayout({
   const router = useRouter();
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
 
+  const [pendingNavigation, setPendingNavigation] = useState<{
+    href: string;
+    label: string;
+  } | null>(null);
+
   const user = useAuthStore((state) => state.user);
   const role = useAuthStore((state) => state.role);
   const accessType = useAuthStore((state) => state.accessType);
@@ -79,6 +85,28 @@ export default function PlatformLayout({
       router.replace("/dashboard");
     }
   }, [accessType, isAuthenticated, isHydrated, isInitializing, router]);
+
+  useEffect(() => {
+    if (!pendingNavigation) return;
+
+    if (
+      pathname === pendingNavigation.href ||
+      pathname.startsWith(`${pendingNavigation.href}/`)
+    ) {
+      setPendingNavigation(null);
+    }
+  }, [pathname, pendingNavigation]);
+
+  function handleSidebarNavigation(href: string, label: string) {
+    if (pathname === href) {
+      return;
+    }
+
+    setPendingNavigation({
+      href,
+      label,
+    });
+  }
 
   async function handleLogout() {
     await logout();
@@ -108,176 +136,202 @@ export default function PlatformLayout({
       .slice(0, 2) || "SA";
 
   return (
-    <div className="min-h-screen bg-slate-50">
-      <aside
-        className={`fixed inset-y-0 left-0 z-40 hidden flex-col bg-slate-950 text-white transition-all duration-300 lg:flex ${
-          isSidebarCollapsed ? "w-20" : "w-72"
-        }`}
-      >
-        {/* Brand */}
-        <div
-          className={`flex h-24 items-center border-b border-slate-800 ${
-            isSidebarCollapsed ? "justify-center px-3" : "justify-between px-5"
+    <>
+      <GlobalLoader
+        isOpen={pendingNavigation !== null}
+        message={
+          pendingNavigation
+            ? `Loading ${pendingNavigation.label.toLowerCase()}...`
+            : "Loading..."
+        }
+      />
+      <div className="min-h-screen bg-slate-50">
+        <aside
+          className={`fixed inset-y-0 left-0 z-40 hidden flex-col bg-slate-950 text-white transition-all duration-300 lg:flex ${
+            isSidebarCollapsed ? "w-20" : "w-72"
           }`}
         >
-          <Link
-            href="/platform/dashboard"
-            className="flex min-w-0 items-center gap-3"
-          >
-            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-blue-600">
-              <ShieldCheck className="h-6 w-6" />
-            </div>
-
-            {!isSidebarCollapsed && (
-              <div className="min-w-0">
-                <p className="truncate text-base font-bold">EMS Platform</p>
-
-                <p className="mt-0.5 truncate text-xs text-slate-400">
-                  Super Administration
-                </p>
-              </div>
-            )}
-          </Link>
-
-          {!isSidebarCollapsed && (
-            <button
-              type="button"
-              onClick={() => setIsSidebarCollapsed(true)}
-              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-slate-400 transition hover:bg-slate-900 hover:text-white"
-              aria-label="Collapse sidebar"
-            >
-              <ChevronLeft className="h-5 w-5" />
-            </button>
-          )}
-        </div>
-
-        {/* Collapsed expand button */}
-        {isSidebarCollapsed && (
-          <div className="flex justify-center border-b border-slate-800 py-3">
-            <button
-              type="button"
-              onClick={() => setIsSidebarCollapsed(false)}
-              className="flex h-9 w-9 items-center justify-center rounded-lg text-slate-400 transition hover:bg-slate-900 hover:text-white"
-              aria-label="Expand sidebar"
-            >
-              <ChevronRight className="h-5 w-5" />
-            </button>
-          </div>
-        )}
-
-        {/* Navigation */}
-        <nav
-          className={`flex-1 space-y-2 py-5 ${
-            isSidebarCollapsed ? "px-3" : "px-4"
-          }`}
-        >
-          {navigationItems.map((item) => {
-            const Icon = item.icon;
-
-            const isActive =
-              pathname === item.href || pathname.startsWith(`${item.href}/`);
-
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                title={isSidebarCollapsed ? item.label : undefined}
-                className={`flex items-center rounded-xl py-3 text-sm font-semibold transition ${
-                  isSidebarCollapsed
-                    ? "justify-center px-3"
-                    : "justify-between px-4"
-                } ${
-                  isActive
-                    ? "bg-white text-slate-950"
-                    : "text-slate-300 hover:bg-slate-900 hover:text-white"
-                }`}
-              >
-                <span
-                  className={`flex items-center ${
-                    isSidebarCollapsed ? "justify-center" : "gap-3"
-                  }`}
-                >
-                  <Icon className="h-5 w-5 shrink-0" />
-
-                  {!isSidebarCollapsed && <span>{item.label}</span>}
-                </span>
-
-                {!isSidebarCollapsed && isActive && (
-                  <ChevronRight className="h-4 w-4" />
-                )}
-              </Link>
-            );
-          })}
-        </nav>
-
-        {/* Bottom user section */}
-        <div className="border-t border-slate-800 p-4">
-          {!isSidebarCollapsed && (
-            <div className="mb-4 rounded-xl bg-slate-900 p-4">
-              <p className="truncate text-sm font-semibold text-white">
-                {displayName}
-              </p>
-
-              <p className="mt-1 truncate text-xs text-slate-400">
-                {role?.name ?? "Super Administrator"}
-              </p>
-            </div>
-          )}
-
-          <button
-            type="button"
-            onClick={() => void handleLogout()}
-            title={isSidebarCollapsed ? "Sign out" : undefined}
-            className={`flex h-11 w-full items-center rounded-xl border border-slate-700 text-sm font-semibold text-slate-200 transition hover:bg-slate-900 hover:text-white ${
-              isSidebarCollapsed ? "justify-center" : "justify-center gap-2"
+          {/* Brand */}
+          <div
+            className={`flex h-24 items-center border-b border-slate-800 ${
+              isSidebarCollapsed
+                ? "justify-center px-3"
+                : "justify-between px-5"
             }`}
           >
-            <LogOut className="h-4 w-4 shrink-0" />
+            <Link
+              href="/platform/dashboard"
+              className="flex min-w-0 items-center gap-3"
+            >
+              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-blue-600">
+                <ShieldCheck className="h-6 w-6" />
+              </div>
 
-            {!isSidebarCollapsed && <span>Sign out</span>}
-          </button>
-        </div>
-      </aside>
+              {!isSidebarCollapsed && (
+                <div className="min-w-0">
+                  <p className="truncate text-base font-bold">EMS Platform</p>
 
-      <div
-        className={`transition-[padding] duration-300 ${
-          isSidebarCollapsed ? "lg:pl-20" : "lg:pl-72"
-        }`}
-      >
-        <header className="sticky top-0 z-30 border-b border-slate-200 bg-white/95 backdrop-blur">
-          <div className="flex min-h-20 items-center justify-between gap-4 px-5 sm:px-8">
-            <div>
-              <p className="text-sm font-semibold text-slate-950">
-                Platform Administration
-              </p>
+                  <p className="mt-0.5 truncate text-xs text-slate-400">
+                    Super Administration
+                  </p>
+                </div>
+              )}
+            </Link>
 
-              <p className="mt-0.5 text-xs text-slate-500">
-                Manage companies and platform-level access.
-              </p>
+            {!isSidebarCollapsed && (
+              <button
+                type="button"
+                onClick={() => setIsSidebarCollapsed(true)}
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-slate-400 transition hover:bg-slate-900 hover:text-white"
+                aria-label="Collapse sidebar"
+              >
+                <ChevronLeft className="h-5 w-5" />
+              </button>
+            )}
+          </div>
+
+          {/* Collapsed expand button */}
+          {isSidebarCollapsed && (
+            <div className="flex justify-center border-b border-slate-800 py-3">
+              <button
+                type="button"
+                onClick={() => setIsSidebarCollapsed(false)}
+                className="flex h-9 w-9 items-center justify-center rounded-lg text-slate-400 transition hover:bg-slate-900 hover:text-white"
+                aria-label="Expand sidebar"
+              >
+                <ChevronRight className="h-5 w-5" />
+              </button>
             </div>
+          )}
 
-            <div className="flex items-center gap-3">
-              <div className="hidden text-right sm:block">
-                <p className="text-sm font-semibold text-slate-900">
+          {/* Navigation */}
+          <nav
+            className={`flex-1 space-y-2 py-5 ${
+              isSidebarCollapsed ? "px-3" : "px-4"
+            }`}
+          >
+            {navigationItems.map((item) => {
+              const Icon = item.icon;
+
+              const isActive =
+                pathname === item.href || pathname.startsWith(`${item.href}/`);
+
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  title={isSidebarCollapsed ? item.label : undefined}
+                  onClick={(event) => {
+                    if (
+                      event.defaultPrevented ||
+                      event.button !== 0 ||
+                      event.metaKey ||
+                      event.ctrlKey ||
+                      event.shiftKey ||
+                      event.altKey
+                    ) {
+                      return;
+                    }
+
+                    handleSidebarNavigation(item.href, item.label);
+                  }}
+                  className={`flex items-center rounded-none py-3 text-sm font-semibold transition ${
+                    isSidebarCollapsed
+                      ? "justify-center px-3"
+                      : "justify-between px-4"
+                  } ${
+                    isActive
+                      ? "bg-white text-slate-950"
+                      : "text-slate-300 hover:bg-slate-900 hover:text-white"
+                  }`}
+                >
+                  <span
+                    className={`flex items-center ${
+                      isSidebarCollapsed ? "justify-center" : "gap-3"
+                    }`}
+                  >
+                    <Icon className="h-5 w-5 shrink-0" />
+
+                    {!isSidebarCollapsed && <span>{item.label}</span>}
+                  </span>
+
+                  {!isSidebarCollapsed && isActive && (
+                    <ChevronRight className="h-4 w-4" />
+                  )}
+                </Link>
+              );
+            })}
+          </nav>
+
+          {/* Bottom user section */}
+          <div className="border-t border-slate-800 p-4">
+            {!isSidebarCollapsed && (
+              <div className="mb-4 rounded-xl bg-slate-900 p-4">
+                <p className="truncate text-sm font-semibold text-white">
                   {displayName}
                 </p>
 
-                <p className="text-xs text-slate-500">
+                <p className="mt-1 truncate text-xs text-slate-400">
                   {role?.name ?? "Super Administrator"}
                 </p>
               </div>
+            )}
 
-              <div className="flex h-11 w-11 items-center justify-center rounded-full bg-slate-950 text-sm font-bold text-white">
-                {initials}
+            <button
+              type="button"
+              onClick={() => void handleLogout()}
+              title={isSidebarCollapsed ? "Sign out" : undefined}
+              className={`flex h-11 w-full items-center rounded-xl border border-slate-700 text-sm font-semibold text-slate-200 transition hover:bg-slate-900 hover:text-white ${
+                isSidebarCollapsed ? "justify-center" : "justify-center gap-2"
+              }`}
+            >
+              <LogOut className="h-4 w-4 shrink-0" />
+
+              {!isSidebarCollapsed && <span>Sign out</span>}
+            </button>
+          </div>
+        </aside>
+
+        <div
+          className={`transition-[padding] duration-300 ${
+            isSidebarCollapsed ? "lg:pl-20" : "lg:pl-72"
+          }`}
+        >
+          <header className="sticky top-0 z-30 border-b border-slate-200 bg-white/95 backdrop-blur">
+            <div className="flex min-h-20 items-center justify-between gap-4 px-5 sm:px-8">
+              <div>
+                <p className="text-sm font-semibold text-slate-950">
+                  Platform Administration
+                </p>
+
+                <p className="mt-0.5 text-xs text-slate-500">
+                  Manage companies and platform-level access.
+                </p>
+              </div>
+
+              <div className="flex items-center gap-3">
+                <div className="hidden text-right sm:block">
+                  <p className="text-sm font-semibold text-slate-900">
+                    {displayName}
+                  </p>
+
+                  <p className="text-xs text-slate-500">
+                    {role?.name ?? "Super Administrator"}
+                  </p>
+                </div>
+
+                <div className="flex h-11 w-11 items-center justify-center rounded-full bg-slate-950 text-sm font-bold text-white">
+                  {initials}
+                </div>
               </div>
             </div>
-          </div>
-        </header>
-        <main className="px-5 py-6 sm:px-8 sm:py-8">
-          <div className="mx-auto w-full max-w-[1600px]">{children}</div>
-        </main>
+          </header>
+          <main className="px-5 py-6 sm:px-8 sm:py-8">
+            <div className="mx-auto w-full max-w-[1600px]">{children}</div>
+          </main>
+        </div>
       </div>
-    </div>
+    </>
   );
 }
 

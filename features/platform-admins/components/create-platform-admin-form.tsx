@@ -17,6 +17,8 @@ import { toast } from "sonner";
 
 import { platformAdminService } from "../services/platform-admin.service";
 
+import { GlobalLoader } from "@/components/common/global-loader";
+
 import type {
   PlatformAdminStatus,
   PlatformRole,
@@ -132,6 +134,10 @@ export function CreatePlatformAdminForm() {
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
+    if (isSubmitting || isLoadingRoles) {
+      return;
+    }
+
     if (!form.firstName.trim()) {
       toast.error("First name is required.");
       return;
@@ -204,243 +210,259 @@ export function CreatePlatformAdminForm() {
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-        <div className="flex items-start gap-4">
-          <Link
-            href="/platform/admins"
-            className="mt-1 inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 transition hover:bg-slate-50"
-          >
-            <ArrowLeft className="h-5 w-5" />
-          </Link>
+    <>
+      <GlobalLoader
+        isOpen={isLoadingRoles || isSubmitting}
+        message={
+          isSubmitting
+            ? "Creating platform administrator..."
+            : "Loading platform administrator form..."
+        }
+      />
+      <div className="space-y-6">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex items-start gap-4">
+            <Link
+              href="/platform/admins"
+              className="mt-1 inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 transition hover:bg-slate-50"
+            >
+              <ArrowLeft className="h-5 w-5" />
+            </Link>
 
-          <div>
-            <p className="text-sm font-semibold uppercase tracking-wide text-blue-600">
-              Platform Administration
-            </p>
+            <div>
+              <p className="text-sm font-semibold uppercase tracking-wide text-blue-600">
+                Platform Administration
+              </p>
 
-            <h1 className="mt-1 text-3xl font-bold tracking-tight text-slate-950">
-              Add platform administrator
-            </h1>
+              <h1 className="mt-1 text-3xl font-bold tracking-tight text-slate-950">
+                Add platform administrator
+              </h1>
 
-            <p className="mt-2 text-sm text-slate-500">
-              Create a user and grant GLOBAL platform administration access.
-            </p>
+              <p className="mt-2 text-sm text-slate-500">
+                Create a user and grant GLOBAL platform administration access.
+              </p>
+            </div>
           </div>
         </div>
-      </div>
 
-      <form onSubmit={handleSubmit} className="space-y-6">
-        <FormSection
-          icon={UserRound}
-          title="Administrator information"
-          description="Enter the administrator's personal and account information."
-        >
-          <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
-            <FormField label="First name" required>
-              <input
-                value={form.firstName}
-                onChange={(event) =>
-                  updateField("firstName", event.target.value)
-                }
-                placeholder="Enter first name"
-                className={inputClassName}
-              />
-            </FormField>
+        <form onSubmit={handleSubmit} className="space-y-6">
+          <FormSection
+            icon={UserRound}
+            title="Administrator information"
+            description="Enter the administrator's personal and account information."
+          >
+            <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
+              <FormField label="First name" required>
+                <input
+                  value={form.firstName}
+                  onChange={(event) =>
+                    updateField("firstName", event.target.value)
+                  }
+                  placeholder="Enter first name"
+                  className={inputClassName}
+                />
+              </FormField>
 
-            <FormField label="Middle name">
-              <input
-                value={form.middleName}
-                onChange={(event) =>
-                  updateField("middleName", event.target.value)
-                }
-                placeholder="Enter middle name"
-                className={inputClassName}
-              />
-            </FormField>
+              <FormField label="Middle name">
+                <input
+                  value={form.middleName}
+                  onChange={(event) =>
+                    updateField("middleName", event.target.value)
+                  }
+                  placeholder="Enter middle name"
+                  className={inputClassName}
+                />
+              </FormField>
 
-            <FormField label="Last name" required>
-              <input
-                value={form.lastName}
-                onChange={(event) =>
-                  updateField("lastName", event.target.value)
-                }
-                placeholder="Enter last name"
-                className={inputClassName}
-              />
-            </FormField>
+              <FormField label="Last name" required>
+                <input
+                  value={form.lastName}
+                  onChange={(event) =>
+                    updateField("lastName", event.target.value)
+                  }
+                  placeholder="Enter last name"
+                  className={inputClassName}
+                />
+              </FormField>
 
-            <FormField label="Display name">
-              <input
-                value={form.displayName}
-                onChange={(event) =>
-                  updateField("displayName", event.target.value)
-                }
-                placeholder="Example: Rohit Sharma"
-                className={inputClassName}
-              />
-            </FormField>
+              <FormField label="Display name">
+                <input
+                  value={form.displayName}
+                  onChange={(event) =>
+                    updateField("displayName", event.target.value)
+                  }
+                  placeholder="Example: Rohit Sharma"
+                  className={inputClassName}
+                />
+              </FormField>
 
-            <FormField label="Email address" required>
-              <input
-                type="email"
-                value={form.email}
-                onChange={(event) => updateField("email", event.target.value)}
-                placeholder="admin@example.com"
-                className={inputClassName}
-              />
-            </FormField>
+              <FormField label="Email address" required>
+                <input
+                  type="email"
+                  value={form.email}
+                  onChange={(event) => updateField("email", event.target.value)}
+                  placeholder="admin@example.com"
+                  className={inputClassName}
+                />
+              </FormField>
 
-            <FormField label="Mobile number">
-              <input
-                type="tel"
-                value={form.mobile}
-                onChange={(event) => updateField("mobile", event.target.value)}
-                placeholder="Enter mobile number"
-                className={inputClassName}
-              />
-            </FormField>
-          </div>
-        </FormSection>
+              <FormField label="Mobile number">
+                <input
+                  type="tel"
+                  value={form.mobile}
+                  onChange={(event) =>
+                    updateField("mobile", event.target.value)
+                  }
+                  placeholder="Enter mobile number"
+                  className={inputClassName}
+                />
+              </FormField>
+            </div>
+          </FormSection>
 
-        <FormSection
-          icon={ShieldCheck}
-          title="Platform access"
-          description="Assign GLOBAL platform access and account status."
-        >
-          <div className="grid gap-5 md:grid-cols-2">
-            <FormField label="Platform role" required>
-              <select
-                value={form.roleId}
-                onChange={(event) => updateField("roleId", event.target.value)}
-                disabled={isLoadingRoles}
-                className={inputClassName}
-              >
-                <option value="">
-                  {isLoadingRoles
-                    ? "Loading platform roles..."
-                    : "Select platform role"}
-                </option>
-
-                {roles.map((role) => (
-                  <option key={role._id} value={role._id}>
-                    {role.name} ({role.code})
+          <FormSection
+            icon={ShieldCheck}
+            title="Platform access"
+            description="Assign GLOBAL platform access and account status."
+          >
+            <div className="grid gap-5 md:grid-cols-2">
+              <FormField label="Platform role" required>
+                <select
+                  value={form.roleId}
+                  onChange={(event) =>
+                    updateField("roleId", event.target.value)
+                  }
+                  disabled={isLoadingRoles}
+                  className={inputClassName}
+                >
+                  <option value="">
+                    {isLoadingRoles
+                      ? "Loading platform roles..."
+                      : "Select platform role"}
                   </option>
-                ))}
-              </select>
-            </FormField>
 
-            <FormField label="Access status" required>
-              <select
-                value={form.status}
-                onChange={(event) =>
-                  updateField(
-                    "status",
-                    event.target.value as PlatformAdminStatus,
-                  )
-                }
-                className={inputClassName}
-              >
-                <option value="ACTIVE">Active</option>
+                  {roles.map((role) => (
+                    <option key={role._id} value={role._id}>
+                      {role.name} ({role.code})
+                    </option>
+                  ))}
+                </select>
+              </FormField>
 
-                <option value="INACTIVE">Inactive</option>
+              <FormField label="Access status" required>
+                <select
+                  value={form.status}
+                  onChange={(event) =>
+                    updateField(
+                      "status",
+                      event.target.value as PlatformAdminStatus,
+                    )
+                  }
+                  className={inputClassName}
+                >
+                  <option value="ACTIVE">Active</option>
 
-                <option value="SUSPENDED">Suspended</option>
-              </select>
-            </FormField>
-          </div>
+                  <option value="INACTIVE">Inactive</option>
 
-          {roles.length === 0 && !isLoadingRoles && (
-            <p className="mt-4 text-sm font-medium text-red-600">
-              No active GLOBAL platform roles are available.
+                  <option value="SUSPENDED">Suspended</option>
+                </select>
+              </FormField>
+            </div>
+
+            {roles.length === 0 && !isLoadingRoles && (
+              <p className="mt-4 text-sm font-medium text-red-600">
+                No active GLOBAL platform roles are available.
+              </p>
+            )}
+          </FormSection>
+
+          <FormSection
+            icon={KeyRound}
+            title="Initial password"
+            description="Create the administrator's initial login password."
+          >
+            <div className="grid gap-5 md:grid-cols-2">
+              <FormField label="Password" required>
+                <div className="relative">
+                  <input
+                    type={showPassword ? "text" : "password"}
+                    value={form.password}
+                    onChange={(event) =>
+                      updateField("password", event.target.value)
+                    }
+                    placeholder="Enter password"
+                    className={`${inputClassName} pr-12`}
+                  />
+
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword((current) => !current)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 transition hover:text-slate-700"
+                  >
+                    {showPassword ? (
+                      <EyeOff className="h-5 w-5" />
+                    ) : (
+                      <Eye className="h-5 w-5" />
+                    )}
+                  </button>
+                </div>
+              </FormField>
+
+              <FormField label="Confirm password" required>
+                <div className="relative">
+                  <input
+                    type={showConfirmPassword ? "text" : "password"}
+                    value={form.confirmPassword}
+                    onChange={(event) =>
+                      updateField("confirmPassword", event.target.value)
+                    }
+                    placeholder="Re-enter password"
+                    className={`${inputClassName} pr-12`}
+                  />
+
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setShowConfirmPassword((current) => !current)
+                    }
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 transition hover:text-slate-700"
+                  >
+                    {showConfirmPassword ? (
+                      <EyeOff className="h-5 w-5" />
+                    ) : (
+                      <Eye className="h-5 w-5" />
+                    )}
+                  </button>
+                </div>
+              </FormField>
+            </div>
+
+            <p className="mt-3 text-xs text-slate-500">
+              Password must contain at least 8 characters.
             </p>
-          )}
-        </FormSection>
+          </FormSection>
 
-        <FormSection
-          icon={KeyRound}
-          title="Initial password"
-          description="Create the administrator's initial login password."
-        >
-          <div className="grid gap-5 md:grid-cols-2">
-            <FormField label="Password" required>
-              <div className="relative">
-                <input
-                  type={showPassword ? "text" : "password"}
-                  value={form.password}
-                  onChange={(event) =>
-                    updateField("password", event.target.value)
-                  }
-                  placeholder="Enter password"
-                  className={`${inputClassName} pr-12`}
-                />
+          <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+            <Link
+              href="/platform/admins"
+              className="inline-flex h-11 items-center justify-center rounded-xl border border-slate-200 bg-white px-5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+            >
+              Cancel
+            </Link>
 
-                <button
-                  type="button"
-                  onClick={() => setShowPassword((current) => !current)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 transition hover:text-slate-700"
-                >
-                  {showPassword ? (
-                    <EyeOff className="h-5 w-5" />
-                  ) : (
-                    <Eye className="h-5 w-5" />
-                  )}
-                </button>
-              </div>
-            </FormField>
+            <button
+              type="submit"
+              disabled={isSubmitting || isLoadingRoles || roles.length === 0}
+              className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-blue-600 px-6 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {isSubmitting && <Loader2 className="h-4 w-4 animate-spin" />}
 
-            <FormField label="Confirm password" required>
-              <div className="relative">
-                <input
-                  type={showConfirmPassword ? "text" : "password"}
-                  value={form.confirmPassword}
-                  onChange={(event) =>
-                    updateField("confirmPassword", event.target.value)
-                  }
-                  placeholder="Re-enter password"
-                  className={`${inputClassName} pr-12`}
-                />
-
-                <button
-                  type="button"
-                  onClick={() => setShowConfirmPassword((current) => !current)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 transition hover:text-slate-700"
-                >
-                  {showConfirmPassword ? (
-                    <EyeOff className="h-5 w-5" />
-                  ) : (
-                    <Eye className="h-5 w-5" />
-                  )}
-                </button>
-              </div>
-            </FormField>
+              {isSubmitting ? "Creating..." : "Create administrator"}
+            </button>
           </div>
-
-          <p className="mt-3 text-xs text-slate-500">
-            Password must contain at least 8 characters.
-          </p>
-        </FormSection>
-
-        <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
-          <Link
-            href="/platform/admins"
-            className="inline-flex h-11 items-center justify-center rounded-xl border border-slate-200 bg-white px-5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
-          >
-            Cancel
-          </Link>
-
-          <button
-            type="submit"
-            disabled={isSubmitting || isLoadingRoles || roles.length === 0}
-            className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-blue-600 px-6 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            {isSubmitting && <Loader2 className="h-4 w-4 animate-spin" />}
-
-            {isSubmitting ? "Creating..." : "Create administrator"}
-          </button>
-        </div>
-      </form>
-    </div>
+        </form>
+      </div>
+    </>
   );
 }
 

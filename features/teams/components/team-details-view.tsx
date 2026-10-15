@@ -19,6 +19,8 @@ import {
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 
+import { PageLoading } from "@/components/common/page-loading";
+
 import { teamService } from "@/features/teams/services/team.service";
 import type {
   Team,
@@ -232,7 +234,7 @@ export function TeamDetailsView({ teamId }: TeamDetailsViewProps) {
   }
 
   if (isLoading) {
-    return <TeamDetailsSkeleton />;
+    return <PageLoading message="Loading team details..." />;
   }
 
   if (errorMessage || !team) {

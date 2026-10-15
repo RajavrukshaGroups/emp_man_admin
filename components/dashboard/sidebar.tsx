@@ -8,7 +8,7 @@ import { useAuthStore } from "@/store/auth.store";
 import { dashboardNavigation } from "@/components/dashboard/navigation";
 
 interface SidebarProps {
-  onNavigate?: () => void;
+  onNavigate?: (href: string, title: string) => void;
   collapsed?: boolean;
   onToggleCollapse?: () => void;
 }
@@ -104,10 +104,23 @@ export function Sidebar({
               <Link
                 key={item.href}
                 href={item.href}
-                onClick={onNavigate}
+                onClick={(event) => {
+                  if (
+                    event.defaultPrevented ||
+                    event.button !== 0 ||
+                    event.metaKey ||
+                    event.ctrlKey ||
+                    event.shiftKey ||
+                    event.altKey
+                  ) {
+                    return;
+                  }
+
+                  onNavigate?.(item.href, item.title);
+                }}
                 title={collapsed ? item.title : undefined}
                 className={cn(
-                  "flex items-center rounded-lg py-2 text-sm font-medium transition",
+                  "flex items-center rounded-none py-2 text-sm font-medium transition",
                   collapsed ? "justify-center px-2" : "gap-3 px-3",
                   isActive
                     ? "bg-white text-slate-950"

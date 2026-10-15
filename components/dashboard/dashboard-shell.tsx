@@ -1,5 +1,9 @@
 "use client";
 
+import { usePathname } from "next/navigation";
+import { useEffect } from "react";
+import { GlobalLoader } from "@/components/common/global-loader";
+
 import { useCallback, useState, type ReactNode } from "react";
 
 import { MobileSidebar } from "@/components/dashboard/mobile-sidebar";
@@ -11,6 +15,14 @@ interface DashboardShellProps {
 }
 
 export function DashboardShell({ children }: DashboardShellProps) {
+  const pathname = usePathname();
+
+  const [pendingNavigation, setPendingNavigation] = useState<{
+    href: string;
+    title: string;
+    fromPath: string;
+  } | null>(null);
+
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
 
   const [isDesktopSidebarCollapsed, setIsDesktopSidebarCollapsed] =
@@ -28,8 +40,46 @@ export function DashboardShell({ children }: DashboardShellProps) {
     setIsDesktopSidebarCollapsed((current) => !current);
   }, []);
 
+  const handleSidebarNavigation = useCallback(
+    (href: string, title: string) => {
+      if (pathname === href) {
+        setPendingNavigation(null);
+        return;
+      }
+
+      setPendingNavigation({
+        href,
+        title,
+        fromPath: pathname,
+      });
+
+      setIsMobileSidebarOpen(false);
+    },
+    [pathname],
+  );
+
+  useEffect(() => {
+    if (!pendingNavigation) return;
+
+    if (
+      pathname !== pendingNavigation.fromPath &&
+      (pathname === pendingNavigation.href ||
+        pathname.startsWith(`${pendingNavigation.href}/`))
+    ) {
+      setPendingNavigation(null);
+    }
+  }, [pathname, pendingNavigation]);
+
   return (
     <div className="min-h-screen overflow-x-hidden bg-slate-50">
+      <GlobalLoader
+        isOpen={pendingNavigation !== null}
+        message={
+          pendingNavigation
+            ? `Loading ${pendingNavigation.title.toLowerCase()}...`
+            : "Loading..."
+        }
+      />
       {/* Desktop sidebar */}
       <div
         className={[
@@ -40,12 +90,16 @@ export function DashboardShell({ children }: DashboardShellProps) {
         <Sidebar
           collapsed={isDesktopSidebarCollapsed}
           onToggleCollapse={toggleDesktopSidebar}
+          onNavigate={handleSidebarNavigation}
         />
       </div>
 
       {/* Mobile sidebar */}
-      <MobileSidebar open={isMobileSidebarOpen} onClose={closeMobileSidebar} />
-
+      <MobileSidebar
+        open={isMobileSidebarOpen}
+        onClose={closeMobileSidebar}
+        onNavigate={handleSidebarNavigation}
+      />
       {/* Main dashboard area */}
       <div
         className={[

@@ -8,9 +8,14 @@ import { Sidebar } from "@/components/dashboard/sidebar";
 interface MobileSidebarProps {
   open: boolean;
   onClose: () => void;
+  onNavigate?: (href: string, title: string) => void;
 }
 
-export function MobileSidebar({ open, onClose }: MobileSidebarProps) {
+export function MobileSidebar({
+  open,
+  onClose,
+  onNavigate,
+}: MobileSidebarProps) {
   useEffect(() => {
     if (!open) {
       return;
@@ -69,8 +74,12 @@ export function MobileSidebar({ open, onClose }: MobileSidebarProps) {
         >
           <X className="h-5 w-5" />
         </button>
-
-        <Sidebar onNavigate={onClose} />
+        <Sidebar
+          onNavigate={(href, title) => {
+            onClose();
+            onNavigate?.(href, title);
+          }}
+        />
       </div>
     </div>
   );

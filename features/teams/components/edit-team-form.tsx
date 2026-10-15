@@ -16,6 +16,8 @@ import { useCallback, useEffect, useState } from "react";
 import { useForm, type SubmitHandler } from "react-hook-form";
 import { toast } from "sonner";
 
+import { PageLoading } from "@/components/common/page-loading";
+
 import { departmentService } from "@/features/departments/services/department.service";
 import type { Department } from "@/features/departments/types/department.types";
 
@@ -232,7 +234,7 @@ export function EditTeamForm({ teamId }: EditTeamFormProps) {
   }
 
   if (isLoading) {
-    return <EditTeamSkeleton />;
+    return <PageLoading message="Loading team edit form..." />;
   }
 
   if (loadError || !team) {

@@ -99,7 +99,10 @@ export function UserAccountStep({ onSuccess }: UserAccountStepProps) {
 
   const previewName =
     displayName?.trim() ||
-    [firstName, middleName, lastName].filter(Boolean).join(" ").trim() ||
+    [firstName, middleName, lastName]
+      .map((part) => part?.trim())
+      .filter(Boolean)
+      .join(" ") ||
     "New user";
 
   async function onSubmit(values: CreateUserFormValues) {
@@ -114,7 +117,7 @@ export function UserAccountStep({ onSuccess }: UserAccountStepProps) {
       const createdUser = await userService.createUser({
         firstName: payload.firstName,
         middleName: payload.middleName,
-        lastName: payload.lastName,
+        lastName: payload.lastName ?? "",
         displayName: payload.displayName,
         email: payload.email,
         mobile: payload.mobile,
@@ -264,7 +267,10 @@ export function UserAccountStep({ onSuccess }: UserAccountStepProps) {
 
           <div>
             <label htmlFor="lastName" className={labelClassName}>
-              Last name <span className="text-red-500">*</span>
+              Last name
+              <span className="ml-1 text-xs font-normal text-slate-400">
+                (Optional)
+              </span>
             </label>
 
             <input

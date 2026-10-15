@@ -112,7 +112,7 @@ export function CreateUserForm() {
       await userService.createUser({
         firstName: payload.firstName,
         middleName: payload.middleName,
-        lastName: payload.lastName,
+        lastName: payload.lastName ?? "",
         displayName: payload.displayName,
         email: payload.email,
         mobile: payload.mobile,

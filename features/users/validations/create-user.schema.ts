@@ -35,19 +35,11 @@ export const createUserSchema = z
             .string()
             .trim()
             .min(1, "First name is required.")
-            .min(
-                2,
-                "First name must contain at least 2 characters.",
-            )
-            .max(
-                50,
-                "First name must not exceed 50 characters.",
-            )
+            .max(50, "First name must not exceed 50 characters.")
             .regex(
                 /^[A-Za-z][A-Za-z\s'-]*$/,
                 "First name can contain only letters, spaces, apostrophes and hyphens.",
             ),
-
         middleName: optionalTrimmedString.refine(
             (value) =>
                 !value ||
@@ -58,23 +50,20 @@ export const createUserSchema = z
             },
         ),
 
-        lastName: z
-            .string()
-            .trim()
-            .min(1, "Last name is required.")
-            .min(
-                2,
-                "Last name must contain at least 2 characters.",
+        lastName: optionalTrimmedString
+            .refine(
+                (value) => !value || value.length <= 50,
+                {
+                    message: "Last name must not exceed 50 characters.",
+                },
             )
-            .max(
-                50,
-                "Last name must not exceed 50 characters.",
-            )
-            .regex(
-                /^[A-Za-z][A-Za-z\s'-]*$/,
-                "Last name can contain only letters, spaces, apostrophes and hyphens.",
+            .refine(
+                (value) => !value || /^[A-Za-z][A-Za-z\s'-]*$/.test(value),
+                {
+                    message:
+                        "Last name can contain only letters, spaces, apostrophes and hyphens.",
+                },
             ),
-
         displayName: optionalTrimmedString.refine(
             (value) => !value || value.length <= 120,
             {
