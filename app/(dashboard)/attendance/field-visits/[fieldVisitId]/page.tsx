@@ -1,6 +1,6 @@
 "use client";
 
-import { use, useEffect, useState } from "react";
+import { use, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, Loader2, Navigation, ShieldAlert } from "lucide-react";
 import { toast } from "sonner";
@@ -35,8 +35,8 @@ export default function FieldVisitDetailPage({
 
   const [errorMessage, setErrorMessage] = useState("");
 
-  useEffect(() => {
-    async function loadFieldVisit() {
+  const loadFieldVisit = useCallback(
+    async (background = false) => {
       if (!company?._id || !fieldVisitId) {
         setIsLoading(false);
         return;
@@ -44,14 +44,15 @@ export default function FieldVisitDetailPage({
 
       if (!canReadFieldVisits) {
         setErrorMessage("You do not have permission to view field visits.");
-
+        setVisit(null);
         setIsLoading(false);
-
         return;
       }
 
       try {
-        setIsLoading(true);
+        if (!background) {
+          setIsLoading(true);
+        }
 
         setErrorMessage("");
 
@@ -62,23 +63,58 @@ export default function FieldVisitDetailPage({
 
         setVisit(result);
       } catch (error) {
-        setVisit(null);
-
         const message = getApiErrorMessage(
           error,
           "Unable to load field visit details.",
         );
 
-        setErrorMessage(message);
+        if (!background) {
+          setVisit(null);
+          setErrorMessage(message);
+        }
 
         toast.error(message);
       } finally {
-        setIsLoading(false);
+        if (!background) {
+          setIsLoading(false);
+        }
       }
+    },
+    [company, fieldVisitId, canReadFieldVisits],
+  );
+
+  /**
+   * Initial load and refresh when the company or visit changes.
+   */
+  useEffect(() => {
+    async function loadInitialFieldVisit() {
+      await loadFieldVisit();
     }
 
-    void loadFieldVisit();
-  }, [company?._id, fieldVisitId, canReadFieldVisits]);
+    void loadInitialFieldVisit();
+  }, [loadFieldVisit]);
+
+  /**
+   * Refresh field visit details when returning to the browser tab.
+   * Keep the existing details visible while refreshing.
+   */
+  useEffect(() => {
+    if (!company?._id || !fieldVisitId || !canReadFieldVisits) {
+      return;
+    }
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        void loadFieldVisit(true);
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [company?._id, fieldVisitId, canReadFieldVisits, loadFieldVisit]);
 
   if (isLoading) {
     return <FieldVisitDetailLoading />;

@@ -114,50 +114,83 @@ export default function AttendanceRegularizationsPage() {
    */
   const isManagementView = canRecommend || canApprove;
 
-  const loadRegularizations = useCallback(async () => {
-    if (!company?._id) {
-      setIsLoading(false);
+  const loadRegularizations = useCallback(
+    async (background = false) => {
+      if (!company?._id) {
+        setIsLoading(false);
 
+        return;
+      }
+
+      try {
+        if (!background) {
+          setIsLoading(true);
+        }
+        const query = {
+          page,
+          limit: 10,
+
+          status: status === "ALL" ? undefined : status,
+        };
+
+        const result = isManagementView
+          ? await attendanceRegularizationService.list(company._id, query)
+          : await attendanceRegularizationService.getMyHistory(
+              company._id,
+              query,
+            );
+
+        setData(result);
+      } catch (error) {
+        setData(null);
+
+        toast.error(
+          getApiErrorMessage(
+            error,
+            "Unable to load attendance regularization requests.",
+          ),
+        );
+      } finally {
+        if (!background) {
+          setIsLoading(false);
+        }
+      }
+    },
+    [company, page, status, isManagementView],
+  );
+
+  useEffect(() => {
+    async function loadInitialRegularizations() {
+      await loadRegularizations();
+    }
+
+    void loadInitialRegularizations();
+  }, [loadRegularizations]);
+
+  /**
+   * ============================================================
+   * REFRESH REGULARIZATIONS ON BROWSER TAB RETURN
+   * ============================================================
+   */
+  useEffect(() => {
+    if (!company?._id) {
       return;
     }
 
-    try {
-      setIsLoading(true);
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        void loadRegularizations(true);
+      }
+    };
 
-      const query = {
-        page,
-        limit: 10,
+    document.addEventListener("visibilitychange", handleVisibilityChange);
 
-        status: status === "ALL" ? undefined : status,
-      };
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [company?._id, loadRegularizations]);
 
-      const result = isManagementView
-        ? await attendanceRegularizationService.list(company._id, query)
-        : await attendanceRegularizationService.getMyHistory(
-            company._id,
-            query,
-          );
-
-      setData(result);
-    } catch (error) {
-      setData(null);
-
-      toast.error(
-        getApiErrorMessage(
-          error,
-          "Unable to load attendance regularization requests.",
-        ),
-      );
-    } finally {
-      setIsLoading(false);
-    }
-  }, [company?._id, page, status, isManagementView]);
-
-  useEffect(() => {
-    void loadRegularizations();
-  }, [loadRegularizations]);
-
-  const items = data?.items ?? [];
+  const items = useMemo(() => data?.items ?? [], [data?.items]);
 
   const summary = useMemo(() => {
     return {

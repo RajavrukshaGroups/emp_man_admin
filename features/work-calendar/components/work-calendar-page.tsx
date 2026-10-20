@@ -1,10 +1,17 @@
 "use client";
 
-import { CalendarDays, Loader2, RefreshCw, ShieldAlert } from "lucide-react";
+import {
+  CalendarDays,
+  Loader2,
+  Plus,
+  RefreshCw,
+  ShieldAlert,
+} from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import { CalendarDaysSection } from "./calendar-days-section";
+import { CreateWorkCalendarModal } from "./create-work-calendar-modal";
 
 import { getApiErrorMessage } from "@/lib/axios";
 import { useAuthStore } from "@/store/auth.store";
@@ -24,9 +31,17 @@ export function WorkCalendarPage() {
   const canRead = permissions.includes("calendar.read");
   const canManage = permissions.includes("calendar.manage");
 
+  console.log("[Work Calendar] Permissions:", {
+    companyId: company?._id,
+    canRead,
+    canManage,
+  });
+
   const [calendars, setCalendars] = useState<WorkCalendar[]>([]);
   const [selectedCalendarId, setSelectedCalendarId] = useState<string>("");
   const [isLoading, setIsLoading] = useState(true);
+
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
 
   /* =========================================================
      LOAD CALENDARS
@@ -43,12 +58,16 @@ export function WorkCalendarPage() {
     try {
       setIsLoading(true);
 
-      const result = await workCalendarService.list(company._id, {
-        status: "ACTIVE",
-      });
+      //   const result = await workCalendarService.list(company._id, {
+      //     status: "ACTIVE",
+      //   });
+
+      const result = await workCalendarService.list(company._id);
+
+      console.log("[Work Calendar] Full API result:", result);
+      console.log("[Work Calendar] Existing calendars:", result.items);
 
       const items = result.items ?? [];
-
       setCalendars(items);
 
       setSelectedCalendarId((current) => {
@@ -100,6 +119,28 @@ export function WorkCalendarPage() {
     );
   };
 
+  const handleCalendarCreated = (createdCalendar: WorkCalendar) => {
+    setCalendars((current) => {
+      const withoutCreated = current.filter(
+        (calendar) => calendar._id !== createdCalendar._id,
+      );
+
+      return [
+        ...withoutCreated.map((calendar) =>
+          createdCalendar.isDefault
+            ? { ...calendar, isDefault: false }
+            : calendar,
+        ),
+        createdCalendar,
+      ];
+    });
+
+    setSelectedCalendarId(createdCalendar._id);
+    setIsCreateModalOpen(false);
+
+    void loadCalendars();
+  };
+
   /* =========================================================
      PERMISSION
      ========================================================= */
@@ -135,15 +176,30 @@ export function WorkCalendarPage() {
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <PageHeader />
 
-        <button
-          type="button"
-          onClick={() => void loadCalendars()}
-          disabled={isLoading}
-          className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-50"
-        >
-          <RefreshCw className={`h-4 w-4 ${isLoading ? "animate-spin" : ""}`} />
-          Refresh
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={() => void loadCalendars()}
+            disabled={isLoading}
+            className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-50"
+          >
+            <RefreshCw
+              className={`h-4 w-4 ${isLoading ? "animate-spin" : ""}`}
+            />
+            Refresh
+          </button>
+
+          {canManage && (
+            <button
+              type="button"
+              onClick={() => setIsCreateModalOpen(true)}
+              className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-slate-950 px-4 text-sm font-semibold text-white transition hover:bg-slate-800"
+            >
+              <Plus className="h-4 w-4" />
+              Create Work Calendar
+            </button>
+          )}
+        </div>
       </div>
 
       {/* LOADING */}
@@ -262,10 +318,17 @@ export function WorkCalendarPage() {
           )}
         </>
       )}
+
+      {isCreateModalOpen && company?._id && canManage && (
+        <CreateWorkCalendarModal
+          companyId={company._id}
+          onClose={() => setIsCreateModalOpen(false)}
+          onCreated={handleCalendarCreated}
+        />
+      )}
     </div>
   );
 }
-
 /* =========================================================
    HEADER
    ========================================================= */

@@ -11,7 +11,7 @@ import {
   Loader2,
   Save,
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import { attendanceService } from "@/features/attendance/services/attendance.service";
@@ -114,15 +114,17 @@ export default function NewAttendanceRegularizationPage() {
    * We use the attendance history so the employee can select
    * the record instead of manually entering MongoDB IDs.
    */
-  useEffect(() => {
-    async function loadAttendanceHistory() {
+  const loadAttendanceHistory = useCallback(
+    async (background = false) => {
       if (!company?._id) {
         setIsLoadingAttendance(false);
         return;
       }
 
       try {
-        setIsLoadingAttendance(true);
+        if (!background) {
+          setIsLoadingAttendance(true);
+        }
 
         const result = await attendanceService.getMyHistory(company._id, {
           page: 1,
@@ -131,18 +133,54 @@ export default function NewAttendanceRegularizationPage() {
 
         setAttendanceRecords(result.items ?? []);
       } catch (error) {
-        setAttendanceRecords([]);
+        if (!background) {
+          setAttendanceRecords([]);
+        }
 
         toast.error(
           getApiErrorMessage(error, "Unable to load attendance records."),
         );
       } finally {
-        setIsLoadingAttendance(false);
+        if (!background) {
+          setIsLoadingAttendance(false);
+        }
       }
+    },
+    [company],
+  );
+
+  /**
+   * Initial attendance history load.
+   */
+  useEffect(() => {
+    async function loadInitialAttendanceHistory() {
+      await loadAttendanceHistory();
     }
 
-    void loadAttendanceHistory();
-  }, [company?._id]);
+    void loadInitialAttendanceHistory();
+  }, [loadAttendanceHistory]);
+
+  /**
+   * Refresh attendance records when returning to the browser tab.
+   * Preserve all regularization form inputs.
+   */
+  useEffect(() => {
+    if (!company?._id) {
+      return;
+    }
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        void loadAttendanceHistory(true);
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [company?._id, loadAttendanceHistory]);
 
   const selectedAttendance = useMemo(
     () =>
@@ -242,31 +280,6 @@ export default function NewAttendanceRegularizationPage() {
       null,
     [breaks, targetBreakId],
   );
-  /**
-   * Reset event-specific values whenever attendance changes.
-   */
-  useEffect(() => {
-    setTargetWorkSessionId("");
-    setTargetBreakId("");
-  }, [attendanceId]);
-
-  /**
-   * Reset request-specific values whenever request type changes.
-   */
-  useEffect(() => {
-    setAttendanceId("");
-
-    setTargetWorkSessionId("");
-    setTargetBreakId("");
-
-    setRequestedCheckInAt("");
-    setRequestedCheckOutAt("");
-
-    setRequestedBreakStartAt("");
-    setRequestedBreakEndAt("");
-
-    setRequestedBreakExtensionMinutes("");
-  }, [requestType]);
 
   const requiresWorkSession = [
     "MISSING_CHECKOUT",
@@ -513,7 +526,20 @@ export default function NewAttendanceRegularizationPage() {
                 <button
                   key={item.value}
                   type="button"
-                  onClick={() => setRequestType(item.value)}
+                  onClick={() => {
+                    if (requestType === item.value) return;
+
+                    setRequestType(item.value);
+                    setAttendanceId("");
+                    setTargetWorkSessionId("");
+                    setTargetBreakId("");
+
+                    setRequestedCheckInAt("");
+                    setRequestedCheckOutAt("");
+                    setRequestedBreakStartAt("");
+                    setRequestedBreakEndAt("");
+                    setRequestedBreakExtensionMinutes("");
+                  }}
                   className={`rounded-xl border p-4 text-left transition ${
                     active
                       ? "border-slate-950 bg-slate-950 text-white"
@@ -576,7 +602,11 @@ export default function NewAttendanceRegularizationPage() {
               <>
                 <select
                   value={attendanceId}
-                  onChange={(event) => setAttendanceId(event.target.value)}
+                  onChange={(event) => {
+                    setAttendanceId(event.target.value);
+                    setTargetWorkSessionId("");
+                    setTargetBreakId("");
+                  }}
                   className={inputClassName}
                   required
                 >
@@ -778,6 +808,7 @@ export default function NewAttendanceRegularizationPage() {
               {requestType === "MISSING_CHECK_IN" && (
                 <div className="grid gap-4 sm:grid-cols-2">
                   <DateTimeField
+                    key={`missing-check-in-${requestType}`}
                     label="Requested check-in"
                     value={requestedCheckInAt}
                     onChange={setRequestedCheckInAt}
@@ -785,6 +816,7 @@ export default function NewAttendanceRegularizationPage() {
                   />
 
                   <DateTimeField
+                    key={`missing-checkout-${requestType}`}
                     label="Requested checkout"
                     value={requestedCheckOutAt}
                     onChange={setRequestedCheckOutAt}
@@ -795,6 +827,7 @@ export default function NewAttendanceRegularizationPage() {
 
               {requestType === "MISSING_CHECKOUT" && (
                 <DateTimeField
+                  key={`missing-checkout-${requestType}`}
                   label="Requested checkout"
                   value={requestedCheckOutAt}
                   onChange={setRequestedCheckOutAt}
@@ -804,6 +837,7 @@ export default function NewAttendanceRegularizationPage() {
 
               {requestType === "CHECK_IN_TIME_CORRECTION" && (
                 <DateTimeField
+                  key={`corrected-check-in-${requestType}`}
                   label="Corrected check-in"
                   value={requestedCheckInAt}
                   onChange={setRequestedCheckInAt}
@@ -813,6 +847,7 @@ export default function NewAttendanceRegularizationPage() {
 
               {requestType === "CHECKOUT_TIME_CORRECTION" && (
                 <DateTimeField
+                  key={`corrected-checkout-${requestType}`}
                   label="Corrected checkout"
                   value={requestedCheckOutAt}
                   onChange={setRequestedCheckOutAt}
@@ -823,6 +858,7 @@ export default function NewAttendanceRegularizationPage() {
               {requestType === "BREAK_CORRECTION" && (
                 <div className="grid gap-4 sm:grid-cols-2">
                   <DateTimeField
+                    key={`corrected-break-start-${requestType}`}
                     label="Corrected break start"
                     value={requestedBreakStartAt}
                     onChange={setRequestedBreakStartAt}
@@ -830,6 +866,7 @@ export default function NewAttendanceRegularizationPage() {
                   />
 
                   <DateTimeField
+                    key={`corrected-break-end-${requestType}`}
                     label="Corrected break end"
                     value={requestedBreakEndAt}
                     onChange={setRequestedBreakEndAt}
@@ -1008,15 +1045,6 @@ function DateTimeField({
   const [hour, setHour] = useState(parsed.hour);
   const [minute, setMinute] = useState(parsed.minute);
   const [period, setPeriod] = useState<"AM" | "PM">(parsed.period);
-
-  useEffect(() => {
-    const current = parseLocalDateTime(value);
-
-    setDate(current.date);
-    setHour(current.hour);
-    setMinute(current.minute);
-    setPeriod(current.period);
-  }, [value]);
 
   function updateValue(
     nextDate: string,

@@ -53,37 +53,69 @@ export default function AttendanceShiftsPage() {
     null,
   );
 
-  const loadShifts = useCallback(async () => {
+  const loadShifts = useCallback(
+    async (background = false) => {
+      if (!company?._id || !canManageShifts) {
+        setIsLoading(false);
+        return;
+      }
+
+      try {
+        if (!background) {
+          setIsLoading(true);
+        }
+        const result = await attendanceShiftService.list(company._id, {
+          page: 1,
+          limit: 50,
+
+          search: search.trim() || undefined,
+
+          status: status === "ALL" ? undefined : status,
+        });
+
+        setData(result);
+      } catch (error) {
+        toast.error(
+          getApiErrorMessage(error, "Unable to load attendance shifts."),
+        );
+      } finally {
+        if (!background) {
+          setIsLoading(false);
+        }
+      }
+    },
+    [company, search, status, canManageShifts],
+  );
+
+  useEffect(() => {
+    async function loadInitialShifts() {
+      await loadShifts();
+    }
+
+    void loadInitialShifts();
+  }, [loadShifts]);
+
+  /**
+   * Refresh shifts when the user returns to the browser tab.
+   * Preserve the current search, status filter and open forms.
+   */
+  useEffect(() => {
     if (!company?._id || !canManageShifts) {
-      setIsLoading(false);
       return;
     }
 
-    try {
-      setIsLoading(true);
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        void loadShifts(true);
+      }
+    };
 
-      const result = await attendanceShiftService.list(company._id, {
-        page: 1,
-        limit: 50,
+    document.addEventListener("visibilitychange", handleVisibilityChange);
 
-        search: search.trim() || undefined,
-
-        status: status === "ALL" ? undefined : status,
-      });
-
-      setData(result);
-    } catch (error) {
-      toast.error(
-        getApiErrorMessage(error, "Unable to load attendance shifts."),
-      );
-    } finally {
-      setIsLoading(false);
-    }
-  }, [company?._id, search, status, canManageShifts]);
-
-  useEffect(() => {
-    void loadShifts();
-  }, [loadShifts]);
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [company?._id, canManageShifts, loadShifts]);
 
   const activeCount = useMemo(
     () => data?.items.filter((shift) => shift.status === "ACTIVE").length ?? 0,

@@ -15,6 +15,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { attendanceService } from "@/features/attendance/services/attendance.service";
 import type {
   DailyAttendanceStatus,
+  DailyAttendanceDisplayStatus,
   DailyAttendanceSummaryResponse,
   DailyAttendanceSummaryRow,
 } from "@/features/attendance/types/attendance.types";
@@ -125,7 +126,7 @@ function humanizeStatus(status: string) {
     .join(" ");
 }
 
-function getStatusClass(status: DailyAttendanceStatus) {
+function getStatusClass(status: DailyAttendanceDisplayStatus) {
   switch (status) {
     case "PRESENT":
       return "border-emerald-200 bg-emerald-50 text-emerald-700";
@@ -144,6 +145,9 @@ function getStatusClass(status: DailyAttendanceStatus) {
 
     case "ON_LEAVE":
       return "border-violet-200 bg-violet-50 text-violet-700";
+
+    case "PARTIAL_LEAVE":
+      return "border-indigo-200 bg-indigo-50 text-indigo-700";
 
     case "HOLIDAY":
       return "border-purple-200 bg-purple-50 text-purple-700";
@@ -232,8 +236,35 @@ export default function AttendanceEmployeesPage() {
   );
 
   useEffect(() => {
-    void loadAttendance();
+    async function loadInitialAttendance() {
+      await loadAttendance();
+    }
+
+    void loadInitialAttendance();
   }, [loadAttendance]);
+
+  /**
+   * ============================================================
+   * REFRESH DAILY ATTENDANCE WHEN RETURNING TO BROWSER TAB
+   * ============================================================
+   */
+  useEffect(() => {
+    if (!companyId || !canReadAttendanceSummary) {
+      return;
+    }
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        void loadAttendance(true);
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [companyId, canReadAttendanceSummary, loadAttendance]);
 
   useEffect(() => {
     if (!canReadAttendanceSummary) {
@@ -646,9 +677,9 @@ function DesktopRow({ row }: { row: DailyAttendanceSummaryRow }) {
       <td className="whitespace-nowrap px-4 py-4">
         {attendance ? formatMinutes(attendance.totalBreakMinutes) : "—"}
       </td>
-
       <td className="px-4 py-4">
-        <StatusBadge status={row.attendanceStatus} />
+        <StatusBadge status={row.displayStatus} />
+        <LeaveDetails row={row} />
       </td>
 
       <td className="px-4 py-4">
@@ -693,34 +724,30 @@ function MobileCard({ row }: { row: DailyAttendanceSummaryRow }) {
             {row.designation || "—"}
           </p>
         </div>
-
-        <StatusBadge status={row.attendanceStatus} />
+        <div className="flex flex-col items-end gap-1">
+          <StatusBadge status={row.displayStatus} />
+          <LeaveDetails row={row} />
+        </div>
       </div>
 
       <div className="mt-4 grid grid-cols-2 gap-4 border-t border-slate-100 pt-4">
         <Value label="Department" value={row.departmentId?.name ?? "—"} />
-
         <Value label="Team" value={row.teamId?.name ?? "—"} />
-
         <Value label="Shift" value={row.shiftId?.name ?? "Not assigned"} />
-
         <Value
           label="Check In"
           value={formatTime(attendance?.firstCheckInAt)}
         />
-
         <Value
           label="Check Out"
           value={formatTime(attendance?.lastCheckOutAt)}
         />
-
         <Value
           label="Worked"
           value={
             attendance ? formatMinutes(attendance.totalWorkedMinutes) : "—"
           }
         />
-
         <Value
           label="Break"
           value={attendance ? formatMinutes(attendance.totalBreakMinutes) : "—"}
@@ -748,7 +775,47 @@ function MobileCard({ row }: { row: DailyAttendanceSummaryRow }) {
 // COMPONENTS
 // ============================================================
 
-function StatusBadge({ status }: { status: DailyAttendanceStatus }) {
+function LeaveDetails({ row }: { row: DailyAttendanceSummaryRow }) {
+  if (!row.approvedLeaves?.length) {
+    return null;
+  }
+
+  const formatPortion = (portion: string) => {
+    switch (portion) {
+      case "FIRST_HALF":
+        return "First Half";
+      case "SECOND_HALF":
+        return "Second Half";
+      case "FULL_DAY":
+        return "Full Day";
+      default:
+        return portion;
+    }
+  };
+
+  return (
+    <div className="mt-2 space-y-1.5">
+      {row.approvedLeaves.map((leave) => (
+        <div
+          key={`${leave.leaveRequestId}-${leave.dayPortion}`}
+          className="text-xs text-violet-700"
+        >
+          Approved Leave · {formatPortion(leave.dayPortion)}
+          {" · "}
+          {leave.leaveDays} day{leave.leaveDays === 1 ? "" : "s"}
+        </div>
+      ))}
+
+      {row.hasLeaveAttendanceConflict && (
+        <span className="inline-flex rounded-full border border-amber-200 bg-amber-50 px-2 py-1 text-xs font-medium text-amber-700">
+          Leave / Attendance Conflict
+        </span>
+      )}
+    </div>
+  );
+}
+
+function StatusBadge({ status }: { status: DailyAttendanceDisplayStatus }) {
   return (
     <span
       className={`inline-flex whitespace-nowrap rounded-full border px-2.5 py-1 text-xs font-medium ${getStatusClass(

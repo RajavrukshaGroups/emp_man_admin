@@ -39,34 +39,67 @@ export default function AttendanceLocationsPage() {
   const [editingLocation, setEditingLocation] =
     useState<AttendanceLocation | null>(null);
 
-  const loadLocations = useCallback(async () => {
+  const loadLocations = useCallback(
+    async (background = false) => {
+      if (!company?._id || !canManageLocations) {
+        setIsLoading(false);
+        return;
+      }
+
+      try {
+        if (!background) {
+          setIsLoading(true);
+        }
+
+        const result = await attendanceLocationService.list(company._id, {
+          page: 1,
+          limit: 50,
+          search: search.trim() || undefined,
+        });
+
+        setData(result);
+      } catch (error) {
+        toast.error(
+          getApiErrorMessage(error, "Unable to load attendance locations."),
+        );
+      } finally {
+        if (!background) {
+          setIsLoading(false);
+        }
+      }
+    },
+    [company, search, canManageLocations],
+  );
+
+  useEffect(() => {
+    async function loadInitialLocations() {
+      await loadLocations();
+    }
+
+    void loadInitialLocations();
+  }, [loadLocations]);
+
+  /**
+   * Refresh attendance locations when returning to the browser tab.
+   * Preserve search and any open Add/Edit forms.
+   */
+  useEffect(() => {
     if (!company?._id || !canManageLocations) {
-      setIsLoading(false);
       return;
     }
 
-    try {
-      setIsLoading(true);
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        void loadLocations(true);
+      }
+    };
 
-      const result = await attendanceLocationService.list(company._id, {
-        page: 1,
-        limit: 50,
-        search: search.trim() || undefined,
-      });
+    document.addEventListener("visibilitychange", handleVisibilityChange);
 
-      setData(result);
-    } catch (error) {
-      toast.error(
-        getApiErrorMessage(error, "Unable to load attendance locations."),
-      );
-    } finally {
-      setIsLoading(false);
-    }
-  }, [company?._id, search, canManageLocations]);
-
-  useEffect(() => {
-    void loadLocations();
-  }, [loadLocations]);
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [company?._id, canManageLocations, loadLocations]);
 
   if (!canManageLocations) {
     return null;

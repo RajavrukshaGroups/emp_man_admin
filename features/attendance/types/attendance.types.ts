@@ -956,7 +956,9 @@ export type DailyAttendanceStatus =
     | "HOLIDAY"
     | "WEEKLY_OFF";
 
-
+export type DailyAttendanceDisplayStatus =
+    | DailyAttendanceStatus
+    | "PARTIAL_LEAVE";
 export interface DailyAttendanceSummaryQuery {
     page?: number;
 
@@ -1011,6 +1013,16 @@ export interface DailyAttendanceSummaryRow {
 
     attendanceStatus: DailyAttendanceStatus;
 
+    displayStatus: DailyAttendanceDisplayStatus;
+
+    approvedLeave: AttendanceCalendarApprovedLeave | null;
+
+    approvedLeaves: AttendanceCalendarApprovedLeave[];
+
+    totalLeaveDays: number;
+
+    hasLeaveAttendanceConflict: boolean;
+
     attendance: AttendanceRecord | null;
 }
 
@@ -1027,6 +1039,12 @@ export interface DailyAttendanceSummaryCounts {
     halfDay: number;
 
     absent: number;
+
+    onLeave: number;
+
+    holiday: number;
+
+    weeklyOff: number;
 }
 
 

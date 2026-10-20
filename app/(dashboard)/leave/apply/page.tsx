@@ -51,6 +51,91 @@ const initialForm: ApplyLeaveForm = {
   attachmentUrl: "",
 };
 
+function getLeavePortionsForDate(
+  date: string,
+  fromDate: string,
+  toDate: string,
+  startDayPortion: LeaveDayPortion,
+  endDayPortion: LeaveDayPortion,
+): LeaveDayPortion[] {
+  if (date < fromDate || date > toDate) {
+    return [];
+  }
+
+  let portion: LeaveDayPortion = "FULL_DAY";
+
+  if (date === fromDate) {
+    portion = startDayPortion;
+  } else if (date === toDate) {
+    portion = endDayPortion;
+  }
+
+  if (portion === "FULL_DAY") {
+    return ["FIRST_HALF", "SECOND_HALF"];
+  }
+
+  return [portion];
+}
+
+function hasLeavePortionOverlap(
+  request: LeaveRequest,
+  form: ApplyLeaveForm,
+): boolean {
+  const existingFromDate = request.fromDate.slice(0, 10);
+  const existingToDate = request.toDate.slice(0, 10);
+
+  const overlapStart =
+    existingFromDate > form.fromDate ? existingFromDate : form.fromDate;
+
+  const overlapEnd =
+    existingToDate < form.toDate ? existingToDate : form.toDate;
+
+  if (overlapStart > overlapEnd) {
+    return false;
+  }
+
+  const currentDate = new Date(`${overlapStart}T00:00:00.000Z`);
+  const lastDate = new Date(`${overlapEnd}T00:00:00.000Z`);
+
+  while (currentDate <= lastDate) {
+    const date = currentDate.toISOString().slice(0, 10);
+
+    const existingDetail = request.dateDetails?.find(
+      (detail) => detail.date.slice(0, 10) === date,
+    );
+
+    if (
+      existingDetail?.countedAsLeave === true &&
+      Number(existingDetail.leaveDays) > 0
+    ) {
+      const existingPortions =
+        existingDetail.dayPortion === "FULL_DAY"
+          ? ["FIRST_HALF", "SECOND_HALF"]
+          : [existingDetail.dayPortion];
+
+      const requestedPortions = getLeavePortionsForDate(
+        date,
+        form.fromDate,
+        form.toDate,
+        form.startDayPortion,
+        form.endDayPortion,
+      );
+
+      if (
+        existingPortions.some((portion) =>
+          requestedPortions.includes(portion as LeaveDayPortion),
+        )
+      ) {
+        return true;
+      }
+    }
+
+    currentDate.setUTCDate(currentDate.getUTCDate() + 1);
+  }
+
+  return false;
+}
+
 export default function ApplyLeavePage() {
   const router = useRouter();
 
@@ -102,6 +187,10 @@ export default function ApplyLeavePage() {
 
   const [viewingExistingLeave, setViewingExistingLeave] =
     useState<LeaveRequest | null>(null);
+
+  const [viewingExistingLeaves, setViewingExistingLeaves] = useState<
+    LeaveRequest[]
+  >([]);
 
   useEffect(() => {
     if (previousLeaveCacheKey.current === leaveCacheKey) {
@@ -553,20 +642,88 @@ export default function ApplyLeavePage() {
       return;
     }
 
-    const existingLeave = (existingLeavesByDate.get(date) ?? []).find(
+    const activeLeaves = (existingLeavesByDate.get(date) ?? []).filter(
       (request) =>
         request.status === "PENDING" ||
         request.status === "RECOMMENDED" ||
         request.status === "APPROVED",
     );
 
-    if (existingLeave) {
-      setViewingExistingLeave(existingLeave);
-      setSelectionAnchor(null);
-      return;
-    }
+    const existingLeave = activeLeaves[0];
 
-    setViewingExistingLeave(null);
+    setViewingExistingLeaves(activeLeaves);
+
+    if (existingLeave) {
+      // Preserve the ability to view an existing leave request.
+      setViewingExistingLeave(existingLeave);
+
+      // Combine occupied portions across ALL active requests.
+      const occupiedPortions = new Set<string>();
+
+      for (const request of activeLeaves) {
+        const details =
+          request.dateDetails?.filter(
+            (detail) =>
+              detail.date.slice(0, 10) === date &&
+              detail.countedAsLeave === true &&
+              Number(detail.leaveDays) > 0,
+          ) ?? [];
+
+        for (const detail of details) {
+          if (detail.dayPortion === "FULL_DAY") {
+            occupiedPortions.add("FIRST_HALF");
+            occupiedPortions.add("SECOND_HALF");
+          } else if (
+            detail.dayPortion === "FIRST_HALF" ||
+            detail.dayPortion === "SECOND_HALF"
+          ) {
+            occupiedPortions.add(detail.dayPortion);
+          }
+        }
+      }
+
+      const firstHalfOccupied = occupiedPortions.has("FIRST_HALF");
+      const secondHalfOccupied = occupiedPortions.has("SECOND_HALF");
+
+      // Both halves are occupied: no further leave can be selected.
+      if (firstHalfOccupied && secondHalfOccupied) {
+        setSelectionAnchor(null);
+
+        setForm((current) => ({
+          ...current,
+          fromDate: "",
+          toDate: "",
+          startDayPortion: "FULL_DAY",
+          endDayPortion: "FULL_DAY",
+        }));
+
+        toast.error(
+          "Both halves of this date already have active leave requests.",
+        );
+
+        return;
+      }
+
+      // Exactly one half is occupied: select the available half.
+      if ((firstHalfOccupied || secondHalfOccupied) && !selectionAnchor) {
+        const availablePortion: LeaveDayPortion = firstHalfOccupied
+          ? "SECOND_HALF"
+          : "FIRST_HALF";
+
+        setForm((current) => ({
+          ...current,
+          fromDate: date,
+          toDate: date,
+          startDayPortion: availablePortion,
+          endDayPortion: availablePortion,
+        }));
+
+        setSelectionAnchor(date);
+        return;
+      }
+    } else {
+      setViewingExistingLeave(null);
+    }
     // First click:
     // immediately treat it as a valid single-day leave.
     if (!selectionAnchor) {
@@ -598,11 +755,14 @@ export default function ApplyLeavePage() {
     const toDate = date < selectionAnchor ? selectionAnchor : date;
 
     // Check whether the selected range overlaps existing active leave.
-    const overlappingLeave = blockingLeaveRequests.find(
-      (request) =>
-        request.fromDate.slice(0, 10) <= toDate &&
-        request.toDate.slice(0, 10) >= fromDate,
+    const overlappingLeave = blockingLeaveRequests.find((request) =>
+      hasLeavePortionOverlap(request, {
+        ...form,
+        fromDate,
+        toDate,
+      }),
     );
+
     if (overlappingLeave) {
       toast.error(
         `The selected period overlaps an existing ${overlappingLeave.status.toLowerCase()} leave request (${formatPreviewDate(overlappingLeave.fromDate)} – ${formatPreviewDate(overlappingLeave.toDate)}).`,
@@ -695,10 +855,8 @@ export default function ApplyLeavePage() {
       return;
     }
 
-    const overlappingLeave = blockingLeaveRequests.find(
-      (request) =>
-        request.fromDate.slice(0, 10) <= form.toDate &&
-        request.toDate.slice(0, 10) >= form.fromDate,
+    const overlappingLeave = blockingLeaveRequests.find((request) =>
+      hasLeavePortionOverlap(request, form),
     );
 
     if (overlappingLeave) {
@@ -761,8 +919,7 @@ export default function ApplyLeavePage() {
       const verifiedOverlap = matchingRequests.find(
         (request) =>
           ["PENDING", "RECOMMENDED", "APPROVED"].includes(request.status) &&
-          request.fromDate.slice(0, 10) <= form.toDate &&
-          request.toDate.slice(0, 10) >= form.fromDate,
+          hasLeavePortionOverlap(request, form),
       );
 
       if (verifiedOverlap) {
@@ -968,26 +1125,72 @@ export default function ApplyLeavePage() {
                       const existingLeaves =
                         existingLeavesByDate.get(day.date) ?? [];
 
-                      const activeLeave = existingLeaves.find((request) =>
+                      // const activeLeave = existingLeaves.find((request) =>
+                      //   ["PENDING", "RECOMMENDED", "APPROVED"].includes(
+                      //     request.status,
+                      //   ),
+                      // );
+
+                      // const leaveStatusLabel = activeLeave
+                      //   ? activeLeave.status === "APPROVED"
+                      //     ? "Approved"
+                      //     : activeLeave.status === "RECOMMENDED"
+                      //       ? "Recommended"
+                      //       : "Pending"
+                      //   : null;
+
+                      // const leaveStatusClassName =
+                      //   activeLeave?.status === "APPROVED"
+                      //     ? "bg-emerald-100 text-emerald-800"
+                      //     : activeLeave?.status === "RECOMMENDED"
+                      //       ? "bg-violet-100 text-violet-800"
+                      //       : "bg-orange-100 text-orange-800";
+
+                      const activeLeaves = existingLeaves.filter((request) =>
                         ["PENDING", "RECOMMENDED", "APPROVED"].includes(
                           request.status,
                         ),
                       );
 
-                      const leaveStatusLabel = activeLeave
-                        ? activeLeave.status === "APPROVED"
-                          ? "Approved"
-                          : activeLeave.status === "RECOMMENDED"
-                            ? "Recommended"
-                            : "Pending"
-                        : null;
+                      const leaveBadges = activeLeaves.flatMap((request) => {
+                        const details =
+                          request.dateDetails?.filter(
+                            (detail) =>
+                              detail.date.slice(0, 10) === day.date &&
+                              detail.countedAsLeave === true &&
+                              Number(detail.leaveDays) > 0,
+                          ) ?? [];
 
-                      const leaveStatusClassName =
-                        activeLeave?.status === "APPROVED"
-                          ? "bg-emerald-100 text-emerald-800"
-                          : activeLeave?.status === "RECOMMENDED"
-                            ? "bg-violet-100 text-violet-800"
-                            : "bg-orange-100 text-orange-800";
+                        return details.map((detail) => {
+                          const portionLabel =
+                            detail.dayPortion === "FIRST_HALF"
+                              ? "1st Half"
+                              : detail.dayPortion === "SECOND_HALF"
+                                ? "2nd Half"
+                                : "Full Day";
+
+                          const statusLabel =
+                            request.status === "APPROVED"
+                              ? "Approved"
+                              : request.status === "RECOMMENDED"
+                                ? "Recommended"
+                                : "Pending";
+
+                          const statusClassName =
+                            request.status === "APPROVED"
+                              ? "bg-emerald-100 text-emerald-800"
+                              : request.status === "RECOMMENDED"
+                                ? "bg-violet-100 text-violet-800"
+                                : "bg-orange-100 text-orange-800";
+
+                          return {
+                            id: `${request._id}-${detail.date}-${detail.dayPortion}`,
+                            label: `${portionLabel} · ${statusLabel}`,
+                            className: statusClassName,
+                            title: `${request.leaveTypeName} - ${portionLabel} - ${statusLabel}`,
+                          };
+                        });
+                      });
 
                       const isWeeklyOff = day.classification === "WEEKLY_OFF";
                       const isHoliday = day.classification === "HOLIDAY";
@@ -1033,14 +1236,17 @@ export default function ApplyLeavePage() {
                           <span className="text-xs font-bold sm:text-sm">
                             {dayNumber}
                           </span>
-                          {activeLeave && leaveStatusLabel && (
+
+                          {leaveBadges.map((badge) => (
                             <span
-                              className={`mt-1 block truncate rounded px-1 py-0.5 text-center text-[8px] font-bold sm:text-[9px] ${leaveStatusClassName}`}
-                              title={`${activeLeave.leaveTypeName} — ${leaveStatusLabel}`}
+                              key={badge.id}
+                              className={`mt-1 block truncate rounded px-1 py-0.5 text-center text-[8px] font-bold sm:text-[9px] ${badge.className}`}
+                              title={badge.title}
                             >
-                              {leaveStatusLabel}
+                              {badge.label}
                             </span>
-                          )}
+                          ))}
+
                           <span
                             className={`mt-0.5 block truncate text-[9px] font-semibold sm:text-[10px] ${
                               isStart || isEnd || isSelectionAnchor
@@ -1118,53 +1324,68 @@ export default function ApplyLeavePage() {
                 </span>
               </div>
 
-              {viewingExistingLeave && (
-                <div className="rounded-xl border border-blue-200 bg-blue-50 p-4">
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <p className="text-xs font-semibold uppercase tracking-wide text-blue-600">
-                        Existing leave request
-                      </p>
+              {viewingExistingLeaves.length > 0 && (
+                <div className="space-y-3">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-blue-600">
+                    Existing leave requests ({viewingExistingLeaves.length})
+                  </p>
 
-                      <h3 className="mt-1 text-sm font-bold text-slate-950">
-                        {viewingExistingLeave.leaveTypeName}
-                      </h3>
+                  {viewingExistingLeaves.map((request) => (
+                    <div
+                      key={request._id}
+                      className="rounded-xl border border-blue-200 bg-blue-50 p-4"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <h3 className="text-sm font-bold text-slate-950">
+                            {request.leaveTypeName}
+                          </h3>
 
-                      <p className="mt-1 text-xs text-slate-600">
-                        {formatPreviewDate(viewingExistingLeave.fromDate)}
-                        {" → "}
-                        {formatPreviewDate(viewingExistingLeave.toDate)}
-                      </p>
+                          <p className="mt-1 text-xs text-slate-600">
+                            {formatPreviewDate(request.fromDate)}
+                            {" → "}
+                            {formatPreviewDate(request.toDate)}
+                          </p>
+                        </div>
+
+                        <span
+                          className={`rounded-full px-2.5 py-1 text-[11px] font-bold ${
+                            request.status === "APPROVED"
+                              ? "bg-emerald-100 text-emerald-800"
+                              : request.status === "RECOMMENDED"
+                                ? "bg-violet-100 text-violet-800"
+                                : "bg-orange-100 text-orange-800"
+                          }`}
+                        >
+                          {formatEnum(request.status)}
+                        </span>
+                      </div>
+
+                      <div className="mt-3 grid gap-2 text-xs text-slate-700 sm:grid-cols-2">
+                        <p>
+                          <span className="font-semibold">Start:</span>{" "}
+                          {formatEnum(request.startDayPortion)}
+                        </p>
+
+                        <p>
+                          <span className="font-semibold">End:</span>{" "}
+                          {formatEnum(request.endDayPortion)}
+                        </p>
+
+                        <p>
+                          <span className="font-semibold">Duration:</span>{" "}
+                          {formatDays(request.requestedDays)}
+                        </p>
+                      </div>
+
+                      <Link
+                        href="/leave/requests"
+                        className="mt-3 inline-flex text-xs font-bold text-blue-700 hover:text-blue-900"
+                      >
+                        View leave requests →
+                      </Link>
                     </div>
-
-                    <span className="rounded-full bg-white px-2.5 py-1 text-[11px] font-bold text-blue-700">
-                      {formatEnum(viewingExistingLeave.status)}
-                    </span>
-                  </div>
-
-                  <div className="mt-3 grid gap-2 text-xs text-slate-700 sm:grid-cols-2">
-                    <p>
-                      <span className="font-semibold">Start:</span>{" "}
-                      {formatEnum(viewingExistingLeave.startDayPortion)}
-                    </p>
-
-                    <p>
-                      <span className="font-semibold">End:</span>{" "}
-                      {formatEnum(viewingExistingLeave.endDayPortion)}
-                    </p>
-
-                    <p>
-                      <span className="font-semibold">Duration:</span>{" "}
-                      {formatDays(viewingExistingLeave.requestedDays)}
-                    </p>
-                  </div>
-
-                  <Link
-                    href="/leave/requests"
-                    className="mt-3 inline-flex text-xs font-bold text-blue-700 hover:text-blue-900"
-                  >
-                    View leave requests →
-                  </Link>
+                  ))}
                 </div>
               )}
 

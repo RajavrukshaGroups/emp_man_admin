@@ -88,60 +88,91 @@ export function FieldVisitManagementList() {
    *
    * Do NOT fetch company-wide records and filter them here.
    */
-  const loadFieldVisits = useCallback(async () => {
-    if (!company?._id) {
-      setItems([]);
-      setTotal(0);
-      setTotalPages(1);
-      setIsLoading(false);
+  const loadFieldVisits = useCallback(
+    async (background = false) => {
+      if (!company?._id) {
+        setItems([]);
+        setTotal(0);
+        setTotalPages(1);
+        setIsLoading(false);
+        return;
+      }
 
-      return;
-    }
+      if (fromDate && toDate && toDate < fromDate) {
+        setItems([]);
+        setTotal(0);
+        setTotalPages(1);
+        setIsLoading(false);
+        return;
+      }
 
-    if (fromDate && toDate && toDate < fromDate) {
-      setItems([]);
-      setTotal(0);
-      setTotalPages(1);
-      setIsLoading(false);
+      try {
+        if (!background) {
+          setIsLoading(true);
+        }
 
-      return;
-    }
+        const result = await attendanceService.getFieldVisits(company._id, {
+          page,
+          limit: PAGE_SIZE,
+          visitType: visitType || undefined,
+          status: status || undefined,
+          fromDate: fromDate || undefined,
+          toDate: toDate || undefined,
+        });
 
-    try {
-      setIsLoading(true);
+        setItems(result.items);
+        setTotal(result.pagination.total);
+        setTotalPages(Math.max(result.pagination.totalPages, 1));
+      } catch (error) {
+        if (!background) {
+          setItems([]);
+          setTotal(0);
+          setTotalPages(1);
+        }
 
-      const result = await attendanceService.getFieldVisits(company._id, {
-        page,
-        limit: PAGE_SIZE,
-
-        visitType: visitType || undefined,
-
-        status: status || undefined,
-
-        fromDate: fromDate || undefined,
-
-        toDate: toDate || undefined,
-      });
-
-      setItems(result.items);
-
-      setTotal(result.pagination.total);
-
-      setTotalPages(Math.max(result.pagination.totalPages, 1));
-    } catch (error) {
-      setItems([]);
-      setTotal(0);
-      setTotalPages(1);
-
-      toast.error(getApiErrorMessage(error, "Unable to load field visits."));
-    } finally {
-      setIsLoading(false);
-    }
-  }, [company?._id, page, visitType, status, fromDate, toDate]);
+        toast.error(getApiErrorMessage(error, "Unable to load field visits."));
+      } finally {
+        if (!background) {
+          setIsLoading(false);
+        }
+      }
+    },
+    [company, page, visitType, status, fromDate, toDate],
+  );
 
   useEffect(() => {
-    void loadFieldVisits();
+    async function loadInitialFieldVisits() {
+      await loadFieldVisits();
+    }
+
+    void loadInitialFieldVisits();
   }, [loadFieldVisits]);
+
+  /**
+   * Refresh employee field visits when returning to the browser tab.
+   * Preserve pagination, visit type, status and date filters.
+   */
+  useEffect(() => {
+    if (!company?._id) {
+      return;
+    }
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        if (fromDate && toDate && toDate < fromDate) {
+          return;
+        }
+
+        void loadFieldVisits(true);
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [company?._id, fromDate, toDate, loadFieldVisits]);
 
   const handleVisitTypeChange = (value: "" | FieldVisitType) => {
     setPage(1);

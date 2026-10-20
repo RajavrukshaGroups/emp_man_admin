@@ -68,10 +68,33 @@ export function FieldVisitSection({
     } finally {
       setIsLoading(false);
     }
-  }, [company?._id]);
+  }, [company]);
 
   useEffect(() => {
-    void loadActiveFieldVisit();
+    const loadInitialFieldVisit = async () => {
+      await loadActiveFieldVisit();
+    };
+
+    void loadInitialFieldVisit();
+  }, [loadActiveFieldVisit]);
+
+  /**
+   * ============================================================
+   * REFRESH ACTIVE FIELD VISIT ON TAB RETURN
+   * ============================================================
+   */
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        void loadActiveFieldVisit();
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
   }, [loadActiveFieldVisit]);
 
   /**
@@ -100,7 +123,7 @@ export function FieldVisitSection({
    * AFTER END
    * ============================================================
    */
-  const handleEnded = async (_fieldVisit: FieldVisit) => {
+  const handleEnded = async () => {
     setActiveFieldVisit(null);
 
     try {
@@ -115,7 +138,7 @@ export function FieldVisitSection({
    * AFTER CANCEL
    * ============================================================
    */
-  const handleCancelled = async (_fieldVisit: FieldVisit) => {
+  const handleCancelled = async () => {
     setActiveFieldVisit(null);
 
     try {

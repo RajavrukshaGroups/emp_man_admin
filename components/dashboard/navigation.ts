@@ -1,6 +1,7 @@
 import {
     CalendarCheck,
     CalendarDays,
+    CalendarRange,
     LayoutDashboard,
     Network,
     ShieldCheck,
@@ -58,12 +59,17 @@ export const dashboardNavigation: DashboardNavigationItem[] = [
         permission: "attendance.read",
     },
     {
+        title: "Work Calendar",
+        href: "/work-calendar",
+        icon: CalendarRange,
+        permission: "calendar.read",
+    },
+    {
         title: "Leave",
         href: "/leave",
         icon: CalendarDays,
         permission: "leave.read",
-    },
-    {
+    }, {
         title: "Work Categories",
         href: "/work-categories",
         icon: Tags,

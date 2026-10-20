@@ -70,47 +70,80 @@ export function FieldVisitHistory() {
 
   const [isLoading, setIsLoading] = useState(true);
 
-  const loadHistory = useCallback(async () => {
+  const loadHistory = useCallback(
+    async (background = false) => {
+      if (!company?._id) {
+        setItems([]);
+        setTotal(0);
+        setTotalPages(1);
+        setIsLoading(false);
+        return;
+      }
+
+      try {
+        if (!background) {
+          setIsLoading(true);
+        }
+
+        const result = await attendanceService.getMyFieldVisitHistory(
+          company._id,
+          {
+            page,
+            limit: PAGE_SIZE,
+            visitType: visitType || undefined,
+            status: status || undefined,
+          },
+        );
+
+        setItems(result.items);
+        setTotal(result.pagination.total);
+        setTotalPages(Math.max(result.pagination.totalPages, 1));
+      } catch (error) {
+        if (!background) {
+          setItems([]);
+        }
+
+        toast.error(
+          getApiErrorMessage(error, "Unable to load field visit history."),
+        );
+      } finally {
+        if (!background) {
+          setIsLoading(false);
+        }
+      }
+    },
+    [company, page, visitType, status],
+  );
+
+  useEffect(() => {
+    async function loadInitialHistory() {
+      await loadHistory();
+    }
+
+    void loadInitialHistory();
+  }, [loadHistory]);
+
+  /**
+   * Refresh field visit history when returning to the browser tab.
+   * Preserve visit type, status and pagination.
+   */
+  useEffect(() => {
     if (!company?._id) {
-      setItems([]);
-      setTotal(0);
-      setTotalPages(1);
-      setIsLoading(false);
       return;
     }
 
-    try {
-      setIsLoading(true);
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        void loadHistory(true);
+      }
+    };
 
-      const result = await attendanceService.getMyFieldVisitHistory(
-        company._id,
-        {
-          page,
-          limit: PAGE_SIZE,
-          visitType: visitType || undefined,
-          status: status || undefined,
-        },
-      );
+    document.addEventListener("visibilitychange", handleVisibilityChange);
 
-      setItems(result.items);
-
-      setTotal(result.pagination.total);
-
-      setTotalPages(Math.max(result.pagination.totalPages, 1));
-    } catch (error) {
-      setItems([]);
-
-      toast.error(
-        getApiErrorMessage(error, "Unable to load field visit history."),
-      );
-    } finally {
-      setIsLoading(false);
-    }
-  }, [company?._id, page, visitType, status]);
-
-  useEffect(() => {
-    void loadHistory();
-  }, [loadHistory]);
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [company?._id, loadHistory]);
 
   const handleVisitTypeChange = (value: "" | FieldVisitType) => {
     setPage(1);

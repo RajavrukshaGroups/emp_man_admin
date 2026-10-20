@@ -30,40 +30,73 @@ export default function AttendanceHistoryPage() {
 
   const [toDate, setToDate] = useState("");
 
-  const loadHistory = useCallback(async () => {
+  const loadHistory = useCallback(
+    async (background = false) => {
+      if (!company?._id) {
+        setIsLoading(false);
+        return;
+      }
+
+      try {
+        if (!background) {
+          setIsLoading(true);
+        }
+        const result = await attendanceService.getMyHistory(company._id, {
+          page,
+          limit: 10,
+
+          fromDate: fromDate || undefined,
+          toDate: toDate || undefined,
+        });
+
+        setHistory(result);
+      } catch (error) {
+        setHistory(null);
+
+        toast.error(
+          getApiErrorMessage(error, "Unable to load attendance history."),
+        );
+      } finally {
+        if (!background) {
+          setIsLoading(false);
+        }
+      }
+    },
+    [company, page, fromDate, toDate],
+  );
+
+  useEffect(() => {
+    async function loadInitialHistory() {
+      await loadHistory();
+    }
+
+    void loadInitialHistory();
+  }, [loadHistory]);
+
+  /**
+   * ============================================================
+   * REFRESH ATTENDANCE HISTORY ON BROWSER TAB RETURN
+   * ============================================================
+   */
+  useEffect(() => {
     if (!company?._id) {
-      setIsLoading(false);
       return;
     }
 
-    try {
-      setIsLoading(true);
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        void loadHistory(true);
+      }
+    };
 
-      const result = await attendanceService.getMyHistory(company._id, {
-        page,
-        limit: 10,
+    document.addEventListener("visibilitychange", handleVisibilityChange);
 
-        fromDate: fromDate || undefined,
-        toDate: toDate || undefined,
-      });
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [company?._id, loadHistory]);
 
-      setHistory(result);
-    } catch (error) {
-      setHistory(null);
-
-      toast.error(
-        getApiErrorMessage(error, "Unable to load attendance history."),
-      );
-    } finally {
-      setIsLoading(false);
-    }
-  }, [company?._id, page, fromDate, toDate]);
-
-  useEffect(() => {
-    void loadHistory();
-  }, [loadHistory]);
-
-  const items = history?.items ?? [];
+  const items = useMemo(() => history?.items ?? [], [history?.items]);
 
   const summary = useMemo(() => {
     return {

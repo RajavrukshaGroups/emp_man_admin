@@ -360,7 +360,6 @@ export function AttendanceCalendar({
                   }
 
                   const styles = getStatusStyles(day.displayStatus);
-                  const leave = day.approvedLeaves[0];
 
                   return (
                     <button
@@ -401,11 +400,22 @@ export function AttendanceCalendar({
                             </p>
                           )}
 
-                        {leave && (
-                          <p className="text-[10px] font-medium">
+                        {day.approvedLeaves.map((leave, index) => (
+                          <p
+                            key={`${leave.leaveRequestId}-${index}`}
+                            className="text-[10px] font-medium"
+                          >
                             {formatStatus(leave.dayPortion)}
                             {" · "}
-                            {leave.leaveDays} day
+                            {leave.leaveDays}{" "}
+                            {leave.leaveDays === 1 ? "day" : "days"}
+                          </p>
+                        ))}
+
+                        {day.approvedLeaves.length > 0 && (
+                          <p className="border-t border-current/10 pt-1 text-[10px] font-semibold">
+                            Total leave: {day.totalLeaveDays}{" "}
+                            {day.totalLeaveDays === 1 ? "day" : "days"}
                           </p>
                         )}
 

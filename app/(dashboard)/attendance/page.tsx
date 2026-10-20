@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   CalendarCheck,
   CalendarClock,
@@ -9,6 +9,7 @@ import {
   MapPin,
   Moon,
   Navigation,
+  ShieldCheck,
   Sun,
   Users,
 } from "lucide-react";
@@ -45,6 +46,11 @@ export default function AttendancePage() {
   const canManageShifts =
     permissions?.includes("attendance.shift_manage") ?? false;
 
+  const canAccessPolicies =
+    permissions?.includes("attendance.policy_read") ||
+    permissions?.includes("attendance.policy_update") ||
+    false;
+
   const companyAccess = useAuthStore((state) => state.companyAccess);
 
   const assignedShiftId = companyAccess?.shiftId ?? null;
@@ -71,7 +77,7 @@ export default function AttendancePage() {
 
   const canManageAttendance = permissions.includes("attendance.summary_read");
 
-  const refreshTodayAttendance = async () => {
+  const refreshTodayAttendance = useCallback(async () => {
     if (!company?._id || !canUseSelfAttendance) {
       return;
     }
@@ -86,8 +92,8 @@ export default function AttendancePage() {
         getApiErrorMessage(error, "Unable to refresh today's attendance."),
       );
     }
-  };
-
+  }, [company, canUseSelfAttendance]);
+  
   const handleAttendanceChanged = (
     attendanceResult: MyTodayAttendanceResponse,
   ) => {
@@ -157,6 +163,28 @@ export default function AttendancePage() {
 
     void loadAttendance();
   }, [company?._id, assignedShiftId, canUseSelfAttendance]);
+
+  /**
+   * Refresh attendance when the user returns to this browser tab.
+   * Reuses the existing refresh function and calendar refresh key.
+   */
+  useEffect(() => {
+    if (!company?._id || !canUseSelfAttendance) {
+      return;
+    }
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        void refreshTodayAttendance();
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [company?._id, canUseSelfAttendance, refreshTodayAttendance]);
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -215,6 +243,16 @@ export default function AttendancePage() {
               >
                 <CalendarClock className="h-4 w-4" />
                 Manage Shifts
+              </Link>
+            )}
+
+            {canAccessPolicies && (
+              <Link
+                href="/attendance/policies"
+                className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-50 sm:w-auto"
+              >
+                <ShieldCheck className="h-4 w-4" />
+                Manage Policies
               </Link>
             )}
 
