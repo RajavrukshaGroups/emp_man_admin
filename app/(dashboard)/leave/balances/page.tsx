@@ -2400,6 +2400,55 @@ function BalanceMetric({
 }
 
 function getAvailableDays(balance: LeaveBalance) {
+  if (balance.allocationMethod === "MONTHLY_ACCRUAL") {
+    const leaveType = balance.leaveTypeId;
+
+    const allowMonthlyAccumulation =
+      typeof leaveType !== "string" &&
+      leaveType?.allowMonthlyAccumulation === true;
+
+    const currentPeriodKey = getCurrentPeriodKey();
+
+    return Number(
+      (balance.monthlyBalances ?? [])
+        .filter((month) => {
+          const isAccrued =
+            month.isAccrued === true || Number(month.creditedDays ?? 0) > 0;
+
+          if (!isAccrued) {
+            return false;
+          }
+
+          // Never count future months as currently available.
+          if (month.periodKey > currentPeriodKey) {
+            return false;
+          }
+
+          // Without accumulation, only the current month is usable.
+          if (
+            !allowMonthlyAccumulation &&
+            month.periodKey !== currentPeriodKey
+          ) {
+            return false;
+          }
+
+          return true;
+        })
+        .reduce((total, month) => {
+          const available =
+            Number(month.creditedDays ?? 0) +
+            Number(month.adjustedDays ?? 0) -
+            Number(month.pendingDays ?? 0) -
+            Number(month.usedDays ?? 0) -
+            Number(month.lapsedDays ?? 0);
+
+          return total + Math.max(0, available);
+        }, 0)
+        .toFixed(2),
+    );
+  }
+
+  // Preserve existing calculations for annual and manual leave.
   return (
     (balance.allocatedDays ?? 0) +
     (balance.accruedDays ?? 0) +

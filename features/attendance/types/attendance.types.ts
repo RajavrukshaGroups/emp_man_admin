@@ -1123,3 +1123,95 @@ export interface MyAttendanceCalendarResponse {
     companyAccessId: string;
     days: AttendanceCalendarDay[];
 }
+
+
+// ============================================================
+// MONTHLY ATTENDANCE REPORT — MANAGEMENT
+// ============================================================
+
+export type MonthlyAttendanceDisplayStatus =
+    | AttendanceCalendarDisplayStatus
+    | "NOT_CHECKED_IN"
+    | "NOT_EMPLOYED";
+
+export interface MonthlyAttendanceReportQuery {
+    month: string; // YYYY-MM
+    page?: number;
+    limit?: number;
+    departmentId?: string;
+    teamId?: string;
+    search?: string;
+}
+
+export interface MonthlyAttendanceReportDay {
+    date: string;
+    displayStatus: MonthlyAttendanceDisplayStatus;
+    isEmployed: boolean;
+    attendanceId: string | null;
+    attendanceStatus: AttendanceStatus | null;
+    workDay: AttendanceCalendarWorkDay;
+    attendance: AttendanceCalendarAttendance | null;
+    approvedLeaves: AttendanceCalendarApprovedLeave[];
+    totalLeaveDays: number;
+    paidLeaveDays: number;
+    unpaidLeaveDays: number;
+    hasLeaveAttendanceOverlap: boolean;
+}
+
+export interface MonthlyAttendanceReportTotals {
+    present: number;
+    halfDay: number;
+    absent: number;
+    pending: number;
+    onLeave: number;
+    partialLeave: number;
+    holiday: number;
+    weeklyOff: number;
+    notCheckedIn: number;
+    missingAttendance: number;
+    upcoming: number;
+    notEmployed: number;
+    paidLeaveDays: number;
+    unpaidLeaveDays: number;
+    totalWorkedMinutes: number;
+    totalBreakMinutes: number;
+    lateDays: number;
+    earlyCheckoutDays: number;
+    leaveAttendanceOverlaps: number;
+}
+
+export interface MonthlyAttendanceReportEmployee {
+    companyAccessId: string;
+    employeeId: string | null;
+    employeeCode: string;
+    employeeName: string;
+    designation: string;
+    employmentType: string;
+    department: {
+        _id: string;
+        name: string;
+        code: string;
+    } | null;
+    team: {
+        _id: string;
+        name: string;
+        code: string;
+    } | null;
+    attendanceMode: AttendanceMode | null;
+    joiningDate: string | null;
+    lastWorkingDate: string | null;
+    employmentStatus: string;
+    days: MonthlyAttendanceReportDay[];
+    totals: MonthlyAttendanceReportTotals;
+}
+
+export interface MonthlyAttendanceReportResponse {
+    month: string;
+    fromDate: string;
+    toDate: string;
+    timezone: string;
+    dates: string[];
+    items: MonthlyAttendanceReportEmployee[];
+    pagination: AttendanceHistoryPagination;
+}
+

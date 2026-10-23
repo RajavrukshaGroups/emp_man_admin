@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import {
+  BarChart3,
   CalendarCheck,
   CalendarClock,
   Clock3,
@@ -93,7 +94,7 @@ export default function AttendancePage() {
       );
     }
   }, [company, canUseSelfAttendance]);
-  
+
   const handleAttendanceChanged = (
     attendanceResult: MyTodayAttendanceResponse,
   ) => {
@@ -226,6 +227,16 @@ export default function AttendancePage() {
               </Link>
             )}
 
+            {canReadAttendanceSummary && (
+              <Link
+                href="/attendance/reports/monthly"
+                className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-50 sm:w-auto"
+              >
+                <BarChart3 className="h-4 w-4" />
+                Monthly Reports
+              </Link>
+            )}
+
             {canManageLocations && (
               <Link
                 href="/attendance/locations"
@@ -273,6 +284,16 @@ export default function AttendancePage() {
               >
                 <Navigation className="h-4 w-4" />
                 My Field Visits
+              </Link>
+            )}
+
+            {canUseSelfAttendance && (
+              <Link
+                href="/attendance/my-report"
+                className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-50 sm:w-auto"
+              >
+                <BarChart3 className="h-4 w-4" />
+                My Attendance Report
               </Link>
             )}
 

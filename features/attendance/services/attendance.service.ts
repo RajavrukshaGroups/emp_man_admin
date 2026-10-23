@@ -23,6 +23,8 @@ import type {
     MyTodayAttendanceResponse,
     StartBreakPayload,
     StartFieldVisitPayload,
+    MonthlyAttendanceReportQuery,
+    MonthlyAttendanceReportResponse,
 } from "../types/attendance.types";
 
 
@@ -137,6 +139,38 @@ export const attendanceService = {
 
         return response.data.data;
     },
+
+
+
+    // ============================================================
+    // MONTHLY ATTENDANCE REPORT
+    // ============================================================
+
+    /**
+     * Employee-wise monthly attendance register.
+     *
+     * Supports Company Administrator, authorized HR,
+     * and Team Lead users within their permitted scope.
+     *
+     * The backend is responsible for enforcing
+     * company, department, and team visibility.
+     */
+    async getMonthlyReport(
+        companyId: string,
+        query: MonthlyAttendanceReportQuery,
+    ): Promise<MonthlyAttendanceReportResponse> {
+        const response = await apiClient.get<
+            ApiResponse<MonthlyAttendanceReportResponse>
+        >(
+            `/companies/${companyId}/attendance/reports/monthly`,
+            {
+                params: query,
+            },
+        );
+
+        return response.data.data;
+    },
+
 
 
     // ============================================================

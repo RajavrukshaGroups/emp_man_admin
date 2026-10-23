@@ -188,6 +188,20 @@ export function AttendanceCalendar({
     void loadAttendance();
   }, [loadAttendance, refreshKey]);
 
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        void loadAttendance();
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [loadAttendance]);
+
   const attendanceByDate = useMemo(() => {
     const map = new Map<string, AttendanceCalendarDay>();
 
@@ -196,6 +210,70 @@ export function AttendanceCalendar({
     }
 
     return map;
+  }, [items]);
+
+  const monthlySummary = useMemo(() => {
+    const summary = {
+      present: 0,
+      halfDay: 0,
+      absent: 0,
+      onLeave: 0,
+      partialLeave: 0,
+      holidays: 0,
+      weeklyOff: 0,
+      missingAttendance: 0,
+      lateDays: 0,
+      earlyCheckoutDays: 0,
+      workedMinutes: 0,
+      breakMinutes: 0,
+      approvedLeaveDays: 0,
+    };
+
+    for (const day of items) {
+      switch (day.displayStatus) {
+        case "PRESENT":
+          summary.present++;
+          break;
+        case "HALF_DAY":
+          summary.halfDay++;
+          break;
+        case "ABSENT":
+          summary.absent++;
+          break;
+        case "ON_LEAVE":
+          summary.onLeave++;
+          break;
+        case "PARTIAL_LEAVE":
+          summary.partialLeave++;
+          break;
+        case "HOLIDAY":
+          summary.holidays++;
+          break;
+        case "WEEKLY_OFF":
+          summary.weeklyOff++;
+          break;
+        case "NO_ATTENDANCE_RECORDED":
+          summary.missingAttendance++;
+          break;
+      }
+
+      summary.approvedLeaveDays += day.totalLeaveDays ?? 0;
+
+      if (day.attendance) {
+        summary.workedMinutes += day.attendance.totalWorkedMinutes ?? 0;
+        summary.breakMinutes += day.attendance.totalBreakMinutes ?? 0;
+
+        if (day.attendance.isLate) {
+          summary.lateDays++;
+        }
+
+        if (day.attendance.isEarlyCheckout) {
+          summary.earlyCheckoutDays++;
+        }
+      }
+    }
+
+    return summary;
   }, [items]);
 
   const selectedDay = selectedDate
@@ -227,6 +305,8 @@ export function AttendanceCalendar({
   }, [selectedMonth]);
 
   const changeMonth = (offset: number) => {
+    if (loading) return;
+
     setSelectedDate(null);
     setSelectedMonth(
       (current) =>
@@ -257,7 +337,8 @@ export function AttendanceCalendar({
             type="button"
             onClick={() => changeMonth(-1)}
             aria-label="Previous month"
-            className="rounded-lg border border-slate-200 p-2"
+            disabled={loading}
+            className="rounded-lg border border-slate-200 p-2 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
           >
             <ChevronLeft className="h-4 w-4" />
           </button>
@@ -269,8 +350,9 @@ export function AttendanceCalendar({
           <button
             type="button"
             onClick={() => changeMonth(1)}
+            disabled={loading}
             aria-label="Next month"
-            className="rounded-lg border border-slate-200 p-2"
+            className="rounded-lg border border-slate-200 p-2 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
           >
             <ChevronRight className="h-4 w-4" />
           </button>
@@ -281,7 +363,8 @@ export function AttendanceCalendar({
               setSelectedDate(null);
               setSelectedMonth(new Date());
             }}
-            className="rounded-lg border border-slate-200 px-3 py-2 text-sm"
+            disabled={loading}
+            className="rounded-lg border border-slate-200 px-3 py-2 text-sm transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
           >
             Today
           </button>
@@ -300,9 +383,24 @@ export function AttendanceCalendar({
 
       <div className="p-3 sm:p-5">
         {loading ? (
-          <div className="flex min-h-[300px] items-center justify-center gap-3 text-slate-500">
-            <Loader2 className="h-5 w-5 animate-spin" />
-            Loading attendance...
+          <div
+            role="status"
+            aria-live="polite"
+            className="flex min-h-[320px] flex-col items-center justify-center gap-4 px-6 py-12"
+          >
+            <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-blue-50">
+              <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+            </div>
+
+            <div className="text-center">
+              <p className="text-base font-semibold text-slate-900">
+                Loading your attendance
+              </p>
+
+              <p className="mt-1 text-sm text-slate-500">
+                Fetching your attendance for {formatMonth(selectedMonth)}...
+              </p>
+            </div>
           </div>
         ) : error ? (
           <div className="flex min-h-[220px] flex-col items-center justify-center gap-3">
@@ -317,6 +415,58 @@ export function AttendanceCalendar({
           </div>
         ) : (
           <>
+            <div className="mb-6">
+              <div className="mb-3">
+                <h3 className="text-sm font-semibold text-slate-900">
+                  My Monthly Attendance Summary
+                </h3>
+                <p className="mt-1 text-xs text-slate-500">
+                  Your attendance overview for {formatMonth(selectedMonth)}
+                </p>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4">
+                <CalendarValue
+                  label="Present Days"
+                  value={String(monthlySummary.present)}
+                />
+
+                <CalendarValue
+                  label="Half Days"
+                  value={String(monthlySummary.halfDay)}
+                />
+
+                <CalendarValue
+                  label="Absent Days"
+                  value={String(monthlySummary.absent)}
+                />
+
+                <CalendarValue
+                  label="Approved Leave Days"
+                  value={String(monthlySummary.approvedLeaveDays)}
+                />
+
+                <CalendarValue
+                  label="Worked Hours"
+                  value={formatMinutes(monthlySummary.workedMinutes)}
+                />
+
+                <CalendarValue
+                  label="Late Arrivals"
+                  value={String(monthlySummary.lateDays)}
+                />
+
+                <CalendarValue
+                  label="Early Checkouts"
+                  value={String(monthlySummary.earlyCheckoutDays)}
+                />
+
+                <CalendarValue
+                  label="Missing Attendance"
+                  value={String(monthlySummary.missingAttendance)}
+                />
+              </div>
+            </div>
             <p className="mb-3 text-xs text-slate-400 md:hidden">
               Swipe horizontally to view the full week.
             </p>
@@ -581,9 +731,11 @@ export function AttendanceCalendar({
             <CalendarValue
               label="Leave / attendance conflict"
               value={
-                selectedDay.hasLeaveAttendanceConflict
+                selectedDay.hasLeaveAttendanceConflict === true
                   ? "Yes — review required"
-                  : "No"
+                  : selectedDay.hasLeaveAttendanceConflict === false
+                    ? "No"
+                    : "Pending verification"
               }
             />
           </div>

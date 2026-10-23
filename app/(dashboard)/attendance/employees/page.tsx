@@ -806,7 +806,7 @@ function LeaveDetails({ row }: { row: DailyAttendanceSummaryRow }) {
         </div>
       ))}
 
-      {row.hasLeaveAttendanceConflict && (
+      {row.hasLeaveAttendanceConflict === true && (
         <span className="inline-flex rounded-full border border-amber-200 bg-amber-50 px-2 py-1 text-xs font-medium text-amber-700">
           Leave / Attendance Conflict
         </span>
