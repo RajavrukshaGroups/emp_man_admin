@@ -141,13 +141,28 @@ function StatusCell({
   return (
     <button
       type="button"
-      title={`${day.date} · ${config.label}`}
+      title={`${day.date} · ${config.label}${
+        day.attendance?.isLate ? " · Late arrival" : ""
+      }`}
       onClick={onClick}
       className={`relative flex h-9 w-9 items-center justify-center rounded-md text-[11px] font-semibold transition hover:ring-2 hover:ring-slate-400 ${config.className}`}
     >
       {config.short}
+
+      {day.attendance?.isLate && (
+        <span
+          title="Late arrival"
+          className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-red-600 text-[9px] font-bold text-white ring-2 ring-white"
+        >
+          L
+        </span>
+      )}
+
       {day.hasLeaveAttendanceOverlap && (
-        <span className="absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full bg-red-500" />
+        <span
+          title="Attendance and leave overlap"
+          className="absolute -bottom-0.5 -left-0.5 h-2 w-2 rounded-full bg-amber-500 ring-1 ring-white"
+        />
       )}
     </button>
   );
@@ -466,6 +481,12 @@ export default function MonthlyAttendanceReportPage() {
                 <span className="text-xs text-slate-600">{status.label}</span>
               </div>
             ))}
+            <div className="flex items-center gap-1.5">
+              <span className="flex h-5 w-5 items-center justify-center rounded-full bg-red-600 text-[10px] font-bold text-white">
+                L
+              </span>
+              <span className="text-xs text-slate-600">Late Arrival</span>
+            </div>
           </div>
         </div>
 
@@ -676,6 +697,11 @@ export default function MonthlyAttendanceReportPage() {
               >
                 {statusConfig[selected.day.displayStatus].label}
               </span>
+              {selected.day.attendance?.isLate && (
+                <span className="rounded-lg bg-red-50 px-3 py-2 text-sm font-semibold text-red-700">
+                  Late Arrival
+                </span>
+              )}
             </div>
 
             <div className="mt-5 grid grid-cols-2 gap-3">

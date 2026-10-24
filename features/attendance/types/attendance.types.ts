@@ -855,10 +855,28 @@ export interface AttendanceTodayState {
 // GET MY TODAY ATTENDANCE RESPONSE
 // ============================================================
 
+export interface AttendanceCheckInWindow {
+    opensAt: string;
+    shiftStartsAt: string;
+    shiftEndsAt: string;
+    earlyCheckInWindowMinutes: number;
+    lateGraceMinutes: number;
+    timezone: string;
+}
+
 export interface MyTodayAttendanceResponse {
     attendanceDate: string;
-
     attendance: AttendanceRecord | null;
+
+    checkInWindow: AttendanceCheckInWindow;
+
+    workDay: {
+        isWorkingDay: boolean;
+        classification: string;
+        source: string;
+        name: string;
+        holidayType: string | null;
+    };
 
     state: AttendanceTodayState;
 }

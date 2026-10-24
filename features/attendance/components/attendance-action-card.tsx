@@ -79,16 +79,31 @@ export function AttendanceActionCard({
 
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  const checkInWindow = today.checkInWindow;
+
+  const checkInOpensAt = new Intl.DateTimeFormat("en-IN", {
+    timeZone: checkInWindow.timezone,
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  }).format(new Date(checkInWindow.opensAt));
+
   const attendance = today.attendance;
 
   const state = today.state;
 
   const shift = attendance?.shiftSnapshot;
 
+  const isLate = attendance?.isLate === true;
+
+  const lateMinutes = attendance?.lateMinutes ?? 0;
+
   const statusLabel = state.onBreak
     ? "On break"
     : state.checkedIn
-      ? "Checked in"
+      ? isLate
+        ? "Checked in · Late"
+        : "Checked in · On time"
       : attendance
         ? "Checked out"
         : "Not checked in";
@@ -319,6 +334,11 @@ export function AttendanceActionCard({
 
           <p className="mt-2 text-2xl font-bold">{statusLabel}</p>
 
+          {attendance && isLate && lateMinutes > 0 ? (
+            <p className="mt-2 text-sm font-medium text-amber-300">
+              Late by {lateMinutes} minute{lateMinutes === 1 ? "" : "s"}
+            </p>
+          ) : null}
           {/* Actions */}
           <div className="mt-6 flex flex-col justify-center gap-3 sm:flex-row sm:flex-wrap">
             {activeActionRequiresLocation ? (
@@ -341,6 +361,13 @@ export function AttendanceActionCard({
                     : "Detect Location"}
               </button>
             ) : null}
+            {!attendance &&
+              !state.canCheckIn &&
+              new Date() < new Date(checkInWindow.opensAt) && (
+                <p className="self-center text-sm font-medium text-amber-300">
+                  Check-in opens at {checkInOpensAt}
+                </p>
+              )}
             {state.canCheckIn ? (
               <button
                 type="button"

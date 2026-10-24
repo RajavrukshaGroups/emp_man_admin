@@ -23,6 +23,8 @@ interface AuthActions {
     ) => Promise<LoginResponseData>;
     initializeAuth: () => Promise<void>;
 
+    refreshSession: () => Promise<void>;
+
     logout: () => Promise<void>;
 
     logoutAll: () => Promise<void>;
@@ -157,11 +159,34 @@ export const useAuthStore = create<AuthStore>()(
                 }
             },
 
+            refreshSession: async () => {
+                const token = storage.getAccessToken();
+
+                if (!token) {
+                    return;
+                }
+
+                const data = await authService.getAuthenticatedUser();
+
+                set((state) => {
+                    if (
+                        storage.getAccessToken() !== token ||
+                        !state.isAuthenticated ||
+                        state.user?._id !== data.user?._id
+                    ) {
+                        return state;
+                    }
+
+                    return {
+                        ...getSessionState(data),
+                    };
+                });
+            },
+
             logout: async () => {
                 set({
                     isLoading: true,
                 });
-
                 try {
                     await authService.logout();
                 } catch {

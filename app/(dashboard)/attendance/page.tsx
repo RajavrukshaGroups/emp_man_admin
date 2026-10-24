@@ -13,6 +13,7 @@ import {
   ShieldCheck,
   Sun,
   Users,
+  Loader2,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -29,6 +30,8 @@ import Link from "next/link";
 
 export default function AttendancePage() {
   const company = useAuthStore((state) => state.company);
+
+  const refreshSession = useAuthStore((state) => state.refreshSession);
 
   const role = useAuthStore((state) => state.role);
   const permissions = useAuthStore((state) => state.permissions);
@@ -66,6 +69,8 @@ export default function AttendancePage() {
 
   const [isLoading, setIsLoading] = useState(true);
 
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
   // const isCompanyAttendanceManager =
   //   role?.scopeType === "COMPANY" || role?.scopeType === "GLOBAL";
 
@@ -83,17 +88,54 @@ export default function AttendancePage() {
       return;
     }
 
+    const companyId = company._id;
+
     try {
-      const attendanceResult = await attendanceService.getMyToday(company._id);
+      setIsRefreshing(true);
+
+      // Refresh the latest employee and company access settings.
+      await refreshSession();
+
+      // Read the latest session rather than the previous render's values.
+      const latestSession = useAuthStore.getState();
+
+      // Do not continue if the user switched companies or lost access.
+      if (
+        latestSession.company?._id !== companyId ||
+        !latestSession.isAuthenticated ||
+        latestSession.role?.code === "COMPANY_ADMIN" ||
+        !latestSession.permissions.includes("attendance.check_in")
+      ) {
+        return;
+      }
+
+      const latestShiftId = latestSession.companyAccess?.shiftId ?? null;
+
+      // Fetch the latest attendance state.
+      const attendanceResult = await attendanceService.getMyToday(companyId);
 
       setToday(attendanceResult);
       setCalendarRefreshKey((current) => current + 1);
+
+      // Fetch the employee's latest assigned shift.
+      if (latestShiftId) {
+        const shiftResult = await attendanceShiftService.getById(
+          companyId,
+          latestShiftId,
+        );
+
+        setAssignedShift(shiftResult);
+      } else {
+        setAssignedShift(null);
+      }
     } catch (error) {
       toast.error(
-        getApiErrorMessage(error, "Unable to refresh today's attendance."),
+        getApiErrorMessage(error, "Unable to refresh attendance information."),
       );
+    } finally {
+      setIsRefreshing(false);
     }
-  }, [company, canUseSelfAttendance]);
+  }, [company?._id, canUseSelfAttendance, refreshSession]);
 
   const handleAttendanceChanged = (
     attendanceResult: MyTodayAttendanceResponse,
@@ -186,6 +228,28 @@ export default function AttendancePage() {
       document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
   }, [company?._id, canUseSelfAttendance, refreshTodayAttendance]);
+
+  /**
+   * Refresh attendance periodically while the page is visible.
+   * This allows check-in actions to become available automatically
+   * when the assigned shift's check-in window opens.
+   */
+  useEffect(() => {
+    if (!company?._id || !canUseSelfAttendance) {
+      return;
+    }
+
+    const interval = window.setInterval(() => {
+      if (document.visibilityState === "visible") {
+        void refreshTodayAttendance();
+      }
+    }, 60_000);
+
+    return () => {
+      window.clearInterval(interval);
+    };
+  }, [company?._id, canUseSelfAttendance, refreshTodayAttendance]);
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -334,9 +398,29 @@ export default function AttendancePage() {
           <AttendanceLoadingState />
         ) : today ? (
           <>
+            <div
+              role="status"
+              aria-live="polite"
+              className="flex min-h-5 items-center justify-end gap-2"
+            >
+              {isRefreshing ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin text-blue-600" />
+                  <span className="text-xs font-medium text-slate-500">
+                    Syncing attendance information...
+                  </span>
+                </>
+              ) : (
+                <span className="text-xs text-slate-400">
+                  Attendance is up to date
+                </span>
+              )}
+            </div>
+
             <AssignedShiftCard
               shift={assignedShift}
               attendanceMode={companyAccess?.attendanceMode}
+              checkInWindow={today.checkInWindow}
             />
 
             <AttendanceActionCard
@@ -348,6 +432,7 @@ export default function AttendancePage() {
             <FieldVisitSection
               canStartFieldVisit={today.state.canStartFieldVisit}
               onAttendanceChanged={refreshTodayAttendance}
+              refreshKey={calendarRefreshKey}
             />
 
             {company?._id ? (
@@ -369,9 +454,14 @@ export default function AttendancePage() {
 interface AssignedShiftCardProps {
   shift: AttendanceShift | null;
   attendanceMode?: string | null;
+  checkInWindow?: MyTodayAttendanceResponse["checkInWindow"];
 }
 
-function AssignedShiftCard({ shift, attendanceMode }: AssignedShiftCardProps) {
+function AssignedShiftCard({
+  shift,
+  attendanceMode,
+  checkInWindow,
+}: AssignedShiftCardProps) {
   if (!shift) {
     return (
       <section className="rounded-2xl border border-amber-200 bg-amber-50 p-5 sm:p-6">
@@ -394,6 +484,20 @@ function AssignedShiftCard({ shift, attendanceMode }: AssignedShiftCardProps) {
   }
 
   const lateAfter = addMinutesToTime(shift.startTime, shift.lateGraceMinutes);
+
+  const earlyCheckoutThreshold = addMinutesToTime(
+    shift.endTime,
+    -(shift.earlyCheckoutGraceMinutes ?? 0),
+  );
+
+  const earlyCheckInOpens = checkInWindow
+    ? new Intl.DateTimeFormat("en-IN", {
+        timeZone: checkInWindow.timezone,
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: false,
+      }).format(new Date(checkInWindow.opensAt))
+    : "—";
 
   return (
     <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
@@ -429,7 +533,16 @@ function AssignedShiftCard({ shift, attendanceMode }: AssignedShiftCardProps) {
       </div>
 
       <div className="grid gap-px border-t border-slate-200 bg-slate-200 sm:grid-cols-2 lg:grid-cols-4">
+        <ShiftInfo label="Early check-in opens" value={earlyCheckInOpens} />
+
         <ShiftInfo label="Late after" value={lateAfter} />
+
+        <ShiftInfo
+          label="Early checkout threshold"
+          value={earlyCheckoutThreshold}
+        />
+
+        <ShiftInfo label="Scheduled checkout" value={shift.endTime} />
 
         <ShiftInfo
           label="Full day"

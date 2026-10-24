@@ -25,11 +25,13 @@ interface FieldVisitSectionProps {
    * Backend remains authoritative; this is only UX control.
    */
   canStartFieldVisit?: boolean;
+  refreshKey?: number;
 }
 
 export function FieldVisitSection({
   onAttendanceChanged,
   canStartFieldVisit = false,
+  refreshKey,
 }: FieldVisitSectionProps) {
   const company = useAuthStore((state) => state.company);
 
@@ -71,12 +73,8 @@ export function FieldVisitSection({
   }, [company]);
 
   useEffect(() => {
-    const loadInitialFieldVisit = async () => {
-      await loadActiveFieldVisit();
-    };
-
-    void loadInitialFieldVisit();
-  }, [loadActiveFieldVisit]);
+    void loadActiveFieldVisit();
+  }, [loadActiveFieldVisit, refreshKey]);
 
   /**
    * ============================================================
