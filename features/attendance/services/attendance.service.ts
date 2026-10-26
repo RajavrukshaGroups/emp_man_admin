@@ -172,6 +172,38 @@ export const attendanceService = {
     },
 
 
+    async downloadMonthlyReportExcel(
+        companyId: string,
+        query: Omit<MonthlyAttendanceReportQuery, "page" | "limit">,
+    ): Promise<Blob> {
+        const response = await apiClient.get<Blob>(
+            `/companies/${companyId}/attendance/reports/monthly/export`,
+            {
+                params: query,
+                responseType: "blob",
+            },
+        );
+
+        return response.data;
+    },
+
+    async downloadMonthlyReportPdf(
+        companyId: string,
+        query: Omit<MonthlyAttendanceReportQuery, "page" | "limit">,
+    ): Promise<Blob> {
+        const response = await apiClient.get<Blob>(
+            `/companies/${companyId}/attendance/reports/monthly/export/pdf`,
+            {
+                params: query,
+                responseType: "blob",
+            },
+        );
+
+        return response.data;
+    },
+
+
+
 
     // ============================================================
     // CHECK IN

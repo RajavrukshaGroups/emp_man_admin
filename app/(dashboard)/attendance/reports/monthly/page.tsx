@@ -10,11 +10,18 @@ import {
   Search,
   Users,
   X,
+  FileSpreadsheet,
+  FileText,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { attendanceService } from "@/features/attendance/services/attendance.service";
+import { departmentService } from "@/features/departments/services/department.service";
+import { teamService } from "@/features/teams/services/team.service";
+
+import type { Department } from "@/features/departments/types/department.types";
+import type { Team } from "@/features/teams/types/team.types";
 import type {
   MonthlyAttendanceReportDay,
   MonthlyAttendanceReportEmployee,
@@ -25,6 +32,12 @@ import { getApiErrorMessage } from "@/lib/axios";
 import { useAuthStore } from "@/store/auth.store";
 
 const PAGE_LIMIT = 20;
+
+function getTeamDepartmentId(team: Team): string {
+  return typeof team.departmentId === "string"
+    ? team.departmentId
+    : team.departmentId._id;
+}
 
 function currentMonth() {
   return new Intl.DateTimeFormat("en-CA", {
@@ -194,15 +207,29 @@ function SummaryCard({
 
 export default function MonthlyAttendanceReportPage() {
   const router = useRouter();
+
   const company = useAuthStore((state) => state.company);
   const permissions = useAuthStore((state) => state.permissions);
+  const role = useAuthStore((state) => state.role);
 
   const companyId = company?._id ?? "";
   const canRead = permissions?.includes("attendance.summary_read") ?? false;
 
+  const showOrganizationFilters =
+    role?.code === "COMPANY_ADMIN" || role?.code === "HR_MANAGER";
   const [month, setMonth] = useState(currentMonth);
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
+
+  const [departmentId, setDepartmentId] = useState("");
+  const [teamId, setTeamId] = useState("");
+
+  const [departments, setDepartments] = useState<Department[]>([]);
+  const [teams, setTeams] = useState<Team[]>([]);
+
+  const [filtersLoading, setFiltersLoading] = useState(false);
+  const [filtersError, setFiltersError] = useState("");
+
   const [page, setPage] = useState(1);
   const [refreshKey, setRefreshKey] = useState(0);
 
@@ -212,10 +239,108 @@ export default function MonthlyAttendanceReportPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
+  const [downloading, setDownloading] = useState<"xlsx" | "pdf" | null>(null);
+  const [downloadError, setDownloadError] = useState("");
+
   const [selected, setSelected] = useState<{
     employee: MonthlyAttendanceReportEmployee;
     day: MonthlyAttendanceReportDay;
   } | null>(null);
+
+  useEffect(() => {
+    if (!companyId || !canRead || !showOrganizationFilters) {
+      return;
+    }
+
+    let cancelled = false;
+
+    async function loadFilters() {
+      setFiltersLoading(true);
+      setFiltersError("");
+
+      try {
+        const fetchDepartments = async () => {
+          const all: Department[] = [];
+          let currentPage = 1;
+
+          while (true) {
+            const result = await departmentService.getDepartments(companyId, {
+              page: currentPage,
+              limit: 100,
+              status: "ACTIVE",
+              sortBy: "name",
+              sortOrder: "asc",
+            });
+
+            all.push(...result.departments);
+
+            if (!result.pagination.hasNextPage) break;
+            currentPage++;
+          }
+
+          return all;
+        };
+
+        const fetchTeams = async () => {
+          const all: Team[] = [];
+          let currentPage = 1;
+
+          while (true) {
+            const result = await teamService.getTeams(companyId, {
+              page: currentPage,
+              limit: 100,
+              status: "ACTIVE",
+              sortBy: "name",
+              sortOrder: "asc",
+            });
+
+            all.push(...result.teams);
+
+            if (!result.pagination.hasNextPage) break;
+            currentPage++;
+          }
+
+          return all;
+        };
+
+        const [departmentResults, teamResults] = await Promise.allSettled([
+          fetchDepartments(),
+          fetchTeams(),
+        ]);
+
+        if (cancelled) return;
+
+        if (departmentResults.status === "fulfilled") {
+          setDepartments(departmentResults.value);
+        } else {
+          setDepartments([]);
+        }
+
+        if (teamResults.status === "fulfilled") {
+          setTeams(teamResults.value);
+        } else {
+          setTeams([]);
+        }
+
+        if (
+          departmentResults.status === "rejected" ||
+          teamResults.status === "rejected"
+        ) {
+          setFiltersError(
+            "Some department or team options could not be loaded. You can still view the attendance report.",
+          );
+        }
+      } finally {
+        if (!cancelled) setFiltersLoading(false);
+      }
+    }
+
+    void loadFilters();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [companyId, canRead, showOrganizationFilters]);
 
   const loadReport = useCallback(async () => {
     if (!companyId || !canRead) {
@@ -232,6 +357,8 @@ export default function MonthlyAttendanceReportPage() {
         page,
         limit: PAGE_LIMIT,
         ...(search ? { search } : {}),
+        ...(showOrganizationFilters && departmentId ? { departmentId } : {}),
+        ...(showOrganizationFilters && teamId ? { teamId } : {}),
       });
 
       setData(result);
@@ -243,7 +370,16 @@ export default function MonthlyAttendanceReportPage() {
     } finally {
       setLoading(false);
     }
-  }, [companyId, canRead, month, page, search]);
+  }, [
+    companyId,
+    canRead,
+    month,
+    page,
+    search,
+    departmentId,
+    teamId,
+    showOrganizationFilters,
+  ]);
 
   useEffect(() => {
     void loadReport();
@@ -272,6 +408,12 @@ export default function MonthlyAttendanceReportPage() {
   const items = data?.items ?? [];
   const dates = data?.dates ?? [];
   const pagination = data?.pagination;
+
+  const availableTeams = useMemo(() => {
+    if (!departmentId) return teams;
+
+    return teams.filter((team) => getTeamDepartmentId(team) === departmentId);
+  }, [teams, departmentId]);
 
   const totals = useMemo(() => {
     return items.reduce(
@@ -317,11 +459,120 @@ export default function MonthlyAttendanceReportPage() {
     setSelected(null);
   }
 
+  async function handleDownload(format: "xlsx" | "pdf") {
+    if (!companyId || !canRead || downloading) return;
+
+    setDownloading(format);
+    setDownloadError("");
+
+    try {
+      const query = {
+        month,
+        ...(search ? { search } : {}),
+        ...(showOrganizationFilters && departmentId ? { departmentId } : {}),
+        ...(showOrganizationFilters && teamId ? { teamId } : {}),
+      };
+
+      const blob =
+        format === "xlsx"
+          ? await attendanceService.downloadMonthlyReportExcel(companyId, query)
+          : await attendanceService.downloadMonthlyReportPdf(companyId, query);
+
+      const url = window.URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+
+      const selectedDepartment = departments.find(
+        (department) => department._id === departmentId,
+      );
+
+      const selectedTeam = teams.find((team) => team._id === teamId);
+
+      const sanitizeFilename = (value: string) =>
+        value
+          .trim()
+          .replace(/[^a-zA-Z0-9]+/g, "-")
+          .replace(/^-+|-+$/g, "");
+
+      const filenameParts = ["monthly-attendance"];
+
+      if (showOrganizationFilters) {
+        if (selectedDepartment) {
+          filenameParts.push(sanitizeFilename(selectedDepartment.name));
+        } else if (!selectedTeam) {
+          filenameParts.push("All-Departments");
+        }
+
+        if (selectedTeam) {
+          filenameParts.push(sanitizeFilename(selectedTeam.name));
+        }
+      } else {
+        filenameParts.push("Authorized-Scope");
+      }
+
+      filenameParts.push(month);
+
+      anchor.href = url;
+      anchor.download = `${filenameParts.join("-")}.${format}`;
+
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+
+      window.setTimeout(() => {
+        window.URL.revokeObjectURL(url);
+      }, 1000);
+    } catch (err) {
+      setDownloadError(
+        getApiErrorMessage(
+          err,
+          `Unable to download ${format.toUpperCase()} report.`,
+        ),
+      );
+    } finally {
+      setDownloading(null);
+    }
+  }
+
   if (!canRead) return null;
 
   return (
     <div className="space-y-6 pb-8">
+      {/* FULL-PAGE DOWNLOAD OVERLAY */}
+      {downloading && (
+        <div
+          role="status"
+          aria-live="polite"
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/45 p-4 backdrop-blur-[3px]"
+        >
+          <div className="flex w-full max-w-sm flex-col items-center rounded-2xl bg-white px-8 py-9 text-center shadow-2xl">
+            <div className="flex h-16 w-16 items-center justify-center rounded-full bg-blue-50">
+              <Loader2 className="h-9 w-9 animate-spin text-blue-600" />
+            </div>
+
+            <h2 className="mt-5 text-lg font-semibold text-slate-950">
+              Preparing Attendance Report
+            </h2>
+
+            <p className="mt-2 text-sm text-slate-600">
+              Generating your {downloading === "xlsx" ? "Excel" : "PDF"} report
+              for {formatMonth(month)}.
+            </p>
+
+            <p className="mt-3 text-xs text-slate-500">
+              This may take a little longer for companies with more employees.
+              Please keep this page open.
+            </p>
+
+            <div className="mt-5 flex items-center gap-2 text-sm font-medium text-blue-700">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Processing your download...
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* HEADER */}
+
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <p className="text-sm font-medium text-slate-500">
@@ -336,15 +587,45 @@ export default function MonthlyAttendanceReportPage() {
           </p>
         </div>
 
-        <button
-          type="button"
-          onClick={() => setRefreshKey((value) => value + 1)}
-          disabled={loading}
-          className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50 disabled:opacity-50"
-        >
-          <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
-          Refresh
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setRefreshKey((value) => value + 1)}
+            disabled={loading}
+            className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50 disabled:opacity-50"
+          >
+            <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
+            Refresh
+          </button>
+
+          <button
+            type="button"
+            onClick={() => void handleDownload("xlsx")}
+            disabled={loading || downloading !== null}
+            className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-4 text-sm font-medium text-emerald-700 hover:bg-emerald-100 disabled:opacity-50"
+          >
+            {downloading === "xlsx" ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <FileSpreadsheet className="h-4 w-4" />
+            )}
+            Download Excel
+          </button>
+
+          <button
+            type="button"
+            onClick={() => void handleDownload("pdf")}
+            disabled={loading || downloading !== null}
+            className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-red-200 bg-red-50 px-4 text-sm font-medium text-red-700 hover:bg-red-100 disabled:opacity-50"
+          >
+            {downloading === "pdf" ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <FileText className="h-4 w-4" />
+            )}
+            Download PDF
+          </button>
+        </div>
       </div>
 
       {/* FILTERS */}
@@ -404,7 +685,90 @@ export default function MonthlyAttendanceReportPage() {
             </button>
           </form>
         </div>
+
+        {/* DEPARTMENT AND TEAM FILTERS */}
+        {showOrganizationFilters && (
+          <>
+            <div className="mt-4 grid gap-3 border-t border-slate-100 pt-4 sm:grid-cols-2">
+              <div>
+                <label
+                  htmlFor="monthly-report-department"
+                  className="mb-1.5 block text-xs font-semibold text-slate-600"
+                >
+                  Department
+                </label>
+
+                <select
+                  id="monthly-report-department"
+                  value={departmentId}
+                  onChange={(event) => {
+                    setDepartmentId(event.target.value);
+                    setTeamId("");
+                    setPage(1);
+                    setSelected(null);
+                  }}
+                  disabled={loading || filtersLoading}
+                  className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-800 disabled:opacity-50"
+                >
+                  <option value="">All Departments</option>
+
+                  {departments.map((department) => (
+                    <option key={department._id} value={department._id}>
+                      {department.name} ({department.code})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label
+                  htmlFor="monthly-report-team"
+                  className="mb-1.5 block text-xs font-semibold text-slate-600"
+                >
+                  Team
+                </label>
+
+                <select
+                  id="monthly-report-team"
+                  value={teamId}
+                  onChange={(event) => {
+                    setTeamId(event.target.value);
+                    setPage(1);
+                    setSelected(null);
+                  }}
+                  disabled={loading || filtersLoading}
+                  className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-800 disabled:opacity-50"
+                >
+                  <option value="">All Teams</option>
+
+                  {availableTeams.map((team) => (
+                    <option key={team._id} value={team._id}>
+                      {team.name} ({team.code})
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {filtersError && (
+              <p role="alert" className="mt-3 text-xs text-amber-700">
+                {filtersError}
+              </p>
+            )}
+          </>
+        )}
       </div>
+
+      {/* DOWNLOAD ERROR */}
+
+      {downloadError && (
+        <div
+          role="alert"
+          className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700"
+        >
+          {downloadError}
+        </div>
+      )}
 
       <div className="relative">
         {loading && (

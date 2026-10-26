@@ -365,6 +365,11 @@ function ShiftCard({ shift, canManage, onEdit }: ShiftCardProps) {
           value={formatMinutes(shift.halfDayMinutes)}
         />
 
+        <InfoItem
+          label="Early check-in"
+          value={`${shift.earlyCheckInWindowMinutes ?? 15} min`}
+        />
+
         <InfoItem label="Late grace" value={`${shift.lateGraceMinutes} min`} />
 
         <InfoItem

@@ -16,6 +16,8 @@ export interface AttendanceShift {
     fullDayMinutes: number;
     halfDayMinutes: number;
 
+    earlyCheckInWindowMinutes: number;
+
     lateGraceMinutes: number;
     earlyCheckoutGraceMinutes: number;
 
@@ -49,6 +51,8 @@ export interface CreateAttendanceShiftPayload {
 
     fullDayMinutes: number;
     halfDayMinutes: number;
+
+    earlyCheckInWindowMinutes?: number;
 
     lateGraceMinutes?: number;
     earlyCheckoutGraceMinutes?: number;

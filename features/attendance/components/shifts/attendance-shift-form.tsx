@@ -32,6 +32,8 @@ interface ShiftFormState {
   fullDayMinutes: number;
   halfDayMinutes: number;
 
+  earlyCheckInWindowMinutes: number;
+
   lateGraceMinutes: number;
   earlyCheckoutGraceMinutes: number;
 
@@ -60,6 +62,8 @@ const INITIAL_STATE: ShiftFormState = {
 
   fullDayMinutes: 480,
   halfDayMinutes: 240,
+
+  earlyCheckInWindowMinutes: 15,
 
   lateGraceMinutes: 15,
   earlyCheckoutGraceMinutes: 15,
@@ -129,6 +133,8 @@ function getInitialState(shift?: AttendanceShift | null): ShiftFormState {
 
     fullDayMinutes: shift.fullDayMinutes,
     halfDayMinutes: shift.halfDayMinutes,
+
+    earlyCheckInWindowMinutes: shift.earlyCheckInWindowMinutes ?? 15,
 
     lateGraceMinutes: shift.lateGraceMinutes,
     earlyCheckoutGraceMinutes: shift.earlyCheckoutGraceMinutes,
@@ -222,6 +228,15 @@ export function AttendanceShiftForm({
       return false;
     }
 
+    if (
+      !Number.isInteger(form.earlyCheckInWindowMinutes) ||
+      form.earlyCheckInWindowMinutes < 0 ||
+      form.earlyCheckInWindowMinutes > 120
+    ) {
+      toast.error("Early check-in window must be between 0 and 120 minutes.");
+      return false;
+    }
+
     if (form.maxBreakMinutes < form.standardBreakMinutes) {
       toast.error(
         "Maximum break minutes cannot be below standard break minutes.",
@@ -241,6 +256,12 @@ export function AttendanceShiftForm({
     ) {
       toast.error(
         "Effective-to date cannot be earlier than effective-from date.",
+      );
+      return false;
+    }
+    if (!form.isOvernight && form.endTime <= form.startTime) {
+      toast.error(
+        "For a same-day shift, the end time must be later than the start time. Use 19:30 for 7:30 PM.",
       );
       return false;
     }
@@ -270,6 +291,8 @@ export function AttendanceShiftForm({
       fullDayMinutes: form.fullDayMinutes,
 
       halfDayMinutes: form.halfDayMinutes,
+
+      earlyCheckInWindowMinutes: form.earlyCheckInWindowMinutes,
 
       lateGraceMinutes: form.lateGraceMinutes,
 
@@ -428,31 +451,21 @@ export function AttendanceShiftForm({
             <section>
               <SectionTitle
                 title="Shift timing"
-                description="Configure the scheduled working period."
+                description="Configure shift timings using the 24-hour clock. For example, 09:30 is 9:30 AM and 19:30 is 7:30 PM."
               />
 
               <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                <FormField label="Start time" required>
-                  <input
-                    type="time"
-                    value={form.startTime}
-                    onChange={(event) =>
-                      updateField("startTime", event.target.value)
-                    }
-                    className={inputClassName}
-                  />
-                </FormField>
+                <Time24HourField
+                  label="Start time"
+                  value={form.startTime}
+                  onChange={(value) => updateField("startTime", value)}
+                />
 
-                <FormField label="End time" required>
-                  <input
-                    type="time"
-                    value={form.endTime}
-                    onChange={(event) =>
-                      updateField("endTime", event.target.value)
-                    }
-                    className={inputClassName}
-                  />
-                </FormField>
+                <Time24HourField
+                  label="End time"
+                  value={form.endTime}
+                  onChange={(value) => updateField("endTime", value)}
+                />
 
                 <ToggleCard
                   label="Overnight shift"
@@ -485,6 +498,16 @@ export function AttendanceShiftForm({
                   onChange={(value) => updateField("halfDayMinutes", value)}
                   min={1}
                   max={1440}
+                />
+
+                <MinutesField
+                  label="Early check-in window"
+                  value={form.earlyCheckInWindowMinutes}
+                  onChange={(value) =>
+                    updateField("earlyCheckInWindowMinutes", value)
+                  }
+                  min={0}
+                  max={120}
                 />
 
                 <MinutesField
@@ -673,6 +696,60 @@ function FormField({ label, required = false, children }: FormFieldProps) {
 
       {children}
     </div>
+  );
+}
+
+interface Time24HourFieldProps {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+}
+
+function Time24HourField({ label, value, onChange }: Time24HourFieldProps) {
+  const [hour = "00", minute = "00"] = value.split(":");
+
+  const hours = Array.from({ length: 24 }, (_, index) =>
+    String(index).padStart(2, "0"),
+  );
+
+  const minutes = Array.from({ length: 60 }, (_, index) =>
+    String(index).padStart(2, "0"),
+  );
+
+  return (
+    <FormField label={`${label} (24-hour format)`} required>
+      <div className="flex items-center gap-2">
+        <select
+          aria-label={`${label} hour`}
+          value={hour}
+          onChange={(event) => onChange(`${event.target.value}:${minute}`)}
+          className={inputClassName}
+        >
+          {hours.map((item) => (
+            <option key={item} value={item}>
+              {item}
+            </option>
+          ))}
+        </select>
+
+        <span className="font-semibold text-slate-500">:</span>
+
+        <select
+          aria-label={`${label} minute`}
+          value={minute}
+          onChange={(event) => onChange(`${hour}:${event.target.value}`)}
+          className={inputClassName}
+        >
+          {minutes.map((item) => (
+            <option key={item} value={item}>
+              {item}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      <p className="mt-1 text-xs text-slate-500">{value} (HH:mm)</p>
+    </FormField>
   );
 }
 
