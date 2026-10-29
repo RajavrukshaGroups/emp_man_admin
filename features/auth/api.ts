@@ -23,7 +23,6 @@ const publicAuthClient = axios.create({
  */
 export interface ForgotPasswordPayload {
   email: string;
-  companySlug: string;
 }
 
 export const forgotPassword = async (

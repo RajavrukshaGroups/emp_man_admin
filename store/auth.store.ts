@@ -142,13 +142,17 @@ export const useAuthStore = create<AuthStore>()(
                 });
 
                 try {
-                    const data =
-                        await authService.getAuthenticatedUser();
+                   const data =
+    await authService.getAuthenticatedUser();
 
-                    set({
-                        ...getSessionState(data),
-                        isInitializing: false,
-                    });
+if (storage.getAccessToken() !== token) {
+    return;
+}
+
+set({
+    ...getSessionState(data),
+    isInitializing: false,
+});
                 } catch {
                     storage.clearAuthStorage();
 

@@ -84,6 +84,10 @@ export type ChangePasswordFormValues = z.infer<
 /**
  * Forgot Password Validation
  */
+/**
+ * Forgot Password Validation
+ * Employees only need their registered email address.
+ */
 export const forgotPasswordSchema = z.object({
   email: z
     .string()
@@ -91,16 +95,6 @@ export const forgotPasswordSchema = z.object({
     .min(1, "Email address is required.")
     .email("Please enter a valid email address.")
     .max(150, "Email address cannot exceed 150 characters."),
-
-  companySlug: z
-    .string()
-    .trim()
-    .min(1, "Company slug is required.")
-    .max(150, "Company slug cannot exceed 150 characters.")
-    .regex(
-      /^[a-z0-9]+(?:-[a-z0-9]+)*$/,
-      "Enter a valid company slug.",
-    ),
 });
 
 export type ForgotPasswordFormValues = z.infer<

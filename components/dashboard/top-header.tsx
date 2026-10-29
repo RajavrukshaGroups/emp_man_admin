@@ -22,18 +22,17 @@ export function TopHeader({ onMenuClick }: TopHeaderProps) {
   const logout = useAuthStore((state) => state.logout);
   const isLoading = useAuthStore((state) => state.isLoading);
 
-  const handleLogout = async () => {
-    try {
-      await logout();
+ const handleLogout = async () => {
+  try {
+    await logout();
 
-      toast.success("Logged out successfully.");
+    toast.success("Logged out successfully.");
 
-      router.replace("/login");
-      router.refresh();
-    } catch {
-      toast.error("Unable to logout.");
-    }
-  };
+    window.location.replace("/login");
+  } catch {
+    toast.error("Unable to logout.");
+  }
+};
 
   const initials =
     user?.displayName

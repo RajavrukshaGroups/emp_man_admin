@@ -1,4 +1,5 @@
 "use client";
+import Link from "next/link";
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
@@ -142,15 +143,27 @@ export function LoginForm() {
         )}
       </div>
 
-      <label className="flex cursor-pointer items-center gap-2">
-        <input
-          type="checkbox"
-          {...register("rememberMe")}
-          className="h-4 w-4 rounded border-slate-300"
-        />
+    
+<div className="flex items-center justify-between gap-3">
+  <label className="flex cursor-pointer items-center gap-2">
+    <input
+      type="checkbox"
+      {...register("rememberMe")}
+      className="h-4 w-4 rounded border-slate-300"
+    />
 
-        <span className="text-sm text-slate-600">Remember me</span>
-      </label>
+    <span className="text-sm text-slate-600">
+      Remember me
+    </span>
+  </label>
+
+  <Link
+    href="/forgot-password"
+    className="text-sm font-medium text-slate-900 transition hover:underline"
+  >
+    Forgot password?
+  </Link>
+</div>
 
       <button
         type="submit"

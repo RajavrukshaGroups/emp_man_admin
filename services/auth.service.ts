@@ -48,12 +48,12 @@ export const authService = {
     );
   },
 
-  async changePassword(
-    payload: ChangePasswordRequest,
-  ): Promise<void> {
-    await apiClient.post<ApiResponse<null>>(
-      "/auth/change-password",
-      payload,
-    );
-  },
+ async changePassword(
+  payload: ChangePasswordRequest,
+): Promise<void> {
+  await apiClient.patch<ApiResponse<null>>(
+    "/auth/change-password",
+    payload,
+  );
+},
 };
