@@ -1233,3 +1233,27 @@ export interface MonthlyAttendanceReportResponse {
     pagination: AttendanceHistoryPagination;
 }
 
+
+// ============================================================
+// ATTENDANCE PHOTO EVIDENCE
+// ============================================================
+
+export type AttendancePhotoAction =
+  | "CHECK_IN"
+  | "CHECK_OUT"
+  | "FIELD_VISIT_START"
+  | "FIELD_VISIT_END";
+
+export interface UploadAttendancePhotoPayload {
+  action: AttendancePhotoAction;
+  photo: File;
+  attendanceId?: string;
+  fieldVisitId?: string;
+}
+
+export interface AttendancePhotoEvidenceResponse {
+  evidenceId: string;
+  action: AttendancePhotoAction;
+  capturedAt: string;
+  expiresAt: string;
+}
