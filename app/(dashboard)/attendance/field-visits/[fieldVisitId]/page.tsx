@@ -29,6 +29,9 @@ export default function FieldVisitDetailPage({
   const canReadFieldVisits =
     permissions?.includes("attendance.field_visit_read") ?? false;
 
+  const canViewFieldVisitPhotos =
+    permissions?.includes("attendance.photo_view") ?? false;
+
   const [visit, setVisit] = useState<FieldVisit | null>(null);
 
   const [isLoading, setIsLoading] = useState(true);
@@ -158,8 +161,8 @@ export default function FieldVisitDetailPage({
             </h1>
 
             <p className="mt-1 text-sm leading-6 text-slate-500">
-              Review field visit information, attendance context and recorded
-              GPS evidence.
+              Review field visit information, attendance context, GPS evidence
+              and captured photographs.
             </p>
           </div>
         </div>
@@ -172,11 +175,14 @@ export default function FieldVisitDetailPage({
           Back to Field Visits
         </Link>
       </div>
-
       {/* ============================================================
           DETAIL
           ============================================================ */}
-      <FieldVisitDetail visit={visit} />
+      <FieldVisitDetail
+        visit={visit}
+        companyId={company!._id}
+        canViewPhotos={canViewFieldVisitPhotos}
+      />
     </div>
   );
 }

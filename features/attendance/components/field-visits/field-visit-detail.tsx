@@ -1,8 +1,10 @@
 "use client";
+import { useState } from "react";
 
 import {
   BriefcaseBusiness,
   CalendarDays,
+  Camera,
   CheckCircle2,
   Clock3,
   MapPin,
@@ -25,11 +27,24 @@ import type {
 
 import { FieldVisitEvidenceMap } from "./field-visit-evidence-map";
 
+import { FieldVisitPhotoPreview } from "./field-visit-photo-preview";
+
 interface FieldVisitDetailProps {
   visit: FieldVisit;
+  companyId: string;
+  canViewPhotos: boolean;
 }
 
-export function FieldVisitDetail({ visit }: FieldVisitDetailProps) {
+export function FieldVisitDetail({
+  visit,
+  companyId,
+  canViewPhotos,
+}: FieldVisitDetailProps) {
+  const [activePhoto, setActivePhoto] = useState<"START" | "END" | null>(null);
+
+  const hasStartPhoto = visit.startPhotoEvidence?.status === "CAPTURED";
+
+  const hasEndPhoto = visit.endPhotoEvidence?.status === "CAPTURED";
   const companyAccess = getCompanyAccess(visit.companyAccessId);
   const employee = getEmployee(visit.employeeId);
   const user = getEmployeeUser(employee?.userId);
@@ -221,6 +236,85 @@ export function FieldVisitDetail({ visit }: FieldVisitDetailProps) {
       </section>
 
       {/* ============================================================
+    PHOTO EVIDENCE
+    ============================================================ */}
+      {canViewPhotos && (
+        <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+          <SectionHeading
+            icon={Camera}
+            title="Photo Evidence"
+            description="Photographs captured when the employee started or ended the field visit."
+          />
+
+          <div className="mt-5 grid gap-4 sm:grid-cols-2">
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
+              <Camera className="h-6 w-6 text-blue-600" />
+
+              <h3 className="mt-3 font-semibold text-slate-900">Start Photo</h3>
+
+              {hasStartPhoto ? (
+                <>
+                  <p className="mt-1 text-sm text-slate-500">
+                    Captured{" "}
+                    {visit.startPhotoEvidence?.capturedAt
+                      ? formatDateTime(visit.startPhotoEvidence.capturedAt)
+                      : "during visit start"}
+                  </p>
+
+                  <button
+                    type="button"
+                    onClick={() => setActivePhoto("START")}
+                    className="mt-4 inline-flex min-h-10 items-center justify-center rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-700"
+                  >
+                    View Start Photo
+                  </button>
+                </>
+              ) : (
+                <p className="mt-2 text-sm text-slate-500">
+                  {visit.startPhotoEvidence?.status === "EXEMPTED"
+                    ? "Photo capture was exempted."
+                    : "No start photograph was captured."}
+                </p>
+              )}
+            </div>
+
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
+              <Camera className="h-6 w-6 text-blue-600" />
+
+              <h3 className="mt-3 font-semibold text-slate-900">End Photo</h3>
+
+              {hasEndPhoto ? (
+                <>
+                  <p className="mt-1 text-sm text-slate-500">
+                    Captured{" "}
+                    {visit.endPhotoEvidence?.capturedAt
+                      ? formatDateTime(visit.endPhotoEvidence.capturedAt)
+                      : "during visit completion"}
+                  </p>
+
+                  <button
+                    type="button"
+                    onClick={() => setActivePhoto("END")}
+                    className="mt-4 inline-flex min-h-10 items-center justify-center rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-700"
+                  >
+                    View End Photo
+                  </button>
+                </>
+              ) : (
+                <p className="mt-2 text-sm text-slate-500">
+                  {visit.status === "IN_PROGRESS"
+                    ? "The end photograph will appear after the visit is completed, if captured."
+                    : visit.endPhotoEvidence?.status === "EXEMPTED"
+                      ? "Photo capture was exempted."
+                      : "No end photograph was captured."}
+                </p>
+              )}
+            </div>
+          </div>
+        </section>
+      )}
+
+      {/* ============================================================
           OUTCOME
           ============================================================ */}
       {(visit.outcome?.trim() || visit.status === "COMPLETED") && (
@@ -344,6 +438,15 @@ export function FieldVisitDetail({ visit }: FieldVisitDetailProps) {
             />
           </div>
         </section>
+      )}
+
+      {canViewPhotos && activePhoto && (
+        <FieldVisitPhotoPreview
+          companyId={companyId}
+          fieldVisitId={visit._id}
+          action={activePhoto}
+          onClose={() => setActivePhoto(null)}
+        />
       )}
     </div>
   );

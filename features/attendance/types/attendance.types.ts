@@ -1,4 +1,4 @@
-// ============================================================
+﻿// ============================================================
 // ATTENDANCE ENUM / UNION TYPES
 // ============================================================
 
@@ -98,6 +98,22 @@ export interface LocationEvidence {
 }
 
 
+export type AttendanceSessionPhotoAction =
+    | "CHECK_IN"
+    | "CHECK_OUT";
+
+export type AttendanceSessionPhotoStatus =
+    | "CAPTURED"
+    | "EXEMPTED"
+    | "NOT_REQUIRED";
+
+export interface AttendanceSessionPhotoEvidence {
+    status: AttendanceSessionPhotoStatus;
+    capturedAt?: string | null;
+}
+
+
+
 // ============================================================
 // WORK SESSION
 // ============================================================
@@ -126,6 +142,12 @@ export interface WorkSession {
     workedMinutes: number;
 
     status: WorkSessionStatus;
+
+
+    checkInPhotoEvidence?: AttendanceSessionPhotoEvidence | null;
+
+    checkOutPhotoEvidence?: AttendanceSessionPhotoEvidence | null;
+
 }
 
 
@@ -484,6 +506,7 @@ export interface AttendanceRecord {
 // ============================================================
 
 export interface CheckInPayload {
+    photoEvidenceId?: string;
     location?: AttendanceLocationInput | null;
 
     attendanceLocationId?: string | null;
@@ -497,6 +520,7 @@ export interface CheckInPayload {
 // ============================================================
 
 export interface CheckOutPayload {
+    photoEvidenceId?: string;
     location?: AttendanceLocationInput | null;
 
     attendanceLocationId?: string | null;
@@ -680,6 +704,11 @@ export interface FieldVisitCancelledByReference {
     status?: string;
 }
 
+export interface FieldVisitPhotoEvidence {
+    status: "CAPTURED" | "EXEMPTED" | "NOT_REQUIRED";
+    capturedAt?: string | null;
+}
+
 export interface FieldVisit {
     _id: string;
 
@@ -715,9 +744,13 @@ export interface FieldVisit {
 
     startLocation: FieldVisitLocationEvidence;
 
+    startPhotoEvidence?: FieldVisitPhotoEvidence | null;
+
     endedAt?: string | null;
 
     endLocation?: FieldVisitLocationEvidence | null;
+
+    endPhotoEvidence?: FieldVisitPhotoEvidence | null;
 
     durationMinutes: number;
 
@@ -757,6 +790,8 @@ export interface StartFieldVisitPayload {
     location: FieldVisitLocationInput;
 
     notes?: string;
+
+    photoEvidenceId?: string;
 }
 
 export interface EndFieldVisitPayload {
@@ -765,6 +800,8 @@ export interface EndFieldVisitPayload {
     outcome?: string;
 
     notes?: string;
+
+    photoEvidenceId?: string;
 }
 
 export interface CancelFieldVisitPayload {
@@ -1239,21 +1276,28 @@ export interface MonthlyAttendanceReportResponse {
 // ============================================================
 
 export type AttendancePhotoAction =
-  | "CHECK_IN"
-  | "CHECK_OUT"
-  | "FIELD_VISIT_START"
-  | "FIELD_VISIT_END";
+    | "CHECK_IN"
+    | "CHECK_OUT"
+    | "FIELD_VISIT_START"
+    | "FIELD_VISIT_END";
 
 export interface UploadAttendancePhotoPayload {
-  action: AttendancePhotoAction;
-  photo: File;
-  attendanceId?: string;
-  fieldVisitId?: string;
+    action: AttendancePhotoAction;
+    photo: File;
+    attendanceId?: string;
+    fieldVisitId?: string;
 }
 
 export interface AttendancePhotoEvidenceResponse {
-  evidenceId: string;
-  action: AttendancePhotoAction;
-  capturedAt: string;
-  expiresAt: string;
+    evidenceId: string;
+    action: AttendancePhotoAction;
+    capturedAt: string;
+    expiresAt: string;
+}
+
+export interface AttendancePhotoRequirementResponse {
+    action: AttendancePhotoAction;
+    attendanceMode: "OFFICE" | "FIELD" | "HYBRID" | "REMOTE";
+    photoCaptureEnabled: boolean;
+    photoRequired: boolean;
 }

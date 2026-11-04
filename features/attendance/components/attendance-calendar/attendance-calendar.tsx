@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   CalendarDays,
+  Camera,
   ChevronLeft,
   ChevronRight,
   Loader2,
@@ -10,10 +11,13 @@ import {
 } from "lucide-react";
 
 import { attendanceService } from "@/features/attendance/services/attendance.service";
+import { AttendancePhotoPreview } from "@/features/attendance/components/attendance-photo-preview";
+import { useAuthStore } from "@/store/auth.store";
 
 import type {
   AttendanceCalendarDay,
   AttendanceCalendarDisplayStatus,
+  AttendanceRecord,
 } from "@/features/attendance/types/attendance.types";
 
 interface AttendanceCalendarProps {
@@ -152,12 +156,29 @@ export function AttendanceCalendar({
   companyId,
   refreshKey = 0,
 }: AttendanceCalendarProps) {
+  const canViewAttendancePhotos = useAuthStore((state) =>
+    state.permissions.includes("attendance.photo_view"),
+  );
+
+  const [photoPreview, setPhotoPreview] = useState<{
+    attendanceId: string;
+    sessionId: string;
+    action: "CHECK_IN" | "CHECK_OUT";
+  } | null>(null);
+
   const [selectedMonth, setSelectedMonth] = useState(() => new Date());
 
   const [items, setItems] = useState<AttendanceCalendarDay[]>([]);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+
+  const [selectedAttendance, setSelectedAttendance] =
+    useState<AttendanceRecord | null>(null);
+
+  const [attendanceDetailLoading, setAttendanceDetailLoading] = useState(false);
+
+  const [attendanceDetailError, setAttendanceDetailError] = useState("");
 
   const monthKey = useMemo(
     () => `${selectedMonth.getFullYear()}-${pad(selectedMonth.getMonth() + 1)}`,
@@ -279,6 +300,51 @@ export function AttendanceCalendar({
   const selectedDay = selectedDate
     ? (attendanceByDate.get(selectedDate) ?? null)
     : null;
+
+  const selectedAttendanceId = selectedDay?.attendanceId ?? null;
+
+  useEffect(() => {
+    setPhotoPreview(null);
+  }, [selectedDate, companyId]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    setSelectedAttendance(null);
+    setAttendanceDetailError("");
+
+    if (!selectedDate || !selectedAttendanceId) {
+      setAttendanceDetailLoading(false);
+      return;
+    }
+
+    setAttendanceDetailLoading(true);
+
+    void attendanceService
+      .getAttendanceById(companyId, selectedAttendanceId)
+      .then((attendance) => {
+        if (cancelled) return;
+
+        setSelectedAttendance(attendance);
+      })
+      .catch((error) => {
+        if (cancelled) return;
+
+        console.error("Unable to load attendance details:", error);
+        setAttendanceDetailError(
+          "Unable to load work-session details. Please try again.",
+        );
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setAttendanceDetailLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [companyId, selectedDate, selectedAttendanceId, refreshKey]);
 
   const calendarDays = useMemo(() => {
     const year = selectedMonth.getFullYear();
@@ -511,6 +577,19 @@ export function AttendanceCalendar({
 
                   const styles = getStatusStyles(day.displayStatus);
 
+                  const isWorkedNonWorkingDay =
+                    day.attendance !== null &&
+                    day.attendanceStatus !== null &&
+                    ["PRESENT", "HALF_DAY"].includes(day.attendanceStatus) &&
+                    ["WEEKLY_OFF", "HOLIDAY"].includes(
+                      day.workDay.classification,
+                    );
+
+                  const secondaryAttendanceStatus = isWorkedNonWorkingDay
+                    ? getStatusStyles(
+                        day.attendanceStatus as AttendanceCalendarDisplayStatus,
+                      )
+                    : null;
                   return (
                     <button
                       key={dateKey}
@@ -537,11 +616,36 @@ export function AttendanceCalendar({
                       </div>
 
                       <div className="mt-3 space-y-1.5">
-                        <span
-                          className={`inline-flex rounded-full px-2 py-1 text-[10px] font-semibold ${styles.badge}`}
-                        >
-                          {styles.label}
-                        </span>
+                        <div className="flex flex-wrap gap-1">
+                          <span
+                            className={`inline-flex rounded-full px-2 py-1 text-[10px] font-semibold ${styles.badge}`}
+                          >
+                            {styles.label}
+                          </span>
+
+                          {secondaryAttendanceStatus &&
+                            day.displayStatus !== day.attendanceStatus && (
+                              <span
+                                className={`inline-flex rounded-full px-2 py-1 text-[10px] font-semibold ${secondaryAttendanceStatus.badge}`}
+                              >
+                                {secondaryAttendanceStatus.label}
+                              </span>
+                            )}
+                        </div>
+
+                        {isWorkedNonWorkingDay &&
+                          day.displayStatus !== day.workDay.classification && (
+                            <p className="text-[10px] font-medium text-slate-600">
+                              {formatStatus(day.workDay.classification)}
+                            </p>
+                          )}
+
+                        {isWorkedNonWorkingDay && (
+                          <p className="text-[10px] font-medium">
+                            Worked:{" "}
+                            {formatMinutes(day.attendance?.totalWorkedMinutes)}
+                          </p>
+                        )}
 
                         {day.workDay.name &&
                           day.displayStatus === "HOLIDAY" && (
@@ -739,7 +843,119 @@ export function AttendanceCalendar({
               }
             />
           </div>
+
+          {/* ADD WORK SESSIONS HERE */}
+          <div className="mt-5 border-t border-slate-200 pt-5">
+            <h4 className="text-sm font-semibold text-slate-900">
+              Work Sessions
+            </h4>
+
+            {attendanceDetailLoading ? (
+              <div
+                role="status"
+                className="mt-3 flex items-center gap-2 text-sm text-slate-500"
+              >
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Loading work sessions...
+              </div>
+            ) : attendanceDetailError ? (
+              <p role="alert" className="mt-3 text-sm text-red-600">
+                {attendanceDetailError}
+              </p>
+            ) : !selectedDay.attendanceId ? (
+              <p className="mt-3 text-sm text-slate-500">
+                No attendance record is available for this day.
+              </p>
+            ) : selectedAttendance?.workSessions?.length ? (
+              <div className="mt-3 space-y-3">
+                {selectedAttendance.workSessions.map((session, index) => (
+                  <div
+                    key={session._id}
+                    className="rounded-xl border border-slate-200 bg-white p-4"
+                  >
+                    <p className="text-sm font-semibold text-slate-900">
+                      Session {index + 1}
+                    </p>
+
+                    <div className="mt-3 grid grid-cols-2 gap-3">
+                      <div>
+                        <p className="text-xs text-slate-500">Check-in</p>
+                        <p className="text-sm font-medium text-slate-900">
+                          {formatTime(session.checkInAt)}
+                        </p>
+                      </div>
+
+                      <div>
+                        <p className="text-xs text-slate-500">Check-out</p>
+                        <p className="text-sm font-medium text-slate-900">
+                          {formatTime(session.checkOutAt)}
+                        </p>
+                      </div>
+                    </div>
+
+                    {canViewAttendancePhotos && (
+                      <div className="mt-4 flex flex-wrap gap-2 border-t border-slate-100 pt-3">
+                        {session.checkInPhotoEvidence?.status ===
+                          "CAPTURED" && (
+                          <button
+                            type="button"
+                            className="inline-flex items-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-700 transition hover:bg-blue-100"
+                            onClick={() => {
+                              if (!selectedAttendanceId) return;
+
+                              setPhotoPreview({
+                                attendanceId: selectedAttendanceId,
+                                sessionId: session._id,
+                                action: "CHECK_IN",
+                              });
+                            }}
+                          >
+                            <Camera className="h-4 w-4" />
+                            View Check-in Photo
+                          </button>
+                        )}
+
+                        {session.checkOutPhotoEvidence?.status ===
+                          "CAPTURED" && (
+                          <button
+                            type="button"
+                            className="inline-flex items-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-700 transition hover:bg-blue-100"
+                            onClick={() => {
+                              if (!selectedAttendanceId) return;
+
+                              setPhotoPreview({
+                                attendanceId: selectedAttendanceId,
+                                sessionId: session._id,
+                                action: "CHECK_OUT",
+                              });
+                            }}
+                          >
+                            <Camera className="h-4 w-4" />
+                            View Check-out Photo
+                          </button>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="mt-3 text-sm text-slate-500">
+                No work sessions found.
+              </p>
+            )}
+          </div>
+          {/* END WORK SESSIONS */}
         </div>
+      )}
+      {photoPreview && canViewAttendancePhotos && (
+        <AttendancePhotoPreview
+          companyId={companyId}
+          attendanceId={photoPreview.attendanceId}
+          sessionId={photoPreview.sessionId}
+          action={photoPreview.action}
+          onClose={() => setPhotoPreview(null)}
+        />
       )}
     </section>
   );

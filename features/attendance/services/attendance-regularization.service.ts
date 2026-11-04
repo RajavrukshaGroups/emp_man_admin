@@ -11,6 +11,7 @@ import type {
     CreateAttendanceRegularizationPayload,
     RecommendAttendanceRegularizationPayload,
     RejectAttendanceRegularizationPayload,
+    UpdateAttendanceRegularizationPayload
 } from "../types/attendance-regularization.types";
 
 export const attendanceRegularizationService = {
@@ -27,6 +28,23 @@ export const attendanceRegularizationService = {
 
         return response.data.data;
     },
+
+
+    async update(
+        companyId: string,
+        regularizationId: string,
+        payload: UpdateAttendanceRegularizationPayload,
+    ): Promise<AttendanceRegularization> {
+        const response = await apiClient.patch<
+            ApiResponse<AttendanceRegularization>
+        >(
+            `/companies/${companyId}/attendance/regularizations/${regularizationId}`,
+            payload,
+        );
+
+        return response.data.data;
+    },
+
 
     async getMyHistory(
         companyId: string,

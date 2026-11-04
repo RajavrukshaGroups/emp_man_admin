@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
+import { AttendanceEmployeeDetails } from "@/features/attendance/components/attendance-employee-details";
 import { attendanceService } from "@/features/attendance/services/attendance.service";
 import type {
   DailyAttendanceStatus,
@@ -174,6 +175,11 @@ export default function AttendanceEmployeesPage() {
   const canReadAttendanceSummary =
     permissions?.includes("attendance.summary_read") ?? false;
 
+  const canReadAttendance = permissions?.includes("attendance.read") ?? false;
+
+  const canViewAttendancePhotos =
+    permissions?.includes("attendance.photo_view") ?? false;
+
   const companyId = company?._id ?? "";
 
   const [selectedDate, setSelectedDate] = useState(getToday);
@@ -187,6 +193,9 @@ export default function AttendanceEmployeesPage() {
   const [refreshing, setRefreshing] = useState(false);
 
   const [error, setError] = useState("");
+
+  const [selectedEmployee, setSelectedEmployee] =
+    useState<DailyAttendanceSummaryRow | null>(null);
 
   const [statusFilter, setStatusFilter] = useState<
     "ALL" | DailyAttendanceStatus
@@ -557,12 +566,18 @@ export default function AttendanceEmployeesPage() {
                     <th className="px-4 py-3">Status</th>
 
                     <th className="px-4 py-3">Exceptions</th>
+
+                    <th className="px-4 py-3">Actions</th>
                   </tr>
                 </thead>
 
                 <tbody className="divide-y divide-slate-100">
                   {items.map((row) => (
-                    <DesktopRow key={row.companyAccessId} row={row} />
+                    <DesktopRow
+                      key={row.companyAccessId}
+                      row={row}
+                      onViewDetails={() => setSelectedEmployee(row)}
+                    />
                   ))}
                 </tbody>
               </table>
@@ -573,7 +588,11 @@ export default function AttendanceEmployeesPage() {
 
           <div className="grid gap-4 lg:hidden">
             {items.map((row) => (
-              <MobileCard key={row.companyAccessId} row={row} />
+              <MobileCard
+                key={row.companyAccessId}
+                row={row}
+                onViewDetails={() => setSelectedEmployee(row)}
+              />
             ))}
           </div>
         </>
@@ -618,6 +637,18 @@ export default function AttendanceEmployeesPage() {
           </div>
         </div>
       ) : null}
+
+      {/* EMPLOYEE ATTENDANCE DETAILS */}
+
+      {selectedEmployee && (
+        <AttendanceEmployeeDetails
+          companyId={companyId}
+          row={selectedEmployee}
+          canReadAttendance={canReadAttendance}
+          canViewPhotos={canReadAttendance && canViewAttendancePhotos}
+          onClose={() => setSelectedEmployee(null)}
+        />
+      )}
     </div>
   );
 }
@@ -626,7 +657,13 @@ export default function AttendanceEmployeesPage() {
 // DESKTOP ROW
 // ============================================================
 
-function DesktopRow({ row }: { row: DailyAttendanceSummaryRow }) {
+function DesktopRow({
+  row,
+  onViewDetails,
+}: {
+  row: DailyAttendanceSummaryRow;
+  onViewDetails: () => void;
+}) {
   const attendance = row.attendance;
 
   return (
@@ -699,6 +736,15 @@ function DesktopRow({ row }: { row: DailyAttendanceSummaryRow }) {
           <span className="text-xs text-slate-400">None</span>
         )}
       </td>
+      <td className="whitespace-nowrap px-4 py-4">
+        <button
+          type="button"
+          onClick={onViewDetails}
+          className="inline-flex items-center rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-700 transition hover:bg-blue-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
+        >
+          View Details
+        </button>
+      </td>
     </tr>
   );
 }
@@ -707,7 +753,13 @@ function DesktopRow({ row }: { row: DailyAttendanceSummaryRow }) {
 // MOBILE CARD
 // ============================================================
 
-function MobileCard({ row }: { row: DailyAttendanceSummaryRow }) {
+function MobileCard({
+  row,
+  onViewDetails,
+}: {
+  row: DailyAttendanceSummaryRow;
+  onViewDetails: () => void;
+}) {
   const attendance = row.attendance;
 
   return (
@@ -767,6 +819,15 @@ function MobileCard({ row }: { row: DailyAttendanceSummaryRow }) {
           ) : null}
         </div>
       ) : null}
+
+      {/* VIEW ATTENDANCE DETAILS */}
+      <button
+        type="button"
+        onClick={onViewDetails}
+        className="mt-4 inline-flex w-full items-center justify-center rounded-lg border border-blue-200 bg-blue-50 px-4 py-2.5 text-sm font-semibold text-blue-700 transition hover:bg-blue-100"
+      >
+        View Attendance Details
+      </button>
     </div>
   );
 }

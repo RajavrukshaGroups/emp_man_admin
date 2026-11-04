@@ -8,6 +8,7 @@ import {
   CheckCircle2,
   FileClock,
   Plus,
+  Pencil,
   RefreshCcw,
   ThumbsUp,
   XCircle,
@@ -421,6 +422,7 @@ export default function AttendanceRegularizationsPage() {
                     canRecommend={canRecommend && !isOwnRequest}
                     canApprove={canApprove && !isOwnRequest}
                     canCancel={canRequest && isOwnRequest}
+                    canEdit={canRequest && isOwnRequest}
                     onRecommend={() => openAction("RECOMMEND", item)}
                     onApprove={() => openAction("APPROVE", item)}
                     onReject={() => openAction("REJECT", item)}
@@ -463,6 +465,7 @@ function RegularizationCard({
   canRecommend,
   canApprove,
   canCancel,
+  canEdit,
   onRecommend,
   onApprove,
   onReject,
@@ -475,6 +478,7 @@ function RegularizationCard({
   canRecommend: boolean;
   canApprove: boolean;
   canCancel: boolean;
+  canEdit: boolean;
 
   onRecommend: () => void;
   onApprove: () => void;
@@ -614,6 +618,16 @@ function RegularizationCard({
         </p>
 
         <div className="flex flex-wrap gap-2">
+          {canEdit && item.status === "PENDING" && (
+            <Link
+              href={`/attendance/regularizations/${item._id}/edit`}
+              className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-blue-200 bg-white px-4 text-sm font-semibold text-blue-700 transition hover:bg-blue-50"
+            >
+              <Pencil className="h-4 w-4" />
+              Edit Request
+            </Link>
+          )}
+
           {canCancel && item.status === "PENDING" && (
             <button
               type="button"

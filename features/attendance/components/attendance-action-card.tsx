@@ -22,6 +22,7 @@ import { attendanceService } from "../services/attendance.service";
 
 import type { MyTodayAttendanceResponse } from "../types/attendance.types";
 
+import { AttendancePhotoCamera } from "./attendance-photo-camera";
 import { AttendanceLocationPreviewMap } from "./attendance-location-preview-map-loader";
 
 interface AttendanceActionCardProps {
@@ -78,6 +79,10 @@ export function AttendanceActionCard({
   } = useGeolocation();
 
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [photoAction, setPhotoAction] = useState<
+    "CHECK_IN" | "CHECK_OUT" | null
+  >(null);
+  const [isPhotoSubmitting, setIsPhotoSubmitting] = useState(false);
 
   const checkInWindow = today.checkInWindow;
 
@@ -102,7 +107,7 @@ export function AttendanceActionCard({
     ? "On break"
     : state.checkedIn
       ? isLate
-        ? "Checked in · Late"
+        ? "Checked in · Late arrival"
         : "Checked in · On time"
       : attendance
         ? "Checked out"
@@ -132,6 +137,43 @@ export function AttendanceActionCard({
     }
   };
 
+  const validateLocationBeforePhoto = async (
+    action: "CHECK_IN" | "CHECK_OUT",
+    policy: "GEOFENCE_REQUIRED" | "LOCATION_ONLY" | "NOT_REQUIRED",
+  ) => {
+    if (!company?._id) {
+      throw new Error("Company information is unavailable.");
+    }
+
+    // Obtain fresh GPS whenever the attendance policy requires it.
+    const gps = policy === "NOT_REQUIRED" ? null : await getCurrentLocation();
+
+    // The backend is authoritative for location eligibility.
+    // This must succeed before the camera is opened.
+    const result = await attendanceService.checkLocationEligibility(
+      company._id,
+      {
+        action,
+        ...(gps
+          ? {
+              location: {
+                latitude: gps.latitude,
+                longitude: gps.longitude,
+                accuracy: gps.accuracy,
+                capturedAt: gps.capturedAt,
+              },
+            }
+          : {}),
+      },
+    );
+
+    if (!result.eligible) {
+      throw new Error(
+        "Your attendance location could not be verified. Please try again.",
+      );
+    }
+  };
+
   const handleCheckIn = async () => {
     if (!company?._id) {
       toast.error("Company information is unavailable.");
@@ -140,6 +182,17 @@ export function AttendanceActionCard({
 
     try {
       setIsSubmitting(true);
+
+      const requirement = await attendanceService.getPhotoRequirement(
+        company._id,
+        "CHECK_IN",
+      );
+
+      if (requirement.photoRequired) {
+        await validateLocationBeforePhoto("CHECK_IN", checkInPolicy);
+        setPhotoAction("CHECK_IN");
+        return;
+      }
 
       if (checkInRequiresLocation) {
         const gps = await getCurrentLocation();
@@ -228,6 +281,18 @@ export function AttendanceActionCard({
     try {
       setIsSubmitting(true);
 
+      const requirement = await attendanceService.getPhotoRequirement(
+        company._id,
+        "CHECK_OUT",
+        attendance?._id,
+      );
+
+      if (requirement.photoRequired) {
+        await validateLocationBeforePhoto("CHECK_OUT", checkOutPolicy);
+        setPhotoAction("CHECK_OUT");
+        return;
+      }
+
       if (checkOutRequiresLocation) {
         const gps = await getCurrentLocation();
 
@@ -261,7 +326,76 @@ export function AttendanceActionCard({
     }
   };
 
-  const actionLoading = isSubmitting || isLocating;
+  const handlePhotoCapture = async (photo: File) => {
+    if (!company?._id || !photoAction || isPhotoSubmitting) {
+      return;
+    }
+
+    const action = photoAction;
+
+    try {
+      setIsPhotoSubmitting(true);
+
+      // Collect GPS before uploading so the short-lived photo evidence
+      // remains valid when attendance is submitted.
+      const requiresLocation =
+        action === "CHECK_IN"
+          ? checkInRequiresLocation
+          : checkOutRequiresLocation;
+
+      const gps = requiresLocation ? await getCurrentLocation() : null;
+
+      const evidence = await attendanceService.uploadPhotoEvidence(
+        company._id,
+        {
+          action,
+          photo,
+          ...(action === "CHECK_OUT" && attendance?._id
+            ? { attendanceId: attendance._id }
+            : {}),
+        },
+      );
+
+      const payload = {
+        photoEvidenceId: evidence.evidenceId,
+        notes: "",
+        ...(gps
+          ? {
+              location: {
+                latitude: gps.latitude,
+                longitude: gps.longitude,
+                accuracy: gps.accuracy,
+                capturedAt: gps.capturedAt,
+              },
+            }
+          : {}),
+      };
+
+      if (action === "CHECK_IN") {
+        await attendanceService.checkIn(company._id, payload);
+        toast.success("Checked in successfully.");
+      } else {
+        await attendanceService.checkOut(company._id, payload);
+        toast.success("Checked out successfully.");
+      }
+
+      setPhotoAction(null);
+      await refreshTodayAttendance();
+    } catch (error) {
+      toast.error(
+        getApiErrorMessage(
+          error,
+          error instanceof Error
+            ? error.message
+            : "Unable to complete photo attendance.",
+        ),
+      );
+    } finally {
+      setIsPhotoSubmitting(false);
+    }
+  };
+  const actionLoading =
+    isSubmitting || isLocating || isPhotoSubmitting || photoAction !== null;
 
   const activeLocationPolicy = state.canCheckIn
     ? checkInPolicy
@@ -299,300 +433,314 @@ export function AttendanceActionCard({
       : null;
 
   return (
-    <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-      {/* Header */}
-      <div className="border-b border-slate-100 p-5 sm:p-6">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-          <div>
-            <p className="text-sm font-medium text-slate-500">Today</p>
+    <>
+      {photoAction && (
+        <AttendancePhotoCamera
+          actionLabel={photoAction === "CHECK_IN" ? "Check In" : "Check Out"}
+          onCapture={handlePhotoCapture}
+          onCancel={() => {
+            if (!isPhotoSubmitting) {
+              setPhotoAction(null);
+            }
+          }}
+          isSubmitting={isPhotoSubmitting}
+        />
+      )}
+      <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+        {/* Header */}
+        <div className="border-b border-slate-100 p-5 sm:p-6">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <p className="text-sm font-medium text-slate-500">Today</p>
 
-            <h2 className="mt-1 text-xl font-semibold text-slate-950">
-              {shift?.name ?? "Attendance"}
-            </h2>
+              <h2 className="mt-1 text-xl font-semibold text-slate-950">
+                {shift?.name ?? "Attendance"}
+              </h2>
 
-            {shift ? (
-              <div className="mt-2 flex items-center gap-2 text-sm text-slate-500">
-                <CalendarClock className="h-4 w-4" />
+              {shift ? (
+                <div className="mt-2 flex items-center gap-2 text-sm text-slate-500">
+                  <CalendarClock className="h-4 w-4" />
 
-                <span>
-                  {shift.startTime} - {shift.endTime}
-                </span>
-              </div>
-            ) : null}
-          </div>
-
-          <span className="w-fit rounded-full bg-slate-100 px-3 py-1.5 text-xs font-semibold text-slate-700">
-            {statusLabel}
-          </span>
-        </div>
-      </div>
-
-      <div className="p-5 sm:p-6">
-        {/* Current status */}
-        <div className="rounded-2xl bg-slate-950 px-5 py-7 text-center text-white sm:px-8 sm:py-9">
-          <p className="text-sm font-medium text-slate-300">Current status</p>
-
-          <p className="mt-2 text-2xl font-bold">{statusLabel}</p>
-
-          {attendance && isLate && lateMinutes > 0 ? (
-            <p className="mt-2 text-sm font-medium text-amber-300">
-              Late by {lateMinutes} minute{lateMinutes === 1 ? "" : "s"}
-            </p>
-          ) : null}
-          {/* Actions */}
-          <div className="mt-6 flex flex-col justify-center gap-3 sm:flex-row sm:flex-wrap">
-            {activeActionRequiresLocation ? (
-              <button
-                type="button"
-                onClick={handleRefreshLocation}
-                disabled={actionLoading}
-                className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl border border-white/20 px-6 py-3 text-sm font-semibold text-white transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
-              >
-                {isLocating ? (
-                  <Loader2 className="h-5 w-5 animate-spin" />
-                ) : (
-                  <Crosshair className="h-5 w-5" />
-                )}
-
-                {isLocating
-                  ? "Detecting location..."
-                  : location
-                    ? "Refresh Location"
-                    : "Detect Location"}
-              </button>
-            ) : null}
-            {!attendance &&
-              !state.canCheckIn &&
-              new Date() < new Date(checkInWindow.opensAt) && (
-                <p className="self-center text-sm font-medium text-amber-300">
-                  Check-in opens at {checkInOpensAt}
-                </p>
-              )}
-            {state.canCheckIn ? (
-              <button
-                type="button"
-                onClick={handleCheckIn}
-                disabled={actionLoading}
-                className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-white px-6 py-3 text-sm font-semibold text-slate-950 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
-              >
-                {actionLoading ? (
-                  <Loader2 className="h-5 w-5 animate-spin" />
-                ) : (
-                  <LogIn className="h-5 w-5" />
-                )}
-
-                {isLocating
-                  ? "Getting location..."
-                  : isSubmitting
-                    ? "Checking in..."
-                    : "Check In"}
-              </button>
-            ) : null}
-
-            {state.canStartBreak ? (
-              <button
-                type="button"
-                onClick={handleStartBreak}
-                disabled={actionLoading}
-                className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-white px-6 py-3 text-sm font-semibold text-slate-950 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
-              >
-                {isSubmitting ? (
-                  <Loader2 className="h-5 w-5 animate-spin" />
-                ) : (
-                  <Coffee className="h-5 w-5" />
-                )}
-                Start Break
-              </button>
-            ) : null}
-
-            {state.canEndBreak ? (
-              <button
-                type="button"
-                onClick={handleEndBreak}
-                disabled={actionLoading}
-                className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-white px-6 py-3 text-sm font-semibold text-slate-950 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
-              >
-                {isSubmitting ? (
-                  <Loader2 className="h-5 w-5 animate-spin" />
-                ) : (
-                  <Coffee className="h-5 w-5" />
-                )}
-                End Break
-              </button>
-            ) : null}
-
-            {state.canCheckOut ? (
-              <button
-                type="button"
-                onClick={handleCheckOut}
-                disabled={actionLoading}
-                className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl border border-white/20 px-6 py-3 text-sm font-semibold text-white transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
-              >
-                {actionLoading ? (
-                  <Loader2 className="h-5 w-5 animate-spin" />
-                ) : (
-                  <LogOut className="h-5 w-5" />
-                )}
-
-                {isLocating
-                  ? "Getting location..."
-                  : isSubmitting
-                    ? "Checking out..."
-                    : "Check Out"}
-              </button>
-            ) : null}
-          </div>
-
-          {/* Location verification state */}
-          {(state.canCheckIn || state.canCheckOut) && (
-            <div className="mt-5">
-              {!activeActionRequiresLocation ? (
-                <div className="flex items-center justify-center gap-2 text-xs text-slate-300">
-                  <MapPin className="h-4 w-4" />
-                  Location verification is not required for this attendance
-                  action.
+                  <span>
+                    {shift.startTime} - {shift.endTime}
+                  </span>
                 </div>
-              ) : locationError ? (
-                <div className="mx-auto max-w-lg rounded-xl bg-red-500/10 px-4 py-3 text-left text-xs leading-5 text-red-200">
-                  <div className="flex items-start gap-2">
-                    <MapPin className="mt-0.5 h-4 w-4 shrink-0" />
-                    <span>{locationError}</span>
-                  </div>
-                </div>
-              ) : location ? (
-                <div className="flex items-center justify-center gap-2 text-xs text-emerald-300">
-                  <Navigation className="h-4 w-4" />
-                  Location acquired
-                  {" · "}±{Math.round(location.accuracy)}m
-                </div>
-              ) : activeLocationPolicy === "GEOFENCE_REQUIRED" ? (
-                <div className="flex items-center justify-center gap-2 text-xs text-slate-300">
-                  <MapPin className="h-4 w-4" />
-                  Your location will be verified against the assigned attendance
-                  geofence.
-                </div>
-              ) : (
-                <div className="flex items-center justify-center gap-2 text-xs text-slate-300">
-                  <MapPin className="h-4 w-4" />
-                  Your current location will be recorded. No geofence
-                  restriction applies.
-                </div>
-              )}
+              ) : null}
             </div>
-          )}
 
-          {/* Location map preview */}
-          {activeActionRequiresLocation && location ? (
-            <div className="mx-auto mt-5 max-w-2xl text-left">
-              <AttendanceLocationPreviewMap
-                currentLocation={{
-                  latitude: location.latitude,
-                  longitude: location.longitude,
-                }}
-                attendanceLocation={
-                  hasAssignedAttendanceLocation
-                    ? assignedAttendanceLocation
-                    : null
-                }
-                showGeofence={activeLocationPolicy === "GEOFENCE_REQUIRED"}
-                height="280px"
-              />
+            <span className="w-fit rounded-full bg-slate-100 px-3 py-1.5 text-xs font-semibold text-slate-700">
+              {statusLabel}
+            </span>
+          </div>
+        </div>
 
-              <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                <div className="rounded-xl bg-white/10 px-4 py-3">
-                  <p className="text-xs text-slate-400">GPS accuracy</p>
+        <div className="p-5 sm:p-6">
+          {/* Current status */}
+          <div className="rounded-2xl bg-slate-950 px-5 py-7 text-center text-white sm:px-8 sm:py-9">
+            <p className="text-sm font-medium text-slate-300">Current status</p>
 
-                  <p className="mt-1 text-sm font-semibold text-white">
-                    ±{Math.round(location.accuracy)}m
+            <p className="mt-2 text-2xl font-bold">{statusLabel}</p>
+
+            {attendance && isLate && lateMinutes > 0 ? (
+              <p className="mt-2 text-sm font-medium text-amber-300">
+                Late by {lateMinutes} minute{lateMinutes === 1 ? "" : "s"}
+              </p>
+            ) : null}
+            {/* Actions */}
+            <div className="mt-6 flex flex-col justify-center gap-3 sm:flex-row sm:flex-wrap">
+              {activeActionRequiresLocation ? (
+                <button
+                  type="button"
+                  onClick={handleRefreshLocation}
+                  disabled={actionLoading}
+                  className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl border border-white/20 px-6 py-3 text-sm font-semibold text-white transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
+                >
+                  {isLocating ? (
+                    <Loader2 className="h-5 w-5 animate-spin" />
+                  ) : (
+                    <Crosshair className="h-5 w-5" />
+                  )}
+
+                  {isLocating
+                    ? "Detecting location..."
+                    : location
+                      ? "Refresh Location"
+                      : "Detect Location"}
+                </button>
+              ) : null}
+              {!attendance &&
+                !state.canCheckIn &&
+                new Date() < new Date(checkInWindow.opensAt) && (
+                  <p className="self-center text-sm font-medium text-amber-300">
+                    Check-in opens at {checkInOpensAt}
                   </p>
+                )}
+              {state.canCheckIn ? (
+                <button
+                  type="button"
+                  onClick={handleCheckIn}
+                  disabled={actionLoading}
+                  className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-white px-6 py-3 text-sm font-semibold text-slate-950 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
+                >
+                  {actionLoading ? (
+                    <Loader2 className="h-5 w-5 animate-spin" />
+                  ) : (
+                    <LogIn className="h-5 w-5" />
+                  )}
+
+                  {isLocating
+                    ? "Getting location..."
+                    : isSubmitting
+                      ? "Checking in..."
+                      : "Check In"}
+                </button>
+              ) : null}
+
+              {state.canStartBreak ? (
+                <button
+                  type="button"
+                  onClick={handleStartBreak}
+                  disabled={actionLoading}
+                  className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-white px-6 py-3 text-sm font-semibold text-slate-950 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
+                >
+                  {isSubmitting ? (
+                    <Loader2 className="h-5 w-5 animate-spin" />
+                  ) : (
+                    <Coffee className="h-5 w-5" />
+                  )}
+                  Start Break
+                </button>
+              ) : null}
+
+              {state.canEndBreak ? (
+                <button
+                  type="button"
+                  onClick={handleEndBreak}
+                  disabled={actionLoading}
+                  className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-white px-6 py-3 text-sm font-semibold text-slate-950 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
+                >
+                  {isSubmitting ? (
+                    <Loader2 className="h-5 w-5 animate-spin" />
+                  ) : (
+                    <Coffee className="h-5 w-5" />
+                  )}
+                  End Break
+                </button>
+              ) : null}
+
+              {state.canCheckOut ? (
+                <button
+                  type="button"
+                  onClick={handleCheckOut}
+                  disabled={actionLoading}
+                  className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl border border-white/20 px-6 py-3 text-sm font-semibold text-white transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
+                >
+                  {actionLoading ? (
+                    <Loader2 className="h-5 w-5 animate-spin" />
+                  ) : (
+                    <LogOut className="h-5 w-5" />
+                  )}
+
+                  {isLocating
+                    ? "Getting location..."
+                    : isSubmitting
+                      ? "Checking out..."
+                      : "Check Out"}
+                </button>
+              ) : null}
+            </div>
+
+            {/* Location verification state */}
+            {(state.canCheckIn || state.canCheckOut) && (
+              <div className="mt-5">
+                {!activeActionRequiresLocation ? (
+                  <div className="flex items-center justify-center gap-2 text-xs text-slate-300">
+                    <MapPin className="h-4 w-4" />
+                    Location verification is not required for this attendance
+                    action.
+                  </div>
+                ) : locationError ? (
+                  <div className="mx-auto max-w-lg rounded-xl bg-red-500/10 px-4 py-3 text-left text-xs leading-5 text-red-200">
+                    <div className="flex items-start gap-2">
+                      <MapPin className="mt-0.5 h-4 w-4 shrink-0" />
+                      <span>{locationError}</span>
+                    </div>
+                  </div>
+                ) : location ? (
+                  <div className="flex items-center justify-center gap-2 text-xs text-emerald-300">
+                    <Navigation className="h-4 w-4" />
+                    Location acquired
+                    {" · "}±{Math.round(location.accuracy)}m
+                  </div>
+                ) : activeLocationPolicy === "GEOFENCE_REQUIRED" ? (
+                  <div className="flex items-center justify-center gap-2 text-xs text-slate-300">
+                    <MapPin className="h-4 w-4" />
+                    Your location will be verified against the assigned
+                    attendance geofence.
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-center gap-2 text-xs text-slate-300">
+                    <MapPin className="h-4 w-4" />
+                    Your current location will be recorded. No geofence
+                    restriction applies.
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Location map preview */}
+            {activeActionRequiresLocation && location ? (
+              <div className="mx-auto mt-5 max-w-2xl text-left">
+                <AttendanceLocationPreviewMap
+                  currentLocation={{
+                    latitude: location.latitude,
+                    longitude: location.longitude,
+                  }}
+                  attendanceLocation={
+                    hasAssignedAttendanceLocation
+                      ? assignedAttendanceLocation
+                      : null
+                  }
+                  showGeofence={activeLocationPolicy === "GEOFENCE_REQUIRED"}
+                  height="280px"
+                />
+
+                <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                  <div className="rounded-xl bg-white/10 px-4 py-3">
+                    <p className="text-xs text-slate-400">GPS accuracy</p>
+
+                    <p className="mt-1 text-sm font-semibold text-white">
+                      ±{Math.round(location.accuracy)}m
+                    </p>
+                  </div>
+
+                  {activeLocationPolicy === "GEOFENCE_REQUIRED" &&
+                  hasAssignedAttendanceLocation ? (
+                    <>
+                      <div className="rounded-xl bg-white/10 px-4 py-3">
+                        <p className="text-xs text-slate-400">
+                          Attendance location
+                        </p>
+
+                        <p className="mt-1 text-sm font-semibold text-white">
+                          {assignedAttendanceLocation?.name ??
+                            "Assigned location"}
+                        </p>
+                      </div>
+
+                      <div className="rounded-xl bg-white/10 px-4 py-3">
+                        <p className="text-xs text-slate-400">Distance</p>
+
+                        <p className="mt-1 text-sm font-semibold text-white">
+                          {distanceFromAttendanceLocation !== null
+                            ? `${distanceFromAttendanceLocation}m`
+                            : "—"}
+                        </p>
+                      </div>
+
+                      <div className="rounded-xl bg-white/10 px-4 py-3">
+                        <p className="text-xs text-slate-400">Allowed radius</p>
+
+                        <p className="mt-1 text-sm font-semibold text-white">
+                          {typeof assignedRadius === "number"
+                            ? `${assignedRadius}m`
+                            : "—"}
+                        </p>
+                      </div>
+                    </>
+                  ) : null}
                 </div>
 
                 {activeLocationPolicy === "GEOFENCE_REQUIRED" &&
-                hasAssignedAttendanceLocation ? (
-                  <>
-                    <div className="rounded-xl bg-white/10 px-4 py-3">
-                      <p className="text-xs text-slate-400">
-                        Attendance location
-                      </p>
+                isWithinGeofence !== null ? (
+                  <div
+                    className={`mt-3 rounded-xl px-4 py-3 text-center text-sm font-semibold ${
+                      isWithinGeofence
+                        ? "bg-emerald-500/15 text-emerald-300"
+                        : "bg-red-500/15 text-red-300"
+                    }`}
+                  >
+                    {isWithinGeofence
+                      ? "You are within the permitted attendance area."
+                      : "You appear to be outside the permitted attendance area."}
+                  </div>
+                ) : null}
 
-                      <p className="mt-1 text-sm font-semibold text-white">
-                        {assignedAttendanceLocation?.name ??
-                          "Assigned location"}
-                      </p>
-                    </div>
-
-                    <div className="rounded-xl bg-white/10 px-4 py-3">
-                      <p className="text-xs text-slate-400">Distance</p>
-
-                      <p className="mt-1 text-sm font-semibold text-white">
-                        {distanceFromAttendanceLocation !== null
-                          ? `${distanceFromAttendanceLocation}m`
-                          : "—"}
-                      </p>
-                    </div>
-
-                    <div className="rounded-xl bg-white/10 px-4 py-3">
-                      <p className="text-xs text-slate-400">Allowed radius</p>
-
-                      <p className="mt-1 text-sm font-semibold text-white">
-                        {typeof assignedRadius === "number"
-                          ? `${assignedRadius}m`
-                          : "—"}
-                      </p>
-                    </div>
-                  </>
+                {activeLocationPolicy === "LOCATION_ONLY" ? (
+                  <div className="mt-3 rounded-xl bg-blue-500/10 px-4 py-3 text-center text-sm text-blue-200">
+                    Your current location will be recorded. No geofence
+                    restriction applies.
+                  </div>
                 ) : null}
               </div>
+            ) : null}
+          </div>
 
-              {activeLocationPolicy === "GEOFENCE_REQUIRED" &&
-              isWithinGeofence !== null ? (
-                <div
-                  className={`mt-3 rounded-xl px-4 py-3 text-center text-sm font-semibold ${
-                    isWithinGeofence
-                      ? "bg-emerald-500/15 text-emerald-300"
-                      : "bg-red-500/15 text-red-300"
-                  }`}
-                >
-                  {isWithinGeofence
-                    ? "You are within the permitted attendance area."
-                    : "You appear to be outside the permitted attendance area."}
-                </div>
-              ) : null}
+          {/* Summary */}
+          <div className="mt-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
+            <SummaryItem
+              label="First check in"
+              value={formatTime(attendance?.firstCheckInAt)}
+            />
 
-              {activeLocationPolicy === "LOCATION_ONLY" ? (
-                <div className="mt-3 rounded-xl bg-blue-500/10 px-4 py-3 text-center text-sm text-blue-200">
-                  Your current location will be recorded. No geofence
-                  restriction applies.
-                </div>
-              ) : null}
-            </div>
-          ) : null}
-        </div>
+            <SummaryItem
+              label="Last check out"
+              value={formatTime(attendance?.lastCheckOutAt)}
+            />
 
-        {/* Summary */}
-        <div className="mt-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
-          <SummaryItem
-            label="First check in"
-            value={formatTime(attendance?.firstCheckInAt)}
-          />
+            <SummaryItem
+              label="Worked"
+              value={formatMinutes(attendance?.totalWorkedMinutes ?? 0)}
+            />
 
-          <SummaryItem
-            label="Last check out"
-            value={formatTime(attendance?.lastCheckOutAt)}
-          />
-
-          <SummaryItem
-            label="Worked"
-            value={formatMinutes(attendance?.totalWorkedMinutes ?? 0)}
-          />
-
-          <SummaryItem
-            label="Break"
-            value={formatMinutes(attendance?.totalBreakMinutes ?? 0)}
-          />
+            <SummaryItem
+              label="Break"
+              value={formatMinutes(attendance?.totalBreakMinutes ?? 0)}
+            />
+          </div>
         </div>
       </div>
-    </div>
+    </>
   );
 }
 

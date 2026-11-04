@@ -6,6 +6,22 @@ export type AttendanceMissingCheckoutAction =
   | "AUTO_CLOSE"
   | "REQUIRE_REGULARIZATION";
 
+
+export interface AttendancePhotoCaptureSettings {
+  enabled: boolean;
+
+  requireForCheckIn: boolean;
+  requireForCheckOut: boolean;
+
+  requireForFieldVisitStart: boolean;
+  requireForFieldVisitEnd: boolean;
+
+  requireForOffice: boolean;
+  requireForField: boolean;
+  requireForHybrid: boolean;
+  requireForRemote: boolean;
+}
+
 export interface AttendancePolicy {
   _id: string;
   companyId: string;
@@ -47,6 +63,9 @@ export interface AttendancePolicy {
   fieldVisitEnabled: boolean;
   fieldVisitPurposeRequired: boolean;
   fieldVisitOutcomeRequired: boolean;
+
+  // Attendance photo capture
+  photoCapture?: AttendancePhotoCaptureSettings;
 
   // Policy validity
   effectiveFrom: string;
@@ -92,6 +111,9 @@ export interface CreateAttendancePolicyPayload {
   fieldVisitEnabled?: boolean;
   fieldVisitPurposeRequired?: boolean;
   fieldVisitOutcomeRequired?: boolean;
+
+  // Attendance photo capture
+  photoCapture?: Partial<AttendancePhotoCaptureSettings>;
 
   effectiveFrom: string;
   effectiveTo?: string | null;

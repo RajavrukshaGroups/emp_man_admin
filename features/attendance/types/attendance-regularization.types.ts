@@ -136,6 +136,9 @@ export interface AttendanceRegularization {
     reason: string;
     attachmentUrl?: string;
 
+    editRevision?: number;
+    editHistory?: AttendanceRegularizationEditHistoryEntry[];
+
     status: AttendanceRegularizationStatus;
 
     recommendedBy?:
@@ -256,4 +259,43 @@ export interface RejectAttendanceRegularizationPayload {
 
 export interface CancelAttendanceRegularizationPayload {
     reason?: string;
+}
+
+
+export interface UpdateAttendanceRegularizationPayload {
+    expectedRevision: number;
+
+    requestedCheckInAt?: string | null;
+    requestedCheckOutAt?: string | null;
+
+    requestedBreakStartAt?: string | null;
+    requestedBreakEndAt?: string | null;
+
+    requestedBreakExtensionMinutes?: number | null;
+
+    reason?: string;
+    attachmentUrl?: string;
+}
+
+export interface AttendanceRegularizationEditableValues {
+    requestedCheckInAt?: string | null;
+    requestedCheckOutAt?: string | null;
+
+    requestedBreakStartAt?: string | null;
+    requestedBreakEndAt?: string | null;
+
+    requestedBreakExtensionMinutes?: number | null;
+
+    reason?: string;
+    attachmentUrl?: string;
+}
+
+export interface AttendanceRegularizationEditHistoryEntry {
+    _id?: string;
+
+    editedBy: AttendanceRegularizationUserReference | string;
+    editedAt: string;
+
+    previousValues: AttendanceRegularizationEditableValues;
+    newValues: AttendanceRegularizationEditableValues;
 }

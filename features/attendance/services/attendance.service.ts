@@ -25,7 +25,38 @@ import type {
     StartFieldVisitPayload,
     MonthlyAttendanceReportQuery,
     MonthlyAttendanceReportResponse,
+    AttendancePhotoEvidenceResponse,
+    AttendancePhotoAction,
+    AttendancePhotoRequirementResponse,
+    UploadAttendancePhotoPayload,
 } from "../types/attendance.types";
+
+
+export type AttendanceLocationEligibilityAction =
+    | "CHECK_IN"
+    | "CHECK_OUT";
+
+export interface AttendanceLocationEligibilityPayload {
+    action: AttendanceLocationEligibilityAction;
+    location?: {
+        latitude: number;
+        longitude: number;
+        accuracy?: number | null;
+        capturedAt: string;
+    } | null;
+    attendanceLocationId?: string | null;
+}
+
+export interface AttendanceLocationEligibilityResponse {
+    eligible: boolean;
+    action: AttendanceLocationEligibilityAction;
+    attendanceLocationPolicy:
+    | "GEOFENCE_REQUIRED"
+    | "LOCATION_ONLY"
+    | "NOT_REQUIRED";
+    checkedAt: string;
+}
+
 
 
 export const attendanceService = {
@@ -78,6 +109,21 @@ export const attendanceService = {
             {
                 params: { month },
             },
+        );
+
+        return response.data.data;
+    },
+
+    // ============================================================
+    // ATTENDANCE DETAILS
+    // ============================================================
+
+    async getAttendanceById(
+        companyId: string,
+        attendanceId: string,
+    ): Promise<AttendanceRecord> {
+        const response = await apiClient.get<ApiResponse<AttendanceRecord>>(
+            `/companies/${companyId}/attendance/${attendanceId}`,
         );
 
         return response.data.data;
@@ -203,7 +249,130 @@ export const attendanceService = {
     },
 
 
+    // ============================================================
+    // LOCATION ELIGIBILITY (BEFORE CAMERA)
+    // ============================================================
 
+    async checkLocationEligibility(
+        companyId: string,
+        payload: AttendanceLocationEligibilityPayload,
+    ): Promise<AttendanceLocationEligibilityResponse> {
+        const response = await apiClient.post<
+            ApiResponse<AttendanceLocationEligibilityResponse>
+        >(
+            `/companies/${companyId}/attendance/location-eligibility`,
+            payload,
+        );
+
+        return response.data.data;
+    },
+
+
+    // ============================================================
+    // ATTENDANCE PHOTO EVIDENCE UPLOAD
+    // ============================================================
+
+    async getPhotoRequirement(
+        companyId: string,
+        action: AttendancePhotoAction,
+        attendanceId?: string,
+        fieldVisitId?: string,
+    ): Promise<AttendancePhotoRequirementResponse> {
+        const response = await apiClient.get<
+            ApiResponse<AttendancePhotoRequirementResponse>
+        >(
+            `/companies/${companyId}/attendance/photo-requirement`,
+            {
+                params: {
+                    action,
+                    ...(attendanceId ? { attendanceId } : {}),
+                    ...(fieldVisitId ? { fieldVisitId } : {}),
+                },
+            },
+        );
+
+        return response.data.data;
+    },
+    async uploadPhotoEvidence(
+        companyId: string,
+        payload: UploadAttendancePhotoPayload,
+    ): Promise<AttendancePhotoEvidenceResponse> {
+        const formData = new FormData();
+
+        formData.append("action", payload.action);
+        formData.append("photo", payload.photo);
+
+        if (payload.attendanceId) {
+            formData.append("attendanceId", payload.attendanceId);
+        }
+
+        if (payload.fieldVisitId) {
+            formData.append("fieldVisitId", payload.fieldVisitId);
+        }
+
+        const response = await apiClient.post<
+            ApiResponse<AttendancePhotoEvidenceResponse>
+        >(
+            `/companies/${companyId}/attendance/photo-evidence`,
+            formData,
+            {
+                headers: {
+                    "Content-Type": undefined,
+                },
+            },
+        );
+
+        return response.data.data;
+    },
+
+
+    // ============================================================
+    // SECURE ATTENDANCE SESSION PHOTO VIEWING
+    // ============================================================
+
+    async getAttendanceSessionPhoto(
+        companyId: string,
+        attendanceId: string,
+        sessionId: string,
+        action: "CHECK_IN" | "CHECK_OUT",
+    ): Promise<Blob> {
+        const response = await apiClient.get<Blob>(
+            `/companies/${companyId}/attendance/${attendanceId}/sessions/${sessionId}/photo`,
+            {
+                params: { action },
+                responseType: "blob",
+                headers: {
+                    Accept: "image/jpeg",
+                },
+            },
+        );
+
+        return response.data;
+    },
+
+
+    // ============================================================
+    // SECURE FIELD VISIT PHOTO VIEWING
+    // ============================================================
+
+    async getFieldVisitPhoto(
+        companyId: string,
+        fieldVisitId: string,
+        action: "START" | "END",
+    ): Promise<Blob> {
+        const response = await apiClient.get<Blob>(
+            `/companies/${companyId}/attendance/field-visits/${fieldVisitId}/photo`,
+            {
+                params: { action },
+                responseType: "blob",
+                headers: {
+                    Accept: "image/jpeg",
+                },
+            },
+        );
+
+        return response.data;
+    },
 
     // ============================================================
     // CHECK IN

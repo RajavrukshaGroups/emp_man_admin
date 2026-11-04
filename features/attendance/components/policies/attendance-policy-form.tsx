@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { attendancePolicyService } from "@/features/attendance/services/attendance-policy.service";
 import type {
   AttendanceMissingCheckoutAction,
+  AttendancePhotoCaptureSettings,
   AttendancePolicy,
   AttendancePolicyStatus,
   CreateAttendancePolicyPayload,
@@ -49,10 +50,23 @@ type PolicyFormState = Omit<
   fieldVisitEnabled: boolean;
   fieldVisitPurposeRequired: boolean;
   fieldVisitOutcomeRequired: boolean;
+  photoCapture: AttendancePhotoCaptureSettings;
   effectiveFrom: string;
   effectiveTo: string;
   isDefault: boolean;
   status: AttendancePolicyStatus;
+};
+
+const DEFAULT_PHOTO_CAPTURE: AttendancePhotoCaptureSettings = {
+  enabled: false,
+  requireForCheckIn: true,
+  requireForCheckOut: true,
+  requireForFieldVisitStart: true,
+  requireForFieldVisitEnd: true,
+  requireForOffice: true,
+  requireForField: true,
+  requireForHybrid: true,
+  requireForRemote: true,
 };
 
 const INITIAL_STATE: PolicyFormState = {
@@ -81,6 +95,7 @@ const INITIAL_STATE: PolicyFormState = {
   fieldVisitEnabled: true,
   fieldVisitPurposeRequired: true,
   fieldVisitOutcomeRequired: false,
+  photoCapture: { ...DEFAULT_PHOTO_CAPTURE },
   effectiveFrom: "",
   effectiveTo: "",
   isDefault: true,
@@ -127,6 +142,10 @@ function getInitialState(policy?: AttendancePolicy | null): PolicyFormState {
     fieldVisitEnabled: policy.fieldVisitEnabled,
     fieldVisitPurposeRequired: policy.fieldVisitPurposeRequired,
     fieldVisitOutcomeRequired: policy.fieldVisitOutcomeRequired,
+    photoCapture: {
+      ...DEFAULT_PHOTO_CAPTURE,
+      ...policy.photoCapture,
+    },
     effectiveFrom: dateInputValue(policy.effectiveFrom),
     effectiveTo: dateInputValue(policy.effectiveTo),
     isDefault: policy.isDefault,
@@ -257,6 +276,19 @@ export function AttendancePolicyForm({
     value: PolicyFormState[K],
   ) {
     setForm((current) => ({ ...current, [field]: value }));
+  }
+
+  function updatePhotoCapture(
+    field: keyof AttendancePhotoCaptureSettings,
+    value: boolean,
+  ) {
+    setForm((current) => ({
+      ...current,
+      photoCapture: {
+        ...current.photoCapture,
+        [field]: value,
+      },
+    }));
   }
 
   function validateForm() {
@@ -661,6 +693,130 @@ export function AttendancePolicyForm({
                 />
               </div>
             </section>
+
+            <section>
+              <SectionTitle
+                title="Photo Capture Settings"
+                description="Configure when employees must capture photo evidence during attendance actions. These settings are independent of GPS and geofencing."
+              />
+
+              <div className="mt-4 space-y-5">
+                <ToggleCard
+                  label="Enable attendance photo capture"
+                  description="Master switch for attendance photo requirements. When disabled, employees are not required to capture photos."
+                  checked={form.photoCapture.enabled}
+                  onChange={(value) => updatePhotoCapture("enabled", value)}
+                />
+
+                <div
+                  className={
+                    form.photoCapture.enabled
+                      ? "space-y-5"
+                      : "pointer-events-none space-y-5 opacity-50"
+                  }
+                >
+                  <div>
+                    <h4 className="mb-3 text-sm font-semibold text-slate-900">
+                      Attendance actions
+                    </h4>
+
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <ToggleCard
+                        label="Check-in photo"
+                        description="Require a photo when an employee checks in."
+                        checked={form.photoCapture.requireForCheckIn}
+                        onChange={(value) =>
+                          updatePhotoCapture("requireForCheckIn", value)
+                        }
+                      />
+
+                      <ToggleCard
+                        label="Check-out photo"
+                        description="Require a photo when an employee checks out."
+                        checked={form.photoCapture.requireForCheckOut}
+                        onChange={(value) =>
+                          updatePhotoCapture("requireForCheckOut", value)
+                        }
+                      />
+
+                      <ToggleCard
+                        label="Field visit start photo"
+                        description="Require a photo when an employee starts a field visit."
+                        checked={form.photoCapture.requireForFieldVisitStart}
+                        onChange={(value) =>
+                          updatePhotoCapture("requireForFieldVisitStart", value)
+                        }
+                      />
+
+                      <ToggleCard
+                        label="Field visit end photo"
+                        description="Require a photo when an employee ends a field visit."
+                        checked={form.photoCapture.requireForFieldVisitEnd}
+                        onChange={(value) =>
+                          updatePhotoCapture("requireForFieldVisitEnd", value)
+                        }
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <h4 className="mb-3 text-sm font-semibold text-slate-900">
+                      Employee attendance modes
+                    </h4>
+
+                    <p className="mb-3 text-xs leading-5 text-slate-500">
+                      Select which employee attendance modes are subject to
+                      photo requirements.
+                    </p>
+
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <ToggleCard
+                        label="Office employees"
+                        description="Apply photo requirements to OFFICE attendance."
+                        checked={form.photoCapture.requireForOffice}
+                        onChange={(value) =>
+                          updatePhotoCapture("requireForOffice", value)
+                        }
+                      />
+
+                      <ToggleCard
+                        label="Field employees"
+                        description="Apply photo requirements to FIELD attendance."
+                        checked={form.photoCapture.requireForField}
+                        onChange={(value) =>
+                          updatePhotoCapture("requireForField", value)
+                        }
+                      />
+
+                      <ToggleCard
+                        label="Hybrid employees"
+                        description="Apply photo requirements to HYBRID attendance."
+                        checked={form.photoCapture.requireForHybrid}
+                        onChange={(value) =>
+                          updatePhotoCapture("requireForHybrid", value)
+                        }
+                      />
+
+                      <ToggleCard
+                        label="Remote employees"
+                        description="Apply photo requirements to REMOTE attendance."
+                        checked={form.photoCapture.requireForRemote}
+                        onChange={(value) =>
+                          updatePhotoCapture("requireForRemote", value)
+                        }
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <p className="text-xs leading-5 text-slate-500">
+                  Photo capture is required only when the master switch, the
+                  relevant attendance action, and the employee attendance mode
+                  are enabled. Disabled settings are preserved for future use.
+                </p>
+              </div>
+            </section>
+
             <section>
               <SectionTitle
                 title="Effective dates"
