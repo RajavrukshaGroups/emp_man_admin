@@ -1,5 +1,5 @@
-import { PageLoading } from "@/components/common/page-loading";
+import { CompanyAdministratorEditSkeleton } from "@/features/company-administrators/components/company-administrator-edit-skeleton";
 
 export default function Loading() {
-  return <PageLoading message="Loading administrator details..." />;
+  return <CompanyAdministratorEditSkeleton />;
 }
