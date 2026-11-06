@@ -1,5 +1,5 @@
-import { PageLoading } from "@/components/common/page-loading";
+import { CompanyAdministratorCreateSkeleton } from "@/features/company-administrators/components/company-administrator-create-skeleton";
 
 export default function Loading() {
-  return <PageLoading message="Loading administrator form..." />;
+  return <CompanyAdministratorCreateSkeleton />;
 }

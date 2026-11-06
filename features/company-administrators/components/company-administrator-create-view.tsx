@@ -4,7 +4,6 @@ import Link from "next/link";
 import {
   ArrowLeft,
   Building2,
-  Loader2,
   RefreshCcw,
   ShieldCheck,
 } from "lucide-react";
@@ -17,6 +16,7 @@ import type { Company } from "@/features/companies/types/company.types";
 import { getApiErrorMessage } from "@/lib/axios";
 
 import { CompanyAdministratorForm } from "./company-administrator-form";
+import { CompanyAdministratorCreateSkeleton } from "./company-administrator-create-skeleton";
 
 interface CompanyAdministratorCreateViewProps {
   companyId: string;
@@ -59,17 +59,7 @@ export function CompanyAdministratorCreateView({
   }, [loadCompany]);
 
   if (isLoading) {
-    return (
-      <div className="flex min-h-[400px] items-center justify-center">
-        <div className="flex flex-col items-center gap-3">
-          <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
-
-          <p className="text-sm font-medium text-slate-500">
-            Loading company...
-          </p>
-        </div>
-      </div>
-    );
+    return <CompanyAdministratorCreateSkeleton />;
   }
 
   if (errorMessage || !company) {
@@ -154,7 +144,7 @@ export function CompanyAdministratorCreateView({
 
               <p className="mt-1 text-sm text-slate-500">
                 {company.code}
-                {" · "}
+                {" Â· "}
                 {company.legalName || "No legal name"}
               </p>
             </div>
