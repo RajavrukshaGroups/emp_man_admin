@@ -3,11 +3,12 @@
 import axios from "axios";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { ArrowLeft, Building2, Loader2 } from "lucide-react";
+import { ArrowLeft, Building2 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 
 import { ClientForm } from "@/features/clients/components/client-form";
+import { ClientFormSkeleton } from "@/features/clients/components/client-form-skeleton";
 import { clientService } from "@/features/clients/services/client.service";
 
 import type { Client } from "@/features/clients/types/client.types";
@@ -94,11 +95,7 @@ export default function EditClientPage() {
   }
 
   if (isLoading) {
-    return (
-      <div className="flex min-h-[50vh] items-center justify-center">
-        <Loader2 className="h-7 w-7 animate-spin text-blue-600" />
-      </div>
-    );
+    return <ClientFormSkeleton mode="edit" />;
   }
 
   if (!client) {

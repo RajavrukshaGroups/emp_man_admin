@@ -16,6 +16,7 @@ import {
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 
+import { ClientsTableSkeleton } from "@/features/clients/components/clients-table-skeleton";
 import { clientService } from "@/features/clients/services/client.service";
 
 import type {
@@ -545,9 +546,7 @@ export default function ClientsPage() {
 
       <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
         {isLoading ? (
-          <div className="flex min-h-72 items-center justify-center">
-            <Loader2 className="h-7 w-7 animate-spin text-blue-600" />
-          </div>
+          <ClientsTableSkeleton />
         ) : records.length === 0 ? (
           <div className="flex min-h-72 flex-col items-center justify-center p-8 text-center">
             <div className="flex h-14 w-14 items-center justify-center rounded-full bg-slate-100 text-slate-500">
