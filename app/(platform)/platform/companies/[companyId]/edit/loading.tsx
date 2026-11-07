@@ -1,5 +1,5 @@
-import { PageLoading } from "@/components/common/page-loading";
+import { CompanyFormSkeleton } from "@/features/companies/components/company-form-skeleton";
 
 export default function Loading() {
-  return <PageLoading message="Loading company details..." />;
+  return <CompanyFormSkeleton mode="edit" />;
 }

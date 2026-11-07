@@ -1,5 +1,6 @@
 "use client";
 
+import { CompanyFormSkeleton } from "@/features/companies/components/company-form-skeleton";
 import axios from "axios";
 import Link from "next/link";
 import { ArrowLeft, RefreshCcw } from "lucide-react";
@@ -65,18 +66,7 @@ export function EditCompanyView({ companyId }: EditCompanyViewProps) {
   }, [loadCompany]);
 
   if (isLoading) {
-    return (
-      <div className="space-y-6">
-        <div className="h-10 w-72 animate-pulse rounded-xl bg-slate-200" />
-
-        {Array.from({ length: 4 }).map((_, index) => (
-          <div
-            key={index}
-            className="h-64 animate-pulse rounded-2xl bg-slate-200"
-          />
-        ))}
-      </div>
-    );
+    return <CompanyFormSkeleton mode="edit" />;
   }
 
   if (errorMessage || !company) {
