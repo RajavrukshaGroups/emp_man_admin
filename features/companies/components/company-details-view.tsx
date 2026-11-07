@@ -1,4 +1,5 @@
 "use client";
+import { CompanyDetailsSkeleton } from "@/features/companies/components/company-details-skeleton";
 
 import axios from "axios";
 import Link from "next/link";
@@ -618,25 +619,6 @@ function DetailItem({
       >
         {displayValue}
       </p>
-    </div>
-  );
-}
-
-function CompanyDetailsSkeleton() {
-  return (
-    <div className="space-y-6">
-      <div className="h-10 w-64 animate-pulse rounded-xl bg-slate-200" />
-
-      <div className="h-56 animate-pulse rounded-2xl bg-slate-200" />
-
-      <div className="grid gap-6 xl:grid-cols-2">
-        {Array.from({ length: 6 }).map((_, index) => (
-          <div
-            key={index}
-            className="h-56 animate-pulse rounded-2xl bg-slate-200"
-          />
-        ))}
-      </div>
     </div>
   );
 }
