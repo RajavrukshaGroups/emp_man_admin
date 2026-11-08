@@ -1,5 +1,5 @@
-import { PageLoading } from "@/components/common/page-loading";
+import { DepartmentFormSkeleton } from "@/features/departments/components/department-form-skeleton";
 
 export default function Loading() {
-  return <PageLoading message="Loading department form..." />;
+  return <DepartmentFormSkeleton />;
 }

@@ -1,5 +1,7 @@
 "use client";
 
+import { ManageDepartmentHeadSkeleton } from "@/features/departments/components/manage-department-head-skeleton";
+
 import axios from "axios";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -470,18 +472,6 @@ function InfoCard({ label, value }: { label: string; value: string }) {
       </p>
 
       <p className="mt-2 text-sm font-semibold text-slate-900">{value}</p>
-    </div>
-  );
-}
-
-function ManageDepartmentHeadSkeleton() {
-  return (
-    <div className="space-y-6">
-      <div className="h-12 w-80 animate-pulse rounded-xl bg-slate-200" />
-
-      <div className="h-40 animate-pulse rounded-2xl bg-slate-200" />
-
-      <div className="h-96 animate-pulse rounded-2xl bg-slate-200" />
     </div>
   );
 }

@@ -1,5 +1,7 @@
 "use client";
 
+import { DepartmentFormSkeleton } from "@/features/departments/components/department-form-skeleton";
+
 import axios from "axios";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -644,22 +646,5 @@ function Section({ icon: Icon, title, description, children }: SectionProps) {
         {children}
       </div>
     </section>
-  );
-}
-
-function DepartmentFormSkeleton() {
-  return (
-    <div className="space-y-6">
-      <div className="h-12 w-72 animate-pulse rounded-xl bg-slate-200" />
-
-      {Array.from({
-        length: 3,
-      }).map((_, index) => (
-        <div
-          key={index}
-          className="h-64 animate-pulse rounded-2xl bg-slate-200"
-        />
-      ))}
-    </div>
   );
 }

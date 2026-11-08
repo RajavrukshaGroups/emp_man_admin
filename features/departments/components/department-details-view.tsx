@@ -1,5 +1,7 @@
 "use client";
 
+import { DepartmentDetailsSkeleton } from "@/features/departments/components/department-details-skeleton";
+
 import axios from "axios";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
@@ -636,24 +638,6 @@ function EmptyValue({ message }: { message: string }) {
   );
 }
 
-function DepartmentDetailsSkeleton() {
-  return (
-    <div className="space-y-6">
-      <div className="h-10 w-60 animate-pulse rounded-xl bg-slate-200" />
-
-      <div className="h-56 animate-pulse rounded-2xl bg-slate-200" />
-
-      <div className="grid gap-6 xl:grid-cols-2">
-        {Array.from({ length: 4 }).map((_, index) => (
-          <div
-            key={index}
-            className="h-64 animate-pulse rounded-2xl bg-slate-200"
-          />
-        ))}
-      </div>
-    </div>
-  );
-}
 
 interface ConfirmationModalProps {
   title: string;
