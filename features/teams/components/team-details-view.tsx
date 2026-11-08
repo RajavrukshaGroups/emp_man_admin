@@ -1,5 +1,7 @@
 "use client";
 
+import { TeamDetailsSkeleton } from "./team-details-skeleton";
+
 import axios from "axios";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -19,7 +21,6 @@ import {
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 
-import { PageLoading } from "@/components/common/page-loading";
 
 import { teamService } from "@/features/teams/services/team.service";
 import type {
@@ -138,6 +139,8 @@ export function TeamDetailsView({ teamId }: TeamDetailsViewProps) {
 
   const [isLoading, setIsLoading] = useState(true);
 
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
@@ -148,34 +151,46 @@ export function TeamDetailsView({ teamId }: TeamDetailsViewProps) {
 
   const [showDeleteConfirmation, setShowDeleteConfirmation] = useState(false);
 
-  const loadTeam = useCallback(async () => {
+  const loadTeam = useCallback(async (refresh = false) => {
     if (!company?._id) {
-      setIsLoading(false);
-
-      setErrorMessage("Active company context is unavailable.");
-
+      if (refresh) {
+        toast.error("Active company context is unavailable.");
+      } else {
+        setIsLoading(false);
+        setErrorMessage("Active company context is unavailable.");
+      }
       return;
     }
 
     try {
-      setIsLoading(true);
-      setErrorMessage(null);
+      if (refresh) {
+        setIsRefreshing(true);
+      } else {
+        setIsLoading(true);
+        setErrorMessage(null);
+      }
 
       const data = await teamService.getTeamById(company._id, teamId);
 
       setTeam(data);
+      setErrorMessage(null);
     } catch (error: unknown) {
       const message = getErrorMessage(error);
 
-      setTeam(null);
-      setErrorMessage(message);
+      if (!refresh) {
+        setTeam(null);
+        setErrorMessage(message);
+      }
 
       toast.error(message);
     } finally {
-      setIsLoading(false);
+      if (refresh) {
+        setIsRefreshing(false);
+      } else {
+        setIsLoading(false);
+      }
     }
   }, [company?._id, teamId]);
-
   useEffect(() => {
     void loadTeam();
   }, [loadTeam]);
@@ -234,7 +249,7 @@ export function TeamDetailsView({ teamId }: TeamDetailsViewProps) {
   }
 
   if (isLoading) {
-    return <PageLoading message="Loading team details..." />;
+    return <TeamDetailsSkeleton />;
   }
 
   if (errorMessage || !team) {
@@ -298,12 +313,12 @@ export function TeamDetailsView({ teamId }: TeamDetailsViewProps) {
         <div className="flex flex-wrap gap-3">
           <button
             type="button"
-            onClick={() => void loadTeam()}
-            disabled={isUpdatingStatus || isDeleting}
+            onClick={() => void loadTeam(true)}
+            disabled={isRefreshing || isUpdatingStatus || isDeleting}
             className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
           >
-            <RefreshCcw className="h-4 w-4" />
-            Refresh
+            <RefreshCcw className={`h-4 w-4 ${isRefreshing ? "animate-spin" : ""}`} />
+            {isRefreshing ? "Refreshing..." : "Refresh"}
           </button>
 
           {canUpdateTeam && (
@@ -665,27 +680,6 @@ function EmptyValue({ message }: { message: string }) {
   return (
     <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 px-5 py-8 text-center">
       <p className="text-sm text-slate-500">{message}</p>
-    </div>
-  );
-}
-
-function TeamDetailsSkeleton() {
-  return (
-    <div className="space-y-6">
-      <div className="h-10 w-60 animate-pulse rounded-xl bg-slate-200" />
-
-      <div className="h-56 animate-pulse rounded-2xl bg-slate-200" />
-
-      <div className="grid gap-6 xl:grid-cols-2">
-        {Array.from({
-          length: 4,
-        }).map((_, index) => (
-          <div
-            key={index}
-            className="h-64 animate-pulse rounded-2xl bg-slate-200"
-          />
-        ))}
-      </div>
     </div>
   );
 }

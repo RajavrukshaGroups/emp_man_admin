@@ -1,5 +1,5 @@
-import { PageLoading } from "@/components/common/page-loading";
+import { TeamDetailsSkeleton } from "@/features/teams/components/team-details-skeleton";
 
 export default function Loading() {
-  return <PageLoading message="Loading team details..." />;
+  return <TeamDetailsSkeleton />;
 }

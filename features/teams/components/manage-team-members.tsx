@@ -1,5 +1,7 @@
 "use client";
 
+import { ManageTeamMembersSkeleton } from "./manage-team-members-skeleton";
+
 import axios from "axios";
 import Link from "next/link";
 import {
@@ -635,20 +637,6 @@ function EmptyState({
       <h3 className="mt-3 text-sm font-semibold text-slate-900">{title}</h3>
 
       <p className="mt-1 text-xs text-slate-500">{description}</p>
-    </div>
-  );
-}
-
-function ManageTeamMembersSkeleton() {
-  return (
-    <div className="space-y-6">
-      <div className="h-12 w-80 animate-pulse rounded-xl bg-slate-200" />
-
-      <div className="h-40 animate-pulse rounded-2xl bg-slate-200" />
-
-      <div className="h-80 animate-pulse rounded-2xl bg-slate-200" />
-
-      <div className="h-80 animate-pulse rounded-2xl bg-slate-200" />
     </div>
   );
 }

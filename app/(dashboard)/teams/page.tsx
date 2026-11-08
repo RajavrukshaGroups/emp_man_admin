@@ -13,7 +13,7 @@ import {
   Search,
   UsersRound,
 } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { teamService } from "@/features/teams/services/team.service";
@@ -25,7 +25,6 @@ import type {
   TeamStatus,
 } from "@/features/teams/types/team.types";
 import { useAuthStore } from "@/store/auth.store";
-import { permission } from "process";
 
 const PAGE_SIZE = 10;
 
@@ -127,46 +126,65 @@ export default function TeamsPage() {
   const [page, setPage] = useState(1);
 
   const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const latestRequestId = useRef(0);
 
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  const loadTeams = useCallback(async () => {
+  const loadTeams = useCallback(async (refresh = false) => {
+    const requestId = ++latestRequestId.current;
+
     if (!company?._id) {
       setIsLoading(false);
+      setIsRefreshing(false);
 
-      setErrorMessage("Active company context is unavailable.");
-
+      if (refresh) {
+        toast.error("Active company context is unavailable.");
+      } else {
+        setErrorMessage("Active company context is unavailable.");
+      }
       return;
     }
 
     try {
-      setIsLoading(true);
-      setErrorMessage(null);
+      if (refresh) {
+        setIsRefreshing(true);
+      } else {
+        setIsLoading(true);
+        setIsRefreshing(false);
+        setErrorMessage(null);
+      }
 
       const teamResult = await teamService.getTeams(company._id, {
         page,
         limit: PAGE_SIZE,
-
         search: search || undefined,
-
         status: status || undefined,
-
         sortBy: "createdAt",
         sortOrder: "desc",
       });
 
+      if (requestId !== latestRequestId.current) return;
+
       setResult(teamResult);
+      setErrorMessage(null);
     } catch (error: unknown) {
+      if (requestId !== latestRequestId.current) return;
+
       const message = getErrorMessage(error);
 
-      setErrorMessage(message);
+      if (!refresh) {
+        setErrorMessage(message);
+      }
 
       toast.error(message);
     } finally {
-      setIsLoading(false);
+      if (requestId === latestRequestId.current) {
+        setIsRefreshing(false);
+        setIsLoading(false);
+      }
     }
   }, [company?._id, page, search, status]);
-
   useEffect(() => {
     void loadTeams();
   }, [loadTeams]);
@@ -275,14 +293,14 @@ export default function TeamsPage() {
 
             <button
               type="button"
-              onClick={() => void loadTeams()}
-              disabled={isLoading}
+              onClick={() => void loadTeams(true)}
+              disabled={isLoading || isRefreshing}
               className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-slate-200 px-4 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-60"
             >
               <RefreshCcw
-                className={`h-4 w-4 ${isLoading ? "animate-spin" : ""}`}
+                className={`h-4 w-4 ${isRefreshing ? "animate-spin" : ""}`}
               />
-              Refresh
+              {isRefreshing ? "Refreshing..." : "Refresh"}
             </button>
           </div>
         </div>
