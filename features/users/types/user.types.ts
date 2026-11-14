@@ -28,6 +28,11 @@ export interface User {
 
     status: UserStatus;
 
+    passwordSetupStatus?:
+    | "LEGACY"
+    | "INVITATION_PENDING"
+    | "COMPLETED";
+
     emailVerified: boolean;
     mobileVerified: boolean;
 
@@ -95,8 +100,9 @@ export interface CreateUserPayload {
     email: string;
     mobile?: string;
 
-    password: string;
+    password?: string;
 
+    accountSetupMethod?: "PASSWORD" | "EMAIL_INVITATION";
     profilePhoto?: string;
 
     gender?: UserGender;
@@ -134,4 +140,5 @@ export interface ChangePasswordPayload {
 
 export interface ResetPasswordPayload {
     newPassword: string;
+    confirmPassword: string;
 }

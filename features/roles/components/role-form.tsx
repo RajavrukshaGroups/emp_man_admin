@@ -16,6 +16,8 @@ import {
 } from "../validations/role.validation";
 import { RolePermissionSelector } from "./role-permission-selector";
 import type { Role } from "../types/role.types";
+
+import { useAuthStore } from "@/store/auth.store";
 interface RoleFormProps {
   companyId: string;
   role?: Role;
@@ -46,6 +48,14 @@ function getErrorMessage(error: unknown): string {
 export function RoleForm({ companyId, role }: RoleFormProps) {
   const router = useRouter();
 
+  const userPermissions = useAuthStore((state) => state.permissions);
+
+  const currentRoleScope = useAuthStore((state) => state.role?.scopeType);
+
+  const canDelegatePermissions = userPermissions.includes(
+    "role.permission_delegate",
+  );
+
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const isEditMode = Boolean(role);
@@ -56,7 +66,14 @@ export function RoleForm({ companyId, role }: RoleFormProps) {
     description: role?.description ?? "",
 
     scopeType:
-      role?.scopeType === "GLOBAL" ? "COMPANY" : (role?.scopeType ?? "COMPANY"),
+      role?.scopeType === "GLOBAL"
+        ? "COMPANY"
+        : (role?.scopeType ??
+          (currentRoleScope === "TEAM"
+            ? "TEAM"
+            : currentRoleScope === "DEPARTMENT"
+              ? "DEPARTMENT"
+              : "COMPANY")),
 
     permissionIds:
       role?.permissionIds.map((permission) =>
@@ -71,7 +88,25 @@ export function RoleForm({ companyId, role }: RoleFormProps) {
     isLoading: isPermissionsLoading,
     error: permissionsError,
     refetch: refetchPermissions,
-  } = usePermissions();
+  } = usePermissions(!isEditMode);
+  const grantablePermissions = canDelegatePermissions
+    ? permissions
+    : permissions.filter((permission) =>
+        userPermissions.includes(permission.code),
+      );
+
+  const scopeHierarchy = {
+    TEAM: 1,
+    DEPARTMENT: 2,
+    COMPANY: 3,
+  } as const;
+
+  const availableScopes = (["COMPANY", "DEPARTMENT", "TEAM"] as const).filter(
+    (scope) =>
+      currentRoleScope !== undefined &&
+      currentRoleScope !== "GLOBAL" &&
+      scopeHierarchy[scope] <= scopeHierarchy[currentRoleScope],
+  );
 
   const {
     register,
@@ -105,6 +140,18 @@ export function RoleForm({ companyId, role }: RoleFormProps) {
   };
 
   const onSubmit: SubmitHandler<CreateRoleFormValues> = async (values) => {
+    if (!isEditMode && (isPermissionsLoading || permissionsError)) {
+      toast.error(
+        "Permissions are not available. Please reload them before creating a role.",
+      );
+      return;
+    }
+
+    if (!isEditMode && !availableScopes.includes(values.scopeType)) {
+      toast.error("You cannot create a role with the selected scope.");
+      return;
+    }
+
     if (!companyId) {
       toast.error("No active company was found.");
       return;
@@ -200,7 +247,11 @@ export function RoleForm({ companyId, role }: RoleFormProps) {
 
           <button
             type="submit"
-            disabled={isSubmitting || (!isEditMode && isPermissionsLoading)}
+            disabled={
+              isSubmitting ||
+              (!isEditMode &&
+                (isPermissionsLoading || Boolean(permissionsError)))
+            }
             className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-slate-950 px-4 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {isSubmitting ? (
@@ -351,11 +402,15 @@ export function RoleForm({ companyId, role }: RoleFormProps) {
                 errors.scopeType ? "border-red-500" : "",
               ].join(" ")}
             >
-              <option value="COMPANY">Company</option>
-
-              <option value="DEPARTMENT">Department</option>
-
-              <option value="TEAM">Team</option>
+              {availableScopes.map((scope) => (
+                <option key={scope} value={scope}>
+                  {scope === "COMPANY"
+                    ? "Company"
+                    : scope === "DEPARTMENT"
+                      ? "Department"
+                      : "Team"}
+                </option>
+              ))}
             </select>
 
             {errors.scopeType ? (
@@ -415,7 +470,7 @@ export function RoleForm({ companyId, role }: RoleFormProps) {
             render={({ field, fieldState }) => (
               <div className="space-y-3">
                 <RolePermissionSelector
-                  permissions={permissions}
+                  permissions={grantablePermissions}
                   value={field.value}
                   onChange={field.onChange}
                   isLoading={isPermissionsLoading}
@@ -462,7 +517,11 @@ export function RoleForm({ companyId, role }: RoleFormProps) {
 
           <button
             type="submit"
-            disabled={isSubmitting || (!isEditMode && isPermissionsLoading)}
+            disabled={
+              isSubmitting ||
+              (!isEditMode &&
+                (isPermissionsLoading || Boolean(permissionsError)))
+            }
             className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-slate-950 px-5 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {isSubmitting ? (

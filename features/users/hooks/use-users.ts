@@ -1,109 +1,150 @@
 "use client";
 
 import axios from "axios";
-import {
-    useCallback,
-    useEffect,
-    useState,
-} from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { userService } from "../services/user.service";
-
-import type {
-    UserListData,
-    UserListParams,
-} from "../types/user.types";
+import type { UserListData, UserListParams } from "../types/user.types";
 
 interface UseUsersResult {
-    data: UserListData | null;
-    isLoading: boolean;
-    error: string | null;
-    refetch: () => Promise<void>;
+  data: UserListData | null;
+  isLoading: boolean;
+  isRefreshing: boolean;
+  error: string | null;
+  refetch: () => Promise<void>;
 }
 
-export function useUsers(
-    params: UserListParams = {},
-): UseUsersResult {
-    const [data, setData] =
-        useState<UserListData | null>(null);
+function getErrorMessage(error: unknown): string {
+  if (axios.isAxiosError(error)) {
+    return error.response?.data?.message ?? "Unable to load users.";
+  }
 
-    const [isLoading, setIsLoading] =
-        useState(true);
+  if (error instanceof Error) {
+    return error.message;
+  }
 
-    const [error, setError] =
-        useState<string | null>(null);
+  return "Unable to load users.";
+}
 
-    const {
-        page,
-        limit,
-        search,
-        status,
-        gender,
-        emailVerified,
-        mobileVerified,
-        sortBy,
-        sortOrder,
-    } = params;
+export function useUsers(params: UserListParams = {}): UseUsersResult {
+  const {
+    page,
+    limit,
+    search,
+    status,
+    gender,
+    emailVerified,
+    mobileVerified,
+    sortBy,
+    sortOrder,
+  } = params;
 
-    const fetchUsers = useCallback(async () => {
-        try {
-            setIsLoading(true);
-            setError(null);
+  const [data, setData] = useState<UserListData | null>(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-            const result = await userService.getUsers({
-                page,
-                limit,
-                search,
-                status,
-                gender,
-                emailVerified,
-                mobileVerified,
-                sortBy,
-                sortOrder,
-            });
+  const requestIdRef = useRef(0);
+  const mountedRef = useRef(false);
 
-            setData(result);
-        } catch (error: unknown) {
-            console.error(
-                "Failed to fetch users:",
-                error,
-            );
+  const queryKey = JSON.stringify([
+    page,
+    limit,
+    search,
+    status,
+    gender,
+    emailVerified,
+    mobileVerified,
+    sortBy,
+    sortOrder,
+  ]);
 
-            if (axios.isAxiosError(error)) {
-                setError(
-                    error.response?.data?.message ??
-                    "Unable to load users.",
-                );
-            } else if (error instanceof Error) {
-                setError(error.message);
-            } else {
-                setError("Unable to load users.");
-            }
+  const [loadedQueryKey, setLoadedQueryKey] = useState<string | null>(null);
+  const [errorQueryKey, setErrorQueryKey] = useState<string | null>(null);
 
-            setData(null);
-        } finally {
-            setIsLoading(false);
+  const fetchUsers = useCallback(
+    async (refresh = false): Promise<void> => {
+      const requestId = ++requestIdRef.current;
+
+      setError(null);
+      setErrorQueryKey(null);
+
+      setIsRefreshing(refresh);
+
+      try {
+        const result = await userService.getUsers({
+          page,
+          limit,
+          search,
+          status,
+          gender,
+          emailVerified,
+          mobileVerified,
+          sortBy,
+          sortOrder,
+        });
+
+        if (!mountedRef.current || requestId !== requestIdRef.current) {
+          return;
         }
-    }, [
-        page,
-        limit,
-        search,
-        status,
-        gender,
-        emailVerified,
-        mobileVerified,
-        sortBy,
-        sortOrder,
-    ]);
 
-    useEffect(() => {
-        void fetchUsers();
-    }, [fetchUsers]);
+        setData(result);
+        setLoadedQueryKey(queryKey);
+      } catch (error: unknown) {
+        if (!mountedRef.current || requestId !== requestIdRef.current) {
+          return;
+        }
 
-    return {
-        data,
-        isLoading,
-        error,
-        refetch: fetchUsers,
+        console.error("Failed to fetch users:", error);
+        setError(getErrorMessage(error));
+        setErrorQueryKey(queryKey);
+
+        if (!refresh) {
+          setData(null);
+          setLoadedQueryKey(null);
+        }
+      } finally {
+        if (mountedRef.current && requestId === requestIdRef.current) {
+          setIsRefreshing(false);
+        }
+      }
+    },
+    [
+      page,
+      limit,
+      search,
+      status,
+      gender,
+      emailVerified,
+      mobileVerified,
+      sortBy,
+      sortOrder,
+      queryKey,
+    ],
+  );
+
+  useEffect(() => {
+    mountedRef.current = true;
+    void fetchUsers();
+
+    return () => {
+      mountedRef.current = false;
+      requestIdRef.current += 1;
     };
+  }, [fetchUsers]);
+
+  const refetch = useCallback(async (): Promise<void> => {
+    await fetchUsers(true);
+  }, [fetchUsers]);
+
+  const hasCurrentData = loadedQueryKey === queryKey;
+  const currentError = errorQueryKey === queryKey ? error : null;
+  const isQueryLoading = !hasCurrentData && !currentError;
+
+  return {
+    data: hasCurrentData ? data : null,
+    isLoading: isQueryLoading,
+    isRefreshing,
+    error: currentError,
+    refetch,
+  };
 }

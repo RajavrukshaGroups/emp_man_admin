@@ -68,6 +68,14 @@ export const userService = {
         return response.data.data;
     },
 
+    async sendLoginInvitation(
+        userId: string,
+    ): Promise<void> {
+        await apiClient.post<ApiResponse<unknown>>(
+            `/users/${userId}/send-invitation`,
+        );
+    },
+
     async changePassword(
         userId: string,
         payload: ChangePasswordPayload,

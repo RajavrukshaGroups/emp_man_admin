@@ -1,11 +1,11 @@
-"use client";
-
-import { useParams } from "next/navigation";
-
 import { EditUserForm } from "@/features/users/components/edit-user-form";
 
-export default function EditUserPage() {
-  const params = useParams<{ userId: string }>();
+export default async function EditUserPage({
+  params,
+}: {
+  params: Promise<{ userId: string }>;
+}) {
+  const { userId } = await params;
 
-  return <EditUserForm userId={params.userId} />;
+  return <EditUserForm userId={userId} />;
 }

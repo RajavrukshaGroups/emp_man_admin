@@ -59,4 +59,11 @@ export const employeeService = {
 
         return response.data.data;
     },
+    async sendLoginInvitation(
+        userId: string,
+    ): Promise<void> {
+        await apiClient.post(
+            `/users/${userId}/send-invitation`,
+        );
+    },
 };

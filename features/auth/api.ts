@@ -55,3 +55,26 @@ export const resetPassword = async (
 
   return response.data;
 };
+
+/**
+ * Accept Employee Login Invitation
+ *
+ * Public endpoint. The backend validates the invitation token,
+ * password requirements, and account eligibility.
+ */
+export interface AcceptInvitationPayload {
+  token: string;
+  newPassword: string;
+  confirmPassword: string;
+}
+
+export const acceptInvitation = async (
+  payload: AcceptInvitationPayload,
+): Promise<ApiResponse<null>> => {
+  const response = await publicAuthClient.post<ApiResponse<null>>(
+    "/auth/accept-invitation",
+    payload,
+  );
+
+  return response.data;
+};

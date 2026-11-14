@@ -19,7 +19,7 @@ export interface DashboardNavigationItem {
     href: string;
     icon: React.ElementType;
     permission?: string;
-    roles?: string[];
+    permissionsAny?: string[];
 }
 
 export const dashboardNavigation: DashboardNavigationItem[] = [
@@ -103,7 +103,7 @@ export const dashboardNavigation: DashboardNavigationItem[] = [
         title: "Users",
         href: "/users",
         icon: Users,
-        permission: "admin.read",
+        permissionsAny: ["admin.read", "user.employee_account_read"],
     },
     {
         title: "Profile",

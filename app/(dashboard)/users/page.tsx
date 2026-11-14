@@ -3,20 +3,19 @@
 import axios from "axios";
 import {
   AlertCircle,
-  Loader2,
   Plus,
   RefreshCw,
   Search,
   UsersRound,
   X,
 } from "lucide-react";
-import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import { ResetPasswordDialog } from "@/features/users/components/reset-password-dialog";
 import { UserStatusDialog } from "@/features/users/components/user-status-dialog";
 import { UserTable } from "@/features/users/components/user-table";
+import { UserTableSkeleton } from "@/features/users/components/user-table-skeleton";
 import { useUsers } from "@/features/users/hooks/use-users";
 import { userService } from "@/features/users/services/user.service";
 import type {
@@ -116,6 +115,10 @@ export default function UsersPage() {
 
   const [isResettingPassword, setIsResettingPassword] = useState(false);
 
+  const [sendingInvitationUserId, setSendingInvitationUserId] = useState<
+    string | null
+  >(null);
+
   useEffect(() => {
     const timeout = window.setTimeout(() => {
       setDebouncedSearch(searchInput.trim());
@@ -127,7 +130,7 @@ export default function UsersPage() {
     };
   }, [searchInput]);
 
-  const { data, isLoading, error, refetch } = useUsers({
+  const { data, isLoading, isRefreshing, error, refetch } = useUsers({
     page,
     limit: PAGE_LIMIT,
     search: debouncedSearch || undefined,
@@ -145,33 +148,23 @@ export default function UsersPage() {
     sortOrder: "desc",
   });
 
-  /*
-   * The backend permission seed previously used the
-   * "admin" module for account administration.
-   *
-   * The user.* alternatives are also included so this
-   * page continues working if the permission module is
-   * later renamed to "user".
-   */
+  const canRead =
+    permissions.includes("admin.read") ||
+    permissions.includes("user.employee_account_read");
 
-  const canRead = permissions.includes("admin.read");
+  const canUpdate =
+    permissions.includes("admin.update") ||
+    permissions.includes("user.employee_account_update");
 
-  const canCreate = permissions.includes("admin.create");
+  const canManageStatus =
+    permissions.includes("admin.deactivate") ||
+    permissions.includes("user.employee_account_status_manage");
 
-  const canUpdate = permissions.includes("admin.update");
+  const canResetPassword =
+    permissions.includes("admin.update") ||
+    permissions.includes("user.employee_account_reset_password");
 
-  const canDeactivate = permissions.includes("admin.deactivate");
-
-  /*
-   * There is currently no dedicated permission for:
-   * - admin.delete
-   * - admin.reset_password
-   *
-   * Password reset is treated as an administrative update.
-   * Delete is hidden until the backend introduces a clear
-   * permission or confirms admin.deactivate should authorize it.
-   */
-  const canResetPassword = canUpdate;
+  const canSendInvitation = permissions.includes("admin.invitation_send");
 
   const users = data?.records ?? [];
 
@@ -264,6 +257,7 @@ export default function UsersPage() {
 
       await userService.resetPassword(user._id, {
         newPassword,
+        confirmPassword: newPassword,
       });
 
       toast.success(
@@ -275,6 +269,30 @@ export default function UsersPage() {
       toast.error(getErrorMessage(error, "Unable to reset the password."));
     } finally {
       setIsResettingPassword(false);
+    }
+  }
+
+  async function handleSendInvitation(user: User) {
+    if (
+      !canSendInvitation ||
+      user.passwordSetupStatus !== "INVITATION_PENDING" ||
+      sendingInvitationUserId !== null
+    ) {
+      return;
+    }
+
+    setSendingInvitationUserId(user._id);
+
+    try {
+      await userService.sendLoginInvitation(user._id);
+
+      toast.success(`Login invitation sent successfully to ${user.email}.`);
+
+      await refetch();
+    } catch (error: unknown) {
+      toast.error(getErrorMessage(error, "Unable to send login invitation."));
+    } finally {
+      setSendingInvitationUserId(null);
     }
   }
 
@@ -323,22 +341,12 @@ export default function UsersPage() {
                 </h1>
 
                 <p className="mt-1 text-sm text-gray-500">
-                  Create and manage application login accounts, access status
-                  and credentials.
+                  Manage application login accounts, access status and
+                  credentials.
                 </p>
               </div>
             </div>
           </div>
-
-          {canCreate && (
-            <Link
-              href="/users/new"
-              className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700 focus:outline-none focus:ring-4 focus:ring-blue-500/20"
-            >
-              <Plus className="h-4 w-4" />
-              Create user
-            </Link>
-          )}
         </div>
 
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
@@ -552,30 +560,32 @@ export default function UsersPage() {
             <button
               type="button"
               onClick={() => void refetch()}
-              disabled={isLoading}
+              disabled={isLoading || isRefreshing}
               className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-4 text-sm font-semibold text-gray-700 transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
             >
               <RefreshCw
-                className={["h-4 w-4", isLoading ? "animate-spin" : ""].join(
+                className={["h-4 w-4", isRefreshing ? "animate-spin" : ""].join(
                   " ",
                 )}
               />
-              Refresh
+              {isRefreshing ? "Refreshing..." : "Refresh"}
             </button>
           </div>
         </div>
 
-        {isLoading && !data ? (
-          <div className="flex min-h-[360px] items-center justify-center rounded-2xl border border-gray-200 bg-white shadow-sm">
-            <div className="text-center">
-              <Loader2 className="mx-auto h-8 w-8 animate-spin text-blue-600" />
-
-              <p className="mt-3 text-sm font-medium text-gray-600">
-                Loading users...
-              </p>
-            </div>
+        {error && data && (
+          <div
+            role="alert"
+            className="mb-4 flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700"
+          >
+            <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+            <p>Unable to refresh users: {error}</p>
           </div>
-        ) : error ? (
+        )}
+
+        {isLoading && !data ? (
+          <UserTableSkeleton />
+        ) : error && !data ? (
           <div className="rounded-2xl border border-red-200 bg-red-50 px-6 py-12 text-center">
             <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-red-100 text-red-600">
               <AlertCircle className="h-6 w-6" />
@@ -607,14 +617,18 @@ export default function UsersPage() {
             currentUserId={currentUserId}
             canRead={canRead}
             canUpdate={canUpdate}
-            canActivate={canUpdate}
-            canDeactivate={canDeactivate}
-            canSuspend={canUpdate}
+            canActivate={canManageStatus}
+            canDeactivate={canManageStatus}
+            canSuspend={canManageStatus}
             canResetPassword={canResetPassword}
             isUpdatingStatus={isUpdatingStatus}
             onPageChange={handlePageChange}
             onStatusChange={handleOpenStatusDialog}
             onResetPassword={handleOpenResetPasswordDialog}
+            canSendInvitation={canSendInvitation}
+            isSendingInvitation={sendingInvitationUserId !== null}
+            sendingInvitationUserId={sendingInvitationUserId}
+            onSendInvitation={handleSendInvitation}
           />
         )}
       </div>

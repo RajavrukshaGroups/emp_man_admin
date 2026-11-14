@@ -22,10 +22,10 @@ import { toast } from "sonner";
 
 import { userService } from "@/features/users/services/user.service";
 import {
-  createUserSchema,
-  type CreateUserFormInput,
-  type CreateUserFormValues,
-} from "@/features/users/validations/create-user.schema";
+  createOnboardingUserSchema,
+  type CreateOnboardingUserFormInput,
+  type CreateOnboardingUserFormValues,
+} from "@/features/users/validations/create-onboarding-user.schema";
 import { useAuthStore } from "@/store/auth.store";
 import type { User } from "@/features/users/types/user.types";
 
@@ -64,6 +64,8 @@ export function UserAccountStep({ onSuccess }: UserAccountStepProps) {
   // const canCreate = permissions.includes("admin.create");
   const canCreate = permissions.includes("employee.create");
 
+  const canSendInvitation = permissions.includes("admin.invitation_send");
+
   const [showPassword, setShowPassword] = useState(false);
 
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
@@ -72,9 +74,15 @@ export function UserAccountStep({ onSuccess }: UserAccountStepProps) {
     register,
     handleSubmit,
     watch,
+    setValue,
+    clearErrors,
     formState: { errors, isSubmitting },
-  } = useForm<CreateUserFormInput, unknown, CreateUserFormValues>({
-    resolver: zodResolver(createUserSchema),
+  } = useForm<
+    CreateOnboardingUserFormInput,
+    unknown,
+    CreateOnboardingUserFormValues
+  >({
+    resolver: zodResolver(createOnboardingUserSchema),
 
     defaultValues: {
       firstName: "",
@@ -86,12 +94,16 @@ export function UserAccountStep({ onSuccess }: UserAccountStepProps) {
       profilePhoto: "",
       gender: undefined,
       dateOfBirth: "",
+      accountSetupMethod: canSendInvitation ? "EMAIL_INVITATION" : "PASSWORD",
       password: "",
       confirmPassword: "",
       status: "ACTIVE",
     },
     mode: "onBlur",
   });
+
+  const accountSetupMethod = watch("accountSetupMethod");
+
   const firstName = watch("firstName");
   const middleName = watch("middleName");
   const lastName = watch("lastName");
@@ -105,15 +117,24 @@ export function UserAccountStep({ onSuccess }: UserAccountStepProps) {
       .join(" ") ||
     "New user";
 
-  async function onSubmit(values: CreateUserFormValues) {
+  async function onSubmit(values: CreateOnboardingUserFormValues) {
     if (!canCreate) {
       toast.error("You do not have permission to onboard employees.");
       return;
     }
 
     try {
-      const { confirmPassword: _confirmPassword, ...payload } = values;
+      if (
+        values.accountSetupMethod === "EMAIL_INVITATION" &&
+        !canSendInvitation
+      ) {
+        toast.error(
+          "You do not have permission to create invitation-based accounts.",
+        );
+        return;
+      }
 
+      const { confirmPassword: _confirmPassword, ...payload } = values;
       const createdUser = await userService.createUser({
         firstName: payload.firstName,
         middleName: payload.middleName,
@@ -121,7 +142,11 @@ export function UserAccountStep({ onSuccess }: UserAccountStepProps) {
         displayName: payload.displayName,
         email: payload.email,
         mobile: payload.mobile,
-        password: payload.password,
+        accountSetupMethod: payload.accountSetupMethod,
+        password:
+          payload.accountSetupMethod === "PASSWORD"
+            ? payload.password
+            : undefined,
         profilePhoto: payload.profilePhoto,
         gender: payload.gender,
         dateOfBirth: payload.dateOfBirth,
@@ -482,87 +507,133 @@ export function UserAccountStep({ onSuccess }: UserAccountStepProps) {
         </div>
 
         <div className="grid grid-cols-1 gap-5 p-5 sm:grid-cols-2 sm:p-6">
-          <div>
-            <label htmlFor="password" className={labelClassName}>
-              Password <span className="text-red-500">*</span>
+          <div className="sm:col-span-2">
+            <label htmlFor="accountSetupMethod" className={labelClassName}>
+              Account setup method <span className="text-red-500">*</span>
             </label>
 
-            <div className="relative">
-              <input
-                id="password"
-                type={showPassword ? "text" : "password"}
-                placeholder="Enter secure password"
-                autoComplete="new-password"
-                disabled={isSubmitting}
-                className={`${inputClassName} pr-11`}
-                {...register("password")}
-              />
+            <select
+              id="accountSetupMethod"
+              disabled={isSubmitting}
+              className={selectClassName}
+              {...register("accountSetupMethod", {
+                onChange: (event) => {
+                  if (event.target.value === "EMAIL_INVITATION") {
+                    setValue("password", "", { shouldValidate: false });
+                    setValue("confirmPassword", "", { shouldValidate: false });
+                    clearErrors(["password", "confirmPassword"]);
+                    setShowPassword(false);
+                    setShowConfirmPassword(false);
+                  }
+                },
+              })}
+            >
+              {canSendInvitation && (
+                <option value="EMAIL_INVITATION">
+                  Email invitation — Employee sets their own password
+                </option>
+              )}
 
-              <button
-                type="button"
-                onClick={() => setShowPassword((current) => !current)}
-                disabled={isSubmitting}
-                className="absolute right-0 top-0 inline-flex h-11 w-11 items-center justify-center text-slate-400 transition hover:text-slate-700 disabled:cursor-not-allowed"
-                aria-label={showPassword ? "Hide password" : "Show password"}
-              >
-                {showPassword ? (
-                  <EyeOff className="h-4 w-4" />
-                ) : (
-                  <Eye className="h-4 w-4" />
-                )}
-              </button>
-            </div>
-
-            {errors.password && (
-              <p className={errorClassName}>{errors.password.message}</p>
-            )}
+              <option value="PASSWORD">Set password manually</option>
+            </select>
 
             <p className="mt-2 text-xs leading-5 text-slate-500">
-              Use at least 8 characters with uppercase, lowercase, number and
-              special character.
+              {accountSetupMethod === "EMAIL_INVITATION"
+                ? "After completing employee onboarding, send a login invitation from the Users page."
+                : "Set an initial password for the employee's account."}
             </p>
           </div>
 
-          <div>
-            <label htmlFor="confirmPassword" className={labelClassName}>
-              Confirm password <span className="text-red-500">*</span>
-            </label>
+          {accountSetupMethod === "PASSWORD" && (
+            <>
+              <div>
+                <label htmlFor="password" className={labelClassName}>
+                  Password <span className="text-red-500">*</span>
+                </label>
 
-            <div className="relative">
-              <input
-                id="confirmPassword"
-                type={showConfirmPassword ? "text" : "password"}
-                placeholder="Re-enter password"
-                autoComplete="new-password"
-                disabled={isSubmitting}
-                className={`${inputClassName} pr-11`}
-                {...register("confirmPassword")}
-              />
+                <div className="relative">
+                  <input
+                    id="password"
+                    type={showPassword ? "text" : "password"}
+                    placeholder="Enter secure password"
+                    autoComplete="new-password"
+                    disabled={isSubmitting}
+                    className={`${inputClassName} pr-11`}
+                    {...register("password")}
+                  />
 
-              <button
-                type="button"
-                onClick={() => setShowConfirmPassword((current) => !current)}
-                disabled={isSubmitting}
-                className="absolute right-0 top-0 inline-flex h-11 w-11 items-center justify-center text-slate-400 transition hover:text-slate-700 disabled:cursor-not-allowed"
-                aria-label={
-                  showConfirmPassword
-                    ? "Hide confirmation password"
-                    : "Show confirmation password"
-                }
-              >
-                {showConfirmPassword ? (
-                  <EyeOff className="h-4 w-4" />
-                ) : (
-                  <Eye className="h-4 w-4" />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword((current) => !current)}
+                    disabled={isSubmitting}
+                    className="absolute right-0 top-0 inline-flex h-11 w-11 items-center justify-center text-slate-400 transition hover:text-slate-700 disabled:cursor-not-allowed"
+                    aria-label={
+                      showPassword ? "Hide password" : "Show password"
+                    }
+                  >
+                    {showPassword ? (
+                      <EyeOff className="h-4 w-4" />
+                    ) : (
+                      <Eye className="h-4 w-4" />
+                    )}
+                  </button>
+                </div>
+
+                {errors.password && (
+                  <p className={errorClassName}>{errors.password.message}</p>
                 )}
-              </button>
-            </div>
 
-            {errors.confirmPassword && (
-              <p className={errorClassName}>{errors.confirmPassword.message}</p>
-            )}
-          </div>
+                <p className="mt-2 text-xs leading-5 text-slate-500">
+                  Use at least 8 characters with uppercase, lowercase, number
+                  and special character.
+                </p>
+              </div>
 
+              <div>
+                <label htmlFor="confirmPassword" className={labelClassName}>
+                  Confirm password <span className="text-red-500">*</span>
+                </label>
+
+                <div className="relative">
+                  <input
+                    id="confirmPassword"
+                    type={showConfirmPassword ? "text" : "password"}
+                    placeholder="Re-enter password"
+                    autoComplete="new-password"
+                    disabled={isSubmitting}
+                    className={`${inputClassName} pr-11`}
+                    {...register("confirmPassword")}
+                  />
+
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setShowConfirmPassword((current) => !current)
+                    }
+                    disabled={isSubmitting}
+                    className="absolute right-0 top-0 inline-flex h-11 w-11 items-center justify-center text-slate-400 transition hover:text-slate-700 disabled:cursor-not-allowed"
+                    aria-label={
+                      showConfirmPassword
+                        ? "Hide confirmation password"
+                        : "Show confirmation password"
+                    }
+                  >
+                    {showConfirmPassword ? (
+                      <EyeOff className="h-4 w-4" />
+                    ) : (
+                      <Eye className="h-4 w-4" />
+                    )}
+                  </button>
+                </div>
+
+                {errors.confirmPassword && (
+                  <p className={errorClassName}>
+                    {errors.confirmPassword.message}
+                  </p>
+                )}
+              </div>
+            </>
+          )}
           <div className="sm:col-span-2">
             <label htmlFor="status" className={labelClassName}>
               Account status <span className="text-red-500">*</span>

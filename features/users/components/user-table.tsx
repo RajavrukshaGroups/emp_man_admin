@@ -9,10 +9,12 @@ import {
   Eye,
   KeyRound,
   MoreHorizontal,
-  Pencil,
   Power,
   UserRound,
   X,
+  Loader2,
+  Mail,
+  Pencil,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
@@ -27,9 +29,9 @@ interface UserTableProps {
   totalPages: number;
   totalRecords: number;
 
-  canRead?: boolean;
-  canUpdate?: boolean;
-  canActivate?: boolean;
+  canRead: boolean;
+  canUpdate: boolean;
+  canActivate: boolean;
   canDeactivate?: boolean;
   canSuspend?: boolean;
   canResetPassword?: boolean;
@@ -37,6 +39,12 @@ interface UserTableProps {
   currentUserId?: string;
 
   isUpdatingStatus?: boolean;
+
+  canSendInvitation?: boolean;
+  isSendingInvitation?: boolean;
+  sendingInvitationUserId?: string | null;
+
+  onSendInvitation: (user: User) => void;
 
   onPageChange: (page: number) => void;
 
@@ -57,6 +65,11 @@ interface UserActionMenuProps {
 
   isCurrentUser: boolean;
   isUpdatingStatus: boolean;
+
+  canSendInvitation: boolean;
+  isSendingInvitation: boolean;
+
+  onSendInvitation: (user: User) => void;
 
   onStatusChange: (user: User, status: UserStatus) => void;
 
@@ -134,10 +147,13 @@ function UserActionMenu({
   canDeactivate,
   canSuspend,
   canResetPassword,
+  canSendInvitation,
   isCurrentUser,
   isUpdatingStatus,
+  isSendingInvitation,
   onStatusChange,
   onResetPassword,
+  onSendInvitation,
 }: UserActionMenuProps) {
   const [isOpen, setIsOpen] = useState(false);
 
@@ -177,7 +193,10 @@ function UserActionMenu({
     canActivate ||
     canDeactivate ||
     canSuspend ||
-    canResetPassword;
+    (canResetPassword && user.passwordSetupStatus !== "INVITATION_PENDING") ||
+    (canSendInvitation &&
+      user.passwordSetupStatus === "INVITATION_PENDING" &&
+      user.status === "ACTIVE");
   if (!hasActions) {
     return <span className="text-sm text-gray-400">—</span>;
   }
@@ -218,21 +237,46 @@ function UserActionMenu({
             </Link>
           )}
 
-          {canResetPassword && (
-            <button
-              type="button"
-              onClick={() => {
-                closeMenu();
-                onResetPassword(user);
-              }}
-              className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm font-medium text-gray-700 transition hover:bg-gray-50 hover:text-gray-900"
-            >
-              <KeyRound className="h-4 w-4" />
-              Reset password
-            </button>
-          )}
+          {canResetPassword &&
+            user.passwordSetupStatus !== "INVITATION_PENDING" && (
+              <button
+                type="button"
+                onClick={() => {
+                  closeMenu();
+                  onResetPassword(user);
+                }}
+                className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm font-medium text-gray-700 transition hover:bg-gray-50 hover:text-gray-900"
+              >
+                <KeyRound className="h-4 w-4" />
+                Reset password
+              </button>
+            )}
 
-          {(canRead || canUpdate || canResetPassword) &&
+          {canSendInvitation &&
+            user.passwordSetupStatus === "INVITATION_PENDING" &&
+            user.status === "ACTIVE" && (
+              <button
+                type="button"
+                disabled={isSendingInvitation}
+                onClick={() => {
+                  if (isSendingInvitation) return;
+                  closeMenu();
+                  onSendInvitation(user);
+                }}
+                className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm font-medium text-blue-700 transition hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {isSendingInvitation ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Mail className="h-4 w-4" />
+                )}
+                {isSendingInvitation
+                  ? "Sending invitation..."
+                  : "Send login invitation"}
+              </button>
+            )}
+
+          {(canRead || canResetPassword) &&
             (canActivate || canDeactivate || canSuspend) && (
               <div className="my-1 border-t border-gray-100" />
             )}
@@ -306,7 +350,7 @@ export function UserTable({
   totalPages,
   totalRecords,
   canRead = true,
-  canUpdate = false,
+  canUpdate = false, // ADD THIS LINE
   canActivate = false,
   canDeactivate = false,
   canSuspend = false,
@@ -316,6 +360,10 @@ export function UserTable({
   onPageChange,
   onStatusChange,
   onResetPassword,
+  canSendInvitation = false,
+  isSendingInvitation = false,
+  sendingInvitationUserId = null,
+  onSendInvitation,
 }: UserTableProps) {
   const safePage = Math.max(page, 1);
   const safeTotalPages = Math.max(totalPages, 1);
@@ -458,10 +506,16 @@ export function UserTable({
                       canDeactivate={canDeactivate}
                       canSuspend={canSuspend}
                       canResetPassword={canResetPassword}
+                      canSendInvitation={canSendInvitation}
                       isCurrentUser={isCurrentUser}
                       isUpdatingStatus={isUpdatingStatus}
+                      isSendingInvitation={
+                        isSendingInvitation &&
+                        sendingInvitationUserId === user._id
+                      }
                       onStatusChange={onStatusChange}
                       onResetPassword={onResetPassword}
+                      onSendInvitation={onSendInvitation}
                     />
                   </td>
                 </tr>

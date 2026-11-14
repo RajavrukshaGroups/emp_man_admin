@@ -77,9 +77,13 @@ export function EditUserForm({ userId }: EditUserFormProps) {
 
   const permissions = useAuthStore((state) => state.permissions);
 
-  const canRead = permissions.includes("admin.read");
-  const canUpdate = permissions.includes("admin.update");
+  const canRead =
+    permissions.includes("admin.read") ||
+    permissions.includes("user.employee_account_read");
 
+  const canUpdate =
+    permissions.includes("admin.update") ||
+    permissions.includes("user.employee_account_update");
   const { data: user, isLoading, error, refetch } = useUser(userId);
 
   const {

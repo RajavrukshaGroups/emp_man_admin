@@ -19,6 +19,8 @@ export default function RolesPage() {
 
   const permissions = useAuthStore((state) => state.permissions);
 
+  const currentRoleId = useAuthStore((state) => state.role?._id);
+
   const [search, setSearch] = useState("");
 
   const [page, setPage] = useState(1);
@@ -42,6 +44,13 @@ export default function RolesPage() {
   const canDelete = permissions.includes("role.delete");
 
   const handleStatusChange = async (role: Role) => {
+    if (!canUpdate || !currentRoleId || role._id === currentRoleId) {
+      toast.error("You are not authorized to change this role's status.");
+      return;
+    }
+
+    if (isUpdatingStatus) return;
+
     if (!role.isEditable || role.isSystemRole) {
       toast.error("This system role's status cannot be changed.");
       return;
@@ -76,6 +85,18 @@ export default function RolesPage() {
   };
 
   const handleDeleteRole = async () => {
+    if (isDeleting) return;
+
+    if (
+      !canDelete ||
+      !currentRoleId ||
+      !selectedRole ||
+      selectedRole._id === currentRoleId
+    ) {
+      toast.error("You are not authorized to delete this role.");
+      return;
+    }
+
     if (!company?._id || !selectedRole) {
       return;
     }
@@ -171,6 +192,16 @@ export default function RolesPage() {
             void handleStatusChange(role);
           }}
           onDelete={(role) => {
+            if (
+              !canDelete ||
+              !currentRoleId ||
+              role._id === currentRoleId ||
+              role.isSystemRole
+            ) {
+              toast.error("You are not authorized to delete this role.");
+              return;
+            }
+
             setSelectedRole(role);
           }}
         />

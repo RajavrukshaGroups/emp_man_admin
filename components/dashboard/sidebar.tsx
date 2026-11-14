@@ -29,9 +29,18 @@ export function Sidebar({
       return false;
     }
 
-    if (item.roles && role?.code && !item.roles.includes(role.code)) {
+    if (
+      item.permissionsAny &&
+      !item.permissionsAny.some((permission) =>
+        permissions.includes(permission),
+      )
+    ) {
       return false;
     }
+
+    // if (item.roles && role?.code && !item.roles.includes(role.code)) {
+    //   return false;
+    // }
 
     return true;
   });

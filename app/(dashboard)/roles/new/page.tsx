@@ -13,6 +13,8 @@ export default function CreateRolePage() {
 
   const canCreateRole = permissions.includes("role.create");
 
+  const canReadPermissions = permissions.includes("permission.read");
+
   if (!companyId) {
     return (
       <div className="flex min-h-[60vh] items-center justify-center">
@@ -42,7 +44,7 @@ export default function CreateRolePage() {
     );
   }
 
-  if (!canCreateRole) {
+  if (!canCreateRole || !canReadPermissions) {
     return (
       <div className="flex min-h-[60vh] items-center justify-center">
         <div className="w-full max-w-lg rounded-xl border bg-card p-8 text-center shadow-sm">
@@ -53,7 +55,9 @@ export default function CreateRolePage() {
           <h1 className="mt-4 text-xl font-semibold">Permission denied</h1>
 
           <p className="mt-2 text-sm leading-6 text-muted-foreground">
-            You do not have permission to create roles for this company.
+            {!canCreateRole
+              ? "You do not have permission to create roles for this company."
+              : "You need permission.read access to view and assign permissions while creating roles. Contact an administrator to update your assigned permissions."}
           </p>
 
           <Link

@@ -17,6 +17,8 @@ export default function EditRolePage() {
 
   const companyId = useAuthStore((state) => state.company?._id);
 
+  const currentRoleId = useAuthStore((state) => state.role?._id);
+
   const permissions = useAuthStore((state) => state.permissions);
 
   const [role, setRole] = useState<Role | null>(null);
@@ -26,6 +28,11 @@ export default function EditRolePage() {
   const [error, setError] = useState<string | null>(null);
 
   const canUpdateRole = permissions.includes("role.update");
+
+  const isOwnRole = !currentRoleId || params.roleId === currentRoleId;
+
+  const canEditSelectedRole =
+    canUpdateRole && !isOwnRole && role?.isEditable === true;
 
   useEffect(() => {
     if (!companyId || !params.roleId) {
@@ -92,6 +99,32 @@ export default function EditRolePage() {
 
           <p className="mt-2 text-sm text-slate-500">
             {error ?? "The selected role could not be found."}
+          </p>
+
+          <Link
+            href="/roles"
+            className="mt-6 inline-flex items-center gap-2 rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            Back to roles
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
+  if (!canEditSelectedRole) {
+    return (
+      <div className="flex min-h-[60vh] items-center justify-center">
+        <div className="w-full max-w-lg rounded-2xl border border-slate-200 bg-white p-8 text-center">
+          <ShieldAlert className="mx-auto h-8 w-8 text-red-600" />
+
+          <h1 className="mt-4 text-xl font-semibold">
+            Role editing restricted
+          </h1>
+
+          <p className="mt-2 text-sm text-slate-500">
+            You cannot edit your own assigned role or a protected role.
           </p>
 
           <Link

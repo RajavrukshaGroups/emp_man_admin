@@ -135,10 +135,17 @@ export interface EmployeeUserReference {
     mobile?: string;
     profilePhoto?: string;
     status?: string;
+
+    passwordSetupStatus?:
+    | "LEGACY"
+    | "INVITATION_PENDING"
+    | "COMPLETED";
+
     onboardingStatus?:
     | "USER_CREATED"
     | "COMPANY_ACCESS_CREATED"
     | "COMPLETED";
+
     onboardingCompletedAt?: string | null;
 }
 

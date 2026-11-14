@@ -17,9 +17,11 @@ interface UsePermissionsResult {
     refetch: () => Promise<void>;
 }
 
-export function usePermissions(): UsePermissionsResult {
+export function usePermissions(
+    enabled = true,
+): UsePermissionsResult {
     const [permissions, setPermissions] = useState<Permission[]>([]);
-    const [isLoading, setIsLoading] = useState(true);
+    const [isLoading, setIsLoading] = useState(enabled);
     const [error, setError] = useState<string | null>(null);
 
     const fetchPermissions = useCallback(async () => {
@@ -51,8 +53,13 @@ export function usePermissions(): UsePermissionsResult {
     }, []);
 
     useEffect(() => {
+        if (!enabled) {
+            setIsLoading(false);
+            return;
+        }
+
         void fetchPermissions();
-    }, [fetchPermissions]);
+    }, [enabled, fetchPermissions]);
 
     return {
         permissions,

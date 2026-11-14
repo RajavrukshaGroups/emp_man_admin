@@ -2,6 +2,8 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { toast } from "sonner";
+
 import {
   ArrowLeft,
   BadgeCheck,
@@ -17,6 +19,8 @@ import type { User } from "@/features/users/types/user.types";
 import { CompanyAccessStep } from "./company-access-step";
 import { EmployeeProfileStep } from "./employee-profile-step";
 import { UserAccountStep } from "./user-account-step";
+import { userService } from "@/features/users/services/user.service";
+import { useAuthStore } from "@/store/auth.store";
 
 type OnboardingStep = "USER_ACCOUNT" | "COMPANY_ACCESS" | "EMPLOYEE_PROFILE";
 
@@ -67,10 +71,6 @@ export function EmployeeOnboardingForm() {
       ...currentState,
       employeeId,
     }));
-
-    // router.replace(`/employees/${employeeId}`);
-    router.replace(`/employees/${employeeId}/edit`);
-    router.refresh();
   }
 
   function goToUserAccount() {
@@ -265,14 +265,20 @@ export function EmployeeOnboardingForm() {
 
       {state.currentStep === "EMPLOYEE_PROFILE" &&
         state.createdUser &&
-        state.companyAccess && (
+        state.companyAccess &&
+        (state.employeeId ? (
+          <CompletedEmployeeStep
+            user={state.createdUser}
+            employeeId={state.employeeId}
+          />
+        ) : (
           <EmployeeProfileStep
             user={state.createdUser}
             companyAccessId={state.companyAccess._id}
             onBack={goToCompanyAccess}
             onSuccess={handleEmployeeCreated}
           />
-        )}
+        ))}
     </div>
   );
 }
@@ -527,4 +533,114 @@ function formatEnum(value?: string | null) {
     .split("_")
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
     .join(" ");
+}
+
+function CompletedEmployeeStep({
+  user,
+  employeeId,
+}: {
+  user: User;
+  employeeId: string;
+}) {
+  const permissions = useAuthStore((state) => state.permissions);
+
+  const canSendInvitation = permissions.includes("admin.invitation_send");
+
+  const [isSendingInvitation, setIsSendingInvitation] = useState(false);
+  const [invitationSent, setInvitationSent] = useState(false);
+
+  async function handleSendInvitation() {
+    if (
+      !canSendInvitation ||
+      user.passwordSetupStatus !== "INVITATION_PENDING" ||
+      isSendingInvitation ||
+      invitationSent
+    ) {
+      return;
+    }
+
+    setIsSendingInvitation(true);
+
+    try {
+      await userService.sendLoginInvitation(user._id);
+
+      setInvitationSent(true);
+      toast.success("Login invitation sent successfully.");
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Unable to send login invitation.",
+      );
+    } finally {
+      setIsSendingInvitation(false);
+    }
+  }
+
+  return (
+    <div className="rounded-2xl border border-emerald-200 bg-white p-6 shadow-sm">
+      <div className="flex items-start gap-4">
+        <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-emerald-700">
+          <BadgeCheck className="h-7 w-7" />
+        </div>
+
+        <div>
+          <h2 className="text-xl font-bold text-slate-950">
+            Employee onboarding completed
+          </h2>
+
+          <p className="mt-2 text-sm text-slate-600">
+            {user.displayName} has been successfully onboarded. The user
+            account, company access and employee profile have been created.
+          </p>
+
+          <p className="mt-2 text-sm text-slate-500">{user.email}</p>
+        </div>
+      </div>
+
+      {user.passwordSetupStatus === "INVITATION_PENDING" && (
+        <div className="mt-6 rounded-xl border border-blue-200 bg-blue-50 p-4">
+          <p className="text-sm font-semibold text-blue-950">
+            Login invitation pending
+          </p>
+
+          <p className="mt-1 text-sm text-blue-700">
+            The employee needs to receive a secure invitation to create their
+            own login password.
+          </p>
+        </div>
+      )}
+
+      <div className="mt-6 flex flex-wrap justify-end gap-3 border-t border-slate-100 pt-5">
+        <Link
+          href="/users"
+          className="inline-flex h-11 items-center justify-center rounded-xl border border-slate-200 px-5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+        >
+          Go to users
+        </Link>
+
+        <Link
+          href={`/employees/${employeeId}/edit`}
+          className="inline-flex h-11 items-center justify-center rounded-xl bg-blue-600 px-5 text-sm font-semibold text-white transition hover:bg-blue-700"
+        >
+          View / Edit Employee
+        </Link>
+      </div>
+      {canSendInvitation &&
+        user.passwordSetupStatus === "INVITATION_PENDING" && (
+          <button
+            type="button"
+            onClick={handleSendInvitation}
+            disabled={isSendingInvitation || invitationSent}
+            className="mt-4 inline-flex h-11 items-center justify-center rounded-xl bg-blue-600 px-5 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {isSendingInvitation
+              ? "Sending invitation..."
+              : invitationSent
+                ? "Invitation sent"
+                : "Send Login Invitation"}
+          </button>
+        )}
+    </div>
+  );
 }

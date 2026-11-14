@@ -6,6 +6,7 @@ import { Eye, KeyRound, Pencil, ShieldCheck, Trash2 } from "lucide-react";
 import { RoleStatusBadge } from "./role-status-badge";
 
 import type { Role, RoleScopeType } from "../types/role.types";
+import { useAuthStore } from "@/store/auth.store";
 
 interface RoleTableProps {
   roles: Role[];
@@ -65,6 +66,12 @@ export function RoleTable({
   onDelete,
   isUpdatingStatus = false,
 }: RoleTableProps) {
+  const currentRoleId = useAuthStore((state) => state.role?._id);
+  const userPermissions = useAuthStore((state) => state.permissions);
+
+  const hasPermissionDelegation = userPermissions.includes(
+    "role.permission_delegate",
+  );
   if (roles.length === 0) {
     return (
       <div className="rounded-2xl border bg-white p-10 text-center">
@@ -113,6 +120,7 @@ export function RoleTable({
 
           <tbody className="divide-y">
             {roles.map((role) => {
+              const isOwnRole = !currentRoleId || role._id === currentRoleId;
               /**
                * ------------------------------------------------
                * STRUCTURAL EDITING
@@ -131,8 +139,7 @@ export function RoleTable({
                * so name/code/status cannot be changed.
                */
 
-              const canModifyRole = canUpdate && role.isEditable;
-
+              const canModifyRole = canUpdate && role.isEditable && !isOwnRole;
               /**
                * ------------------------------------------------
                * PERMISSION EDITING
@@ -151,10 +158,21 @@ export function RoleTable({
                * isPermissionEditable = true
                */
 
-              const canManagePermissions =
-                canUpdate && role.isPermissionEditable;
+              const canManageOwnCompanyAdminPermissions =
+                Boolean(currentRoleId) &&
+                role._id === currentRoleId &&
+                role.code === "COMPANY_ADMIN" &&
+                role.isSystemRole === true &&
+                role.scopeType === "COMPANY" &&
+                canUpdate &&
+                hasPermissionDelegation;
 
-              /**
+              const canManagePermissions =
+                canManageOwnCompanyAdminPermissions ||
+                (canUpdate &&
+                  role.isPermissionEditable &&
+                  Boolean(currentRoleId) &&
+                  !isOwnRole); /**
                * ------------------------------------------------
                * STATUS
                * ------------------------------------------------
@@ -163,7 +181,10 @@ export function RoleTable({
                */
 
               const canChangeStatus =
-                canUpdate && role.isEditable && !role.isSystemRole;
+                canUpdate &&
+                role.isEditable &&
+                !role.isSystemRole &&
+                !isOwnRole;
 
               /**
                * ------------------------------------------------
@@ -173,8 +194,8 @@ export function RoleTable({
                * System roles can never be deleted.
                */
 
-              const canRemoveRole = canDelete && !role.isSystemRole;
-
+              const canRemoveRole =
+                canDelete && !role.isSystemRole && !isOwnRole;
               return (
                 <tr key={role._id} className="transition hover:bg-slate-50/70">
                   {/* =================================================

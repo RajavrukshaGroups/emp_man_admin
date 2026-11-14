@@ -29,7 +29,29 @@ const optionalUrl = z
         },
     );
 
-export const createUserSchema = z
+const passwordSchema = z
+    .string()
+    .min(1, "Password is required.")
+    .min(8, "Password must contain at least 8 characters.")
+    .max(72, "Password must not exceed 72 characters.")
+    .regex(
+        /[a-z]/,
+        "Password must contain at least one lowercase letter.",
+    )
+    .regex(
+        /[A-Z]/,
+        "Password must contain at least one uppercase letter.",
+    )
+    .regex(
+        /\d/,
+        "Password must contain at least one number.",
+    )
+    .regex(
+        /[^A-Za-z0-9]/,
+        "Password must contain at least one special character.",
+    );
+
+export const createUserBaseSchema = z
     .object({
         firstName: z
             .string()
@@ -162,7 +184,9 @@ export const createUserSchema = z
             "INACTIVE",
             "SUSPENDED",
         ]),
-    })
+    });
+
+export const createUserSchema = createUserBaseSchema
     .superRefine((values, context) => {
         if (
             values.password !==

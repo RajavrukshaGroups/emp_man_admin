@@ -8,7 +8,6 @@ import {
   Ban,
   CalendarDays,
   CheckCircle2,
-  Edit3,
   KeyRound,
   Loader2,
   Mail,
@@ -163,9 +162,9 @@ export default function UserDetailsPage() {
 
   const permissions = useAuthStore((state) => state.permissions);
 
-  const canRead = permissions.includes("admin.read");
-  const canUpdate = permissions.includes("admin.update");
-
+  const canRead =
+    permissions.includes("admin.read") ||
+    permissions.includes("user.employee_account_read");
   const { data: user, isLoading, error, refetch } = useUser(userId);
 
   if (!canRead) {
@@ -316,16 +315,6 @@ export default function UserDetailsPage() {
             <RefreshCw className="h-4 w-4" />
             Refresh
           </button>
-
-          {canUpdate && (
-            <Link
-              href={`/users/${userId}/edit`}
-              className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700"
-            >
-              <Edit3 className="h-4 w-4" />
-              Edit user
-            </Link>
-          )}
         </div>
       </div>
 
@@ -530,21 +519,6 @@ export default function UserDetailsPage() {
 
           <DetailItem label="Deleted" value={user.isDeleted ? "Yes" : "No"} />
         </div>
-      </section>
-
-      <section className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-5 py-8 text-center sm:px-6">
-        <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-white text-slate-500 shadow-sm">
-          <ShieldCheck className="h-6 w-6" />
-        </div>
-
-        <h2 className="mt-4 text-base font-semibold text-slate-950">
-          Company access not assigned yet
-        </h2>
-
-        <p className="mx-auto mt-2 max-w-xl text-sm leading-6 text-slate-500">
-          After the account is created, company access, role, department, team
-          and employee profile can be assigned separately.
-        </p>
       </section>
     </div>
   );

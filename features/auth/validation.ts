@@ -25,58 +25,58 @@ export const loginSchema = z.object({
 export type LoginFormValues = z.infer<typeof loginSchema>;
 
 export const changePasswordSchema = z
-    .object({
-        currentPassword: z
-            .string()
-            .min(1, "Current password is required."),
+  .object({
+    currentPassword: z
+      .string()
+      .min(1, "Current password is required."),
 
-        newPassword: z
-            .string()
-            .min(
-                8,
-                "New password must contain at least 8 characters.",
-            )
-            .regex(
-                /[A-Z]/,
-                "New password must contain an uppercase letter.",
-            )
-            .regex(
-                /[a-z]/,
-                "New password must contain a lowercase letter.",
-            )
-            .regex(
-                /\d/,
-                "New password must contain a number.",
-            )
-            .regex(
-                /[^A-Za-z0-9]/,
-                "New password must contain a special character.",
-            ),
+    newPassword: z
+      .string()
+      .min(
+        8,
+        "New password must contain at least 8 characters.",
+      )
+      .regex(
+        /[A-Z]/,
+        "New password must contain an uppercase letter.",
+      )
+      .regex(
+        /[a-z]/,
+        "New password must contain a lowercase letter.",
+      )
+      .regex(
+        /\d/,
+        "New password must contain a number.",
+      )
+      .regex(
+        /[^A-Za-z0-9]/,
+        "New password must contain a special character.",
+      ),
 
-        confirmPassword: z
-            .string()
-            .min(1, "Please confirm your new password."),
-    })
-    .refine(
-        (values) =>
-            values.newPassword === values.confirmPassword,
-        {
-            message: "Passwords do not match.",
-            path: ["confirmPassword"],
-        },
-    )
-    .refine(
-        (values) =>
-            values.currentPassword !== values.newPassword,
-        {
-            message:
-                "New password must be different from the current password.",
-            path: ["newPassword"],
-        },
-    );
+    confirmPassword: z
+      .string()
+      .min(1, "Please confirm your new password."),
+  })
+  .refine(
+    (values) =>
+      values.newPassword === values.confirmPassword,
+    {
+      message: "Passwords do not match.",
+      path: ["confirmPassword"],
+    },
+  )
+  .refine(
+    (values) =>
+      values.currentPassword !== values.newPassword,
+    {
+      message:
+        "New password must be different from the current password.",
+      path: ["newPassword"],
+    },
+  );
 
 export type ChangePasswordFormValues = z.infer<
-    typeof changePasswordSchema
+  typeof changePasswordSchema
 >;
 
 
@@ -132,4 +132,16 @@ export const resetPasswordSchema = z
 
 export type ResetPasswordFormValues = z.infer<
   typeof resetPasswordSchema
+>;
+
+/**
+ * Accept Employee Login Invitation Validation
+ *
+ * Reuses the existing password strength and confirmation rules.
+ * The invitation token is validated by the backend.
+ */
+export const acceptInvitationSchema = resetPasswordSchema;
+
+export type AcceptInvitationFormValues = z.infer<
+  typeof acceptInvitationSchema
 >;

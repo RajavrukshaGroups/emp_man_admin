@@ -113,6 +113,8 @@ export default function RolePermissionsPage() {
 
   const userPermissions = useAuthStore((state) => state.permissions);
 
+  const currentRoleId = useAuthStore((state) => state.role?._id);
+
   const roleId = params.roleId;
 
   const [role, setRole] = useState<Role | null>(null);
@@ -139,11 +141,28 @@ export default function RolePermissionsPage() {
 
   const hasRoleUpdatePermission = userPermissions.includes("role.update");
 
+  const hasPermissionDelegation = userPermissions.includes(
+    "role.permission_delegate",
+  );
+
+  const isOwnRole = Boolean(currentRoleId) && roleId === currentRoleId;
+
+  const canEditOwnCompanyAdminPermissions =
+    isOwnRole &&
+    role?.code === "COMPANY_ADMIN" &&
+    role.isSystemRole === true &&
+    role.scopeType === "COMPANY" &&
+    hasRoleUpdatePermission &&
+    hasPermissionDelegation;
+
   const canEditPermissions =
-    hasRoleUpdatePermission && Boolean(role?.isPermissionEditable);
+    hasRoleUpdatePermission &&
+    (canEditOwnCompanyAdminPermissions ||
+      (Boolean(role?.isPermissionEditable) &&
+        Boolean(currentRoleId) &&
+        !isOwnRole));
 
   const isReadOnly = !canEditPermissions;
-
   /**
    * ==========================================================
    * LOAD ROLE + ALL PERMISSIONS
@@ -560,8 +579,9 @@ export default function RolePermissionsPage() {
 
         {isReadOnly && (
           <div className="mt-5 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-            This is a protected role. Its permissions can be reviewed but cannot
-            be changed.
+            {isOwnRole
+              ? "You cannot modify permissions assigned to your own role."
+              : "You can review these permissions, but you are not authorized to modify them."}
           </div>
         )}
 
